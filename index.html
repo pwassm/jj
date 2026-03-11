@@ -9,86 +9,156 @@
 <title>Mlynx</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-html, body { overflow: hidden; height: 100%; background: #000; }
+html, body { overflow: hidden; height: 100vh; background: #000; }
 
+/* ── Canvas: always fills viewport ── */
 #gameCanvas {
   display: block;
   position: fixed;
   top: 0; left: 0;
+  width: 100vw;
+  height: 100vh;
   background: #c8ddf0;
 }
 
-/* ── Hamburger: always fixed lower-right of VIEWPORT (not canvas) ── */
+/* ── Hamburger: ALWAYS viewport lower-right, never rotates with canvas ── */
 #menuWrap {
   position: fixed;
-  bottom: 10px;
-  right: 10px;
+  bottom: 12px;
+  right: 12px;
   z-index: 9999;
-  width: 48px;
-  height: 48px;
+  width: 52px;
+  height: 52px;
 }
 #menuBtn {
   position: absolute; inset: 0;
-  background: rgba(30,30,30,0.92);
-  border: none; border-radius: 10px; cursor: pointer;
+  background: rgba(30,30,30,0.95);
+  border: none; border-radius: 12px; cursor: pointer;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
-  gap: 6px; padding: 10px;
+  gap: 4px; padding: 12px;
 }
 #menuBtn span { display: block; width: 100%; height: 3px; background: #fff; border-radius: 2px; }
 
 #menuPanel {
   position: fixed;
-  bottom: 64px; right: 10px;
+  bottom: 72px; right: 12px;
   z-index: 9998;
-  background: rgba(25,25,25,0.97);
-  border-radius: 10px; min-width: 210px;
+  background: rgba(25,25,25,0.98);
+  border-radius: 12px; min-width: 220px;
   display: none; flex-direction: column;
   overflow: hidden;
-  box-shadow: 0 4px 24px rgba(0,0,0,0.6);
+  box-shadow: 0 6px 32px rgba(0,0,0,0.6);
 }
 #menuPanel.open { display: flex; }
-#menuDateStamp { padding: 6px 12px 4px; font: 10px Arial,sans-serif; color: rgba(255,255,255,0.4); text-align: right; }
-.menu-item { padding: 13px 18px; color: #fff; font: 15px Arial,sans-serif; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.08); white-space: nowrap; }
+#menuDateStamp { padding: 8px 14px 6px; font: 11px Arial,sans-serif; color: rgba(255,255,255,0.4); text-align: right; }
+.menu-item { padding: 14px 20px; color: #fff; font: 15px Arial,sans-serif; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.08); white-space: nowrap; }
 .menu-item:last-child { border-bottom: none; }
-.menu-item:hover, .menu-item:active { background: rgba(255,255,255,0.14); }
+.menu-item:hover { background: rgba(255,255,255,0.14); }
 .menu-divider { height: 1px; background: rgba(255,255,255,0.15); }
 
 #settingsPanel { display: none; flex-direction: column; background: rgba(15,15,30,0.98); border-top: 1px solid rgba(255,255,255,0.1); }
 #settingsPanel.open { display: flex; }
-.setting-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 18px; border-bottom: 1px solid rgba(255,255,255,0.06); }
-.setting-row span { color: #ccc; font: 13px Arial,sans-serif; }
+.setting-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.setting-row span { color: #ccc; font: 14px Arial,sans-serif; }
 
-.tog { position: relative; display: inline-block; width: 38px; height: 20px; flex-shrink: 0; }
+.tog { position: relative; display: inline-block; width: 42px; height: 22px; flex-shrink: 0; }
 .tog input { opacity: 0; width: 0; height: 0; }
-.tog-slider { position: absolute; cursor: pointer; inset: 0; background: #444; border-radius: 20px; transition: .2s; }
-.tog-slider:before { content:""; position:absolute; width:14px; height:14px; left:3px; bottom:3px; background:#fff; border-radius:50%; transition:.2s; }
+.tog-slider { position: absolute; cursor: pointer; inset: 0; background: #444; border-radius: 22px; transition: .2s; }
+.tog-slider:before { content:""; position:absolute; width:16px; height:16px; left:3px; bottom:3px; background:#fff; border-radius:50%; transition:.2s; }
 .tog input:checked + .tog-slider { background: #3a8a3a; }
-.tog input:checked + .tog-slider:before { transform: translateX(18px); }
+.tog input:checked + .tog-slider:before { transform: translateX(20px); }
 
-/* Cell overlays — positioned in ROTATED canvas space */
-#cellOverlayContainer { position: fixed; top: 0; left: 0; pointer-events: none; overflow: hidden; }
-.cell-overlay { position: absolute; display: flex; align-items: flex-end; justify-content: center; overflow: hidden; }
+/* ── Cell overlays ── */
+#cellOverlayContainer {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100vw; height: 100vh;
+  pointer-events: none;
+}
+.cell-overlay {
+  position: absolute;
+  display: flex; align-items: flex-end; justify-content: center;
+  overflow: hidden; cursor: pointer; user-select: none;
+}
 .cell-overlay img { position: absolute; inset: 0; width: 100%; height: 100%; }
 .cell-overlay img.fit-contain { object-fit: contain; background: rgba(0,0,0,0.18); }
-.cell-overlay img.fit-cover   { object-fit: cover; }
-.cell-label { position: relative; z-index: 1; width: 100%; text-align: center; padding: 2px 4px; font-size: 11px; font-weight: bold; color: #fff; background: rgba(0,0,0,0.58); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cell-overlay img.fit-cover { object-fit: cover; }
+.cell-label {
+  position: relative; z-index: 1; width: 100%; text-align: center;
+  padding: 2px 4px; font-size: 11px; font-weight: bold; color: #fff;
+  background: rgba(0,0,0,0.58); white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis;
+}
 .cell-overlay.label-only { align-items: center; justify-content: center; background: rgba(0,0,0,0.12); }
-.cell-overlay.label-only .cell-label { background: rgba(0,0,80,0.55); border-radius: 4px; padding: 3px 6px; width: auto; font-size: 12px; }
-.cell-attrib { position: absolute; bottom: 18px; right: 2px; z-index: 2; font-size: 9px; color: rgba(255,255,255,0.75); background: rgba(0,0,0,0.5); padding: 1px 4px; border-radius: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 90%; }
-.cell-id { position: absolute; top: 2px; left: 3px; z-index: 2; font-size: 9px; color: rgba(255,255,255,0.6); background: rgba(0,0,0,0.4); padding: 1px 3px; border-radius: 3px; }
+.cell-overlay.label-only .cell-label {
+  background: rgba(0,0,80,0.55); border-radius: 4px; padding: 3px 6px;
+  width: auto; font-size: 12px;
+}
+.cell-attrib {
+  position: absolute; bottom: 18px; right: 2px; z-index: 2;
+  font-size: 9px; color: rgba(255,255,255,0.75);
+  background: rgba(0,0,0,0.5); padding: 1px 4px; border-radius: 3px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 90%;
+}
+.cell-id {
+  position: absolute; top: 2px; left: 3px; z-index: 2;
+  font-size: 9px; color: rgba(255,255,255,0.6);
+  background: rgba(0,0,0,0.4); padding: 1px 3px; border-radius: 3px;
+}
 
-#emptyCellHits { position: fixed; top: 0; left: 0; overflow: hidden; }
-.cell-empty-hit { position: absolute; border: 2px dashed rgba(100,180,255,0.0); transition: border-color .15s, background .15s; cursor: crosshair; }
+/* Empty cell hit areas */
+#emptyCellHits {
+  position: fixed; top: 0; left: 0;
+  width: 100vw; height: 100vh;
+}
+.cell-empty-hit {
+  position: absolute;
+  border: 2px dashed rgba(100,180,255,0.0);
+  transition: border-color .15s, background .15s;
+  cursor: crosshair;
+}
 .cell-empty-hit:hover { border-color: rgba(100,180,255,0.6); background: rgba(100,180,255,0.07); }
 
+/* Full-screen image viewer */
+#fullscreenImg {
+  display: none;
+  position: fixed; inset: 0; z-index: 30000;
+  background: rgba(0,0,0,0.95);
+  align-items: center; justify-content: center;
+}
+#fullscreenImg.open { display: flex; }
+#fullscreenImg img {
+  max-width: 95vw; max-height: 95vh;
+  object-fit: contain; touch-action: manipulation;
+}
+#fsCloseBtn {
+  position: absolute; top: 16px; right: 16px;
+  width: 48px; height: 48px;
+  background: rgba(255,255,255,0.25); border: none;
+  border-radius: 50%; color: #fff; font-size: 24px;
+  cursor: pointer; backdrop-filter: blur(4px);
+}
+#fsCloseBtn2 { top: auto; bottom: 16px; }
+
 /* Quick-fill modal */
-#qfModal { display: none; position: fixed; inset: 0; z-index: 20000; background: rgba(0,0,0,0.82); align-items: center; justify-content: center; }
+#qfModal {
+  display: none; position: fixed; inset: 0; z-index: 20000;
+  background: rgba(0,0,0,0.82); align-items: center; justify-content: center;
+}
 #qfModal.open { display: flex; }
-#qfBox { background: #1a1a2e; border: 1px solid #555; border-radius: 12px; padding: 18px 20px; min-width: 280px; max-width: 480px; width: 92vw; display: flex; flex-direction: column; gap: 10px; font-family: Arial,sans-serif; max-height: 94vh; overflow-y: auto; }
+#qfBox {
+  background: #1a1a2e; border: 1px solid #555; border-radius: 12px;
+  padding: 18px 20px; min-width: 280px; max-width: 480px; width: 92vw;
+  display: flex; flex-direction: column; gap: 10px;
+  font-family: Arial,sans-serif; max-height: 94vh; overflow-y: auto;
+}
 #qfBox h3 { color: #8ef; font-size: 15px; }
 #qfBox label { font-size: 12px; color: #aaa; display: block; margin-bottom: 3px; }
-#qfBox input, #qfBox select { background: #0a0a1a; border: 1px solid #555; color: #fff; padding: 9px 10px; border-radius: 6px; font-size: 15px; width: 100%; }
+#qfBox input, #qfBox select {
+  background: #0a0a1a; border: 1px solid #555; color: #fff;
+  padding: 9px 10px; border-radius: 6px; font-size: 15px; width: 100%;
+}
 #qfBox input:focus, #qfBox select:focus { border-color: #8ef; outline: none; }
 #qfCname.has-prev { color: #6af; }
 #qfCname.has-prev:focus { color: #fff; }
@@ -100,8 +170,7 @@ html, body { overflow: hidden; height: 100%; background: #000; }
 #qfPasteBtn { width: 100%; padding: 11px; border-radius: 6px; border: 1px solid #4af; background: rgba(0,80,180,0.3); color: #8ef; font-size: 15px; cursor: pointer; }
 #qfPasteBtn:hover, #qfPasteBtn:active { background: rgba(0,80,180,0.55); }
 #qfError { color: #f66; font-size: 12px; min-height: 14px; }
-/* Desktop-only fields hidden on mobile */
-.desktop-only { }
+#qfDesktopFields { } /* Hidden on mobile via JS */
 </style>
 </head>
 <body>
@@ -140,11 +209,17 @@ html, body { overflow: hidden; height: 100%; background: #000; }
   <button id="menuBtn"><span></span><span></span><span></span></button>
 </div>
 
+<!-- Fullscreen image viewer -->
+<div id="fullscreenImg">
+  <button id="fsCloseBtn" title="Close">×</button>
+  <button id="fsCloseBtn2" title="Close">×</button>
+  <img id="fsImg">
+</div>
+
 <!-- Quick-fill modal -->
 <div id="qfModal">
   <div id="qfBox">
     <h3 id="qfTitle">📌 Fill Cell</h3>
-    <!-- Save at top -->
     <div class="qf-btns">
       <button id="qfCancelBtn">Cancel</button>
       <button id="qfSaveBtn" class="save">Save</button>
@@ -152,12 +227,11 @@ html, body { overflow: hidden; height: 100%; background: #000; }
     <button id="qfPasteBtn">📋 Paste URL from clipboard</button>
     <div><label>Image link</label><input type="text" id="qfLink" inputmode="url" autocomplete="off"><div id="qfLinkPreview"></div></div>
     <div><label>Common name (cname)</label><input type="text" id="qfCname" autocomplete="off"></div>
-    <!-- Desktop-only fields -->
     <div id="qfDesktopFields">
-      <div style="margin-bottom:10px"><label>Scientific name</label><input type="text" id="qfSname" autocomplete="off"></div>
-      <div style="margin-bottom:10px"><label>Attribution</label><input type="text" id="qfAttrib" placeholder="© Author / CC BY 4.0" autocomplete="off"></div>
-      <div style="margin-bottom:10px"><label>Comment</label><input type="text" id="qfComment" autocomplete="off"></div>
-      <div style="margin-bottom:10px"><label>Asset</label>
+      <div><label>Scientific name</label><input type="text" id="qfSname" autocomplete="off"></div>
+      <div><label>Attribution</label><input type="text" id="qfAttrib" placeholder="© Author / CC BY 4.0" autocomplete="off"></div>
+      <div><label>Comment</label><input type="text" id="qfComment" autocomplete="off"></div>
+      <div><label>Asset</label>
         <select id="qfAsset"><option value="i">i — image</option><option value="v">v — video</option></select>
       </div>
       <div><label>Fit override</label>
@@ -169,7 +243,6 @@ html, body { overflow: hidden; height: 100%; background: #000; }
       </div>
     </div>
     <div id="qfError"></div>
-    <!-- Save at bottom too -->
     <div class="qf-btns">
       <button id="qfCancelBtn2">Cancel</button>
       <button id="qfSaveBtn2" class="save">Save</button>
@@ -180,17 +253,17 @@ html, body { overflow: hidden; height: 100%; background: #000; }
 <script>
 'use strict';
 
-const GRID_COLS = 7, GRID_ROWS = 7, COL_LETTERS = "abcdefg";
+const GRID_COLS = 5, GRID_ROWS = 5, COL_LETTERS = "abcde";  // 25 cells, 3 grid lines
 const ISMOBILE = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
 
 let GW=0, GH=0, cellW=0, cellH=0, isPortrait=false;
 let imgFitMode = localStorage.getItem("imgFitMode") || "fc";
 let linksData  = [];
 
-// Display toggles — defaults: cname=on, others=off
-let showCellName  = false;  // cell coordinate badge e.g. "2b"
-let showCname     = true;   // cname label bar
-let showAttrib    = false;  // attribution badge
+// Display toggles
+let showCellName = false;
+let showCname    = true;
+let showAttrib   = false;
 
 const canvas = document.getElementById('gameCanvas');
 const ctx    = canvas.getContext('2d');
@@ -200,38 +273,30 @@ function parseCell(s){ if(!s||s.length<2)return null; const r=parseInt(s[0]); co
 function makeCellStr(r,c){ return r+COL_LETTERS[c-1]; }
 function occupiedCells(){ const s=new Set(); linksData.forEach(it=>{ if(it.show==="1"){const p=parseCell(it.cell);if(p)s.add(makeCellStr(p.row,p.col));} }); return s; }
 
-// ── layout ────────────────────────────────────────────────────────────
-// Key fix: on portrait mobile, we rotate canvas+overlays so landscape fills screen.
-// The canvas is drawn at GW x GH (landscape dims), then CSS-rotated.
-// The hamburger + modal are fixed in VIEWPORT coords, so they stay put.
-
+// ── layout ───────────────────────────────────────────────────────────
 function setup(){
-  const vw = window.innerWidth  || 800;
-  const vh = window.innerHeight || 600;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
   isPortrait = vw < vh;
 
   if(isPortrait){
-    // Landscape dims
+    // Landscape dimensions, rotate 90deg clockwise
     GW = vh; GH = vw;
     canvas.width  = GW;
     canvas.height = GH;
-    // Rotate 90deg clockwise: top-left of rotated canvas lands at top-left of viewport
     canvas.style.width  = GW + "px";
     canvas.style.height = GH + "px";
     canvas.style.top    = "0";
     canvas.style.left   = "0";
     canvas.style.transformOrigin = "top left";
-    canvas.style.transform = "rotate(90deg) translate(0, -" + vw + "px)";
+    canvas.style.transform = `rotate(90deg) translate(0px, -${vw}px)`;
   } else {
     GW = vw; GH = vh;
     canvas.width  = GW;
     canvas.height = GH;
-    canvas.style.width  = GW + "px";
-    canvas.style.height = GH + "px";
-    canvas.style.transformOrigin = "top left";
+    canvas.style.width  = "100vw";
+    canvas.style.height = "100vh";
     canvas.style.transform = "none";
-    canvas.style.top  = "0";
-    canvas.style.left = "0";
   }
   cellW = GW / GRID_COLS;
   cellH = GH / GRID_ROWS;
@@ -239,11 +304,11 @@ function setup(){
 }
 
 function applyOverlayTransform(){
-  const vw = window.innerWidth  || 800;
+  const vw = window.innerWidth;
   const oc = document.getElementById("cellOverlayContainer");
   const eh = document.getElementById("emptyCellHits");
   if(isPortrait){
-    const t = "rotate(90deg) translate(0, -" + vw + "px)";
+    const t = `rotate(90deg) translate(0px, -${vw}px)`;
     [oc, eh].forEach(el=>{
       el.style.width  = GW + "px";
       el.style.height = GH + "px";
@@ -252,14 +317,14 @@ function applyOverlayTransform(){
     });
   } else {
     [oc, eh].forEach(el=>{
-      el.style.width  = GW + "px";
-      el.style.height = GH + "px";
+      el.style.width  = "100vw";
+      el.style.height = "100vh";
       el.style.transform = "none";
     });
   }
 }
 
-// ── render ────────────────────────────────────────────────────────────
+// ── render ───────────────────────────────────────────────────────────
 function renderGrid(){
   if(!GW||!GH) return;
   ctx.fillStyle = '#c8ddf0'; ctx.fillRect(0,0,GW,GH);
@@ -267,9 +332,8 @@ function renderGrid(){
   for(let i=1;i<GRID_COLS;i++){ const x=Math.round(GW*i/GRID_COLS)+0.5; ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,GH); ctx.stroke(); }
   for(let i=1;i<GRID_ROWS;i++){ const y=Math.round(GH*i/GRID_ROWS)+0.5; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(GW,y); ctx.stroke(); }
 
-  // Cell coord labels — on desktop always (if toggled), on mobile never
   if(showCellName && !ISMOBILE){
-    const fs=Math.max(12,Math.floor(Math.min(cellW,cellH)*0.25));
+    const fs=Math.max(14,Math.floor(Math.min(cellW,cellH)*0.25));
     ctx.font=`bold ${fs}px Arial`; ctx.textAlign="center"; ctx.textBaseline="middle";
     for(let r=1;r<=GRID_ROWS;r++) for(let c=1;c<=GRID_COLS;c++){
       const cx=(c-0.5)*cellW, cy=(r-0.5)*cellH, label=r+COL_LETTERS[c-1];
@@ -282,7 +346,7 @@ function renderGrid(){
   updateEmptyHits();
 }
 
-// ── overlays ──────────────────────────────────────────────────────────
+// ── overlays ─────────────────────────────────────────────────────────
 function updateCellOverlays(){
   const cont = document.getElementById("cellOverlayContainer");
   cont.innerHTML = "";
@@ -296,6 +360,7 @@ function updateCellOverlays(){
     const div=document.createElement("div");
     div.className="cell-overlay";
     div.style.cssText=`left:${x}px;top:${y}px;width:${cellW}px;height:${cellH}px;`;
+    div.addEventListener("pointerup", e=>{ e.stopPropagation(); showFullscreen(it); });
 
     const hasImg = it.asset==="i" && it.link;
     if(hasImg){
@@ -307,19 +372,16 @@ function updateCellOverlays(){
     } else if(!it.cname){ return; }
     if(!hasImg) div.classList.add("label-only");
 
-    // cname label
     if(it.cname && showCname){
       const lbl=document.createElement("div");
       lbl.className="cell-label"; lbl.textContent=it.cname;
       div.appendChild(lbl);
     }
-    // attribution badge (desktop only by default)
     if(it.attribution && showAttrib && !ISMOBILE){
       const att=document.createElement("span");
       att.className="cell-attrib"; att.textContent=it.attribution;
       div.appendChild(att);
     }
-    // cell coord badge
     if(showCellName && !ISMOBILE){
       const cid=document.createElement("span");
       cid.className="cell-id"; cid.textContent=it.cell;
@@ -345,15 +407,29 @@ function updateEmptyHits(){
   }
 }
 
-// ── menu ──────────────────────────────────────────────────────────────
-const menuBtn   = document.getElementById("menuBtn");
+// ── fullscreen image ─────────────────────────────────────────────────
+function showFullscreen(item){
+  const fs = document.getElementById("fullscreenImg");
+  const img = document.getElementById("fsImg");
+  img.src = item.link;
+  img.alt = item.cname + " — " + (item.attribution || "");
+  fs.classList.add("open");
+}
+document.getElementById("fsCloseBtn").addEventListener("pointerup", ()=>document.getElementById("fullscreenImg").classList.remove("open"));
+document.getElementById("fsCloseBtn2").addEventListener("pointerup", ()=>document.getElementById("fullscreenImg").classList.remove("open"));
+document.getElementById("fullscreenImg").addEventListener("pointerup", e=>{
+  if(e.target===document.getElementById("fullscreenImg")) document.getElementById("fullscreenImg").classList.remove("open");
+});
+
+// ── menu ─────────────────────────────────────────────────────────────
+const menuBtn = document.getElementById("menuBtn");
 const menuPanel = document.getElementById("menuPanel");
 function closeMenu(){ menuPanel.classList.remove("open"); document.getElementById("settingsPanel").classList.remove("open"); document.getElementById("miSettings").textContent="Settings ▸"; }
 menuBtn.addEventListener("pointerup", e=>{ e.stopPropagation(); menuPanel.classList.toggle("open"); });
 document.addEventListener("pointerup", ()=>{ if(menuPanel.classList.contains("open")) closeMenu(); });
 menuPanel.addEventListener("pointerup", e=>e.stopPropagation());
 document.getElementById("miTables").addEventListener("pointerup", e=>{ e.stopPropagation(); closeMenu(); alert("Tables admin — coming next build"); });
-document.getElementById("miHelp").addEventListener("pointerup", e=>{ e.stopPropagation(); closeMenu(); alert("Mlynx\n\nTap/click empty cell → quick-fill\nHamburger (lower-right) → Settings"); });
+document.getElementById("miHelp").addEventListener("pointerup", e=>{ e.stopPropagation(); closeMenu(); alert("Mlynx\n\nTap image cell → fullscreen\nTap empty → quick-fill\nHamburger → Settings"); });
 document.getElementById("miSettings").addEventListener("pointerup", e=>{ e.stopPropagation(); const sp=document.getElementById("settingsPanel"); const open=sp.classList.toggle("open"); e.currentTarget.textContent=open?"Settings ▾":"Settings ▸"; });
 
 function syncFitToggle(){ const chk=document.getElementById("togImgFit"); chk.checked=(imgFitMode==="ei"); document.getElementById("miImgFitLabel").textContent=imgFitMode==="ei"?"Img: Entire Image":"Img: Fill Cell"; }
@@ -365,24 +441,18 @@ document.getElementById("togAttrib").addEventListener("change",function(){ showA
 // date stamp
 (()=>{ const d=new Date(); const el=document.getElementById("menuDateStamp"); if(el) el.textContent=d.toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric",year:"numeric"})+" "+d.toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"}); })();
 
-// ── quick-fill ────────────────────────────────────────────────────────
-// Mobile: show only link + cname. Desktop: show all fields.
-function applyMobileQF(){
-  document.getElementById("qfDesktopFields").style.display = ISMOBILE ? "none" : "block";
-}
-
+// ── quick-fill ───────────────────────────────────────────────────────
 let qfTargetCell="";
+function applyMobileQF(){ document.getElementById("qfDesktopFields").style.display = ISMOBILE ? "none" : "block"; }
 async function openQF(cs){
   qfTargetCell=cs;
   applyMobileQF();
   const ex=linksData.find(it=>it.cell===cs);
-
   let linkVal = ex?(ex.link||""):"";
   if(!ISMOBILE){
     try{ const clip=(await navigator.clipboard.readText()).trim(); if(/^https?:\/\//i.test(clip)) linkVal=clip; }catch(e){}
   }
-
-  document.getElementById("qfLink").value    = linkVal;
+  document.getElementById("qfLink").value = linkVal;
   document.getElementById("qfLinkPreview").textContent = linkVal||"";
   const cnameEl=document.getElementById("qfCname"); const prev=ex?(ex.cname||""):""; cnameEl.value=prev;
   if(prev){ cnameEl.classList.add("has-prev"); cnameEl.addEventListener("input",function h(){ cnameEl.classList.remove("has-prev"); cnameEl.removeEventListener("input",h); },{once:true}); } else cnameEl.classList.remove("has-prev");
@@ -398,23 +468,21 @@ async function openQF(cs){
   document.getElementById("qfModal").classList.add("open");
   setTimeout(()=>document.getElementById(linkVal?"qfCname":"qfLink").focus(),80);
 }
-
 function qfSave(){
-  const link  = document.getElementById("qfLink").value.trim();
-  const cname = document.getElementById("qfCname").value.trim();
+  const link  =document.getElementById("qfLink").value.trim();
+  const cname =document.getElementById("qfCname").value.trim();
   if(!link&&!cname){ document.getElementById("qfError").textContent="Need link or cname"; return; }
-  const sname   = ISMOBILE ? "" : document.getElementById("qfSname").value.trim();
-  const attrib  = ISMOBILE ? "" : document.getElementById("qfAttrib").value.trim();
-  const comment = ISMOBILE ? "" : document.getElementById("qfComment").value.trim();
-  const asset   = ISMOBILE ? "i" : document.getElementById("qfAsset").value;
-  const fit     = ISMOBILE ? "" : document.getElementById("qfFit").value;
+  const sname   =ISMOBILE ? "" : document.getElementById("qfSname").value.trim();
+  const attrib  =ISMOBILE ? "" : document.getElementById("qfAttrib").value.trim();
+  const comment =ISMOBILE ? "" : document.getElementById("qfComment").value.trim();
+  const asset   =ISMOBILE ? "i" : document.getElementById("qfAsset").value;
+  const fit     =ISMOBILE ? "" : document.getElementById("qfFit").value;
   let e=linksData.find(it=>it.cell===qfTargetCell);
   if(e){ Object.assign(e,{show:"1",asset,fit,link,cname,sname,attribution:attrib,comment}); }
   else  { linksData.push({show:"1",asset,cell:qfTargetCell,fit,link,cname,sname,attribution:attrib,comment}); }
   document.getElementById("qfModal").classList.remove("open");
   renderGrid();
 }
-
 function closeQF(){ document.getElementById("qfModal").classList.remove("open"); }
 
 document.getElementById("qfPasteBtn").addEventListener("pointerup", async e=>{
@@ -426,17 +494,12 @@ document.getElementById("qfPasteBtn").addEventListener("pointerup", async e=>{
   }catch(err){ document.getElementById("qfLink").focus(); alert("Tap the Image link field and use your browser Paste option."); }
 });
 
-document.getElementById("qfSaveBtn").addEventListener("pointerup",  e=>{ e.stopPropagation(); qfSave(); });
-document.getElementById("qfSaveBtn2").addEventListener("pointerup", e=>{ e.stopPropagation(); qfSave(); });
-document.getElementById("qfCancelBtn").addEventListener("pointerup",  e=>{ e.stopPropagation(); closeQF(); });
-document.getElementById("qfCancelBtn2").addEventListener("pointerup", e=>{ e.stopPropagation(); closeQF(); });
+["qfSaveBtn","qfSaveBtn2"].forEach(id=>document.getElementById(id).addEventListener("pointerup", e=>{ e.stopPropagation(); qfSave(); }));
+["qfCancelBtn","qfCancelBtn2"].forEach(id=>document.getElementById(id).addEventListener("pointerup", e=>{ e.stopPropagation(); closeQF(); }));
 document.getElementById("qfLink").addEventListener("input",function(){ document.getElementById("qfLinkPreview").textContent=this.value||""; });
 document.getElementById("qfModal").addEventListener("pointerup", e=>e.stopPropagation());
 
-// keyboard ctrl-L (desktop)
-document.addEventListener("keydown",e=>{ if((e.ctrlKey||e.metaKey)&&e.key==="l"){ e.preventDefault(); showCellName=!showCellName; document.getElementById("togCellName").checked=showCellName; renderGrid(); } });
-
-// ── bootstrap ─────────────────────────────────────────────────────────
+// ── bootstrap ────────────────────────────────────────────────────────
 async function init(){
   setup();
   syncFitToggle();
