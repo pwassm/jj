@@ -10,9 +10,15 @@
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { overflow: hidden; height: 100%; background: #000; }
-#gameCanvas { display: block; background: #c8ddf0; position: fixed; top: 0; left: 0; }
 
-/* ── Hamburger: always lower-right of actual viewport ── */
+#gameCanvas {
+  display: block;
+  position: fixed;
+  top: 0; left: 0;
+  background: #c8ddf0;
+}
+
+/* ── Hamburger: always fixed lower-right of VIEWPORT (not canvas) ── */
 #menuWrap {
   position: fixed;
   bottom: 10px;
@@ -31,15 +37,12 @@ html, body { overflow: hidden; height: 100%; background: #000; }
 }
 #menuBtn span { display: block; width: 100%; height: 3px; background: #fff; border-radius: 2px; }
 
-/* Panel opens upward */
 #menuPanel {
   position: fixed;
-  bottom: 64px;
-  right: 10px;
+  bottom: 64px; right: 10px;
   z-index: 9998;
   background: rgba(25,25,25,0.97);
-  border-radius: 10px;
-  min-width: 210px;
+  border-radius: 10px; min-width: 210px;
   display: none; flex-direction: column;
   overflow: hidden;
   box-shadow: 0 4px 24px rgba(0,0,0,0.6);
@@ -51,20 +54,20 @@ html, body { overflow: hidden; height: 100%; background: #000; }
 .menu-item:hover, .menu-item:active { background: rgba(255,255,255,0.14); }
 .menu-divider { height: 1px; background: rgba(255,255,255,0.15); }
 
-/* Settings sub-panel */
 #settingsPanel { display: none; flex-direction: column; background: rgba(15,15,30,0.98); border-top: 1px solid rgba(255,255,255,0.1); }
 #settingsPanel.open { display: flex; }
 .setting-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 18px; border-bottom: 1px solid rgba(255,255,255,0.06); }
 .setting-row span { color: #ccc; font: 13px Arial,sans-serif; }
+
 .tog { position: relative; display: inline-block; width: 38px; height: 20px; flex-shrink: 0; }
 .tog input { opacity: 0; width: 0; height: 0; }
 .tog-slider { position: absolute; cursor: pointer; inset: 0; background: #444; border-radius: 20px; transition: .2s; }
-.tog-slider:before { content: ""; position: absolute; width: 14px; height: 14px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: .2s; }
+.tog-slider:before { content:""; position:absolute; width:14px; height:14px; left:3px; bottom:3px; background:#fff; border-radius:50%; transition:.2s; }
 .tog input:checked + .tog-slider { background: #3a8a3a; }
 .tog input:checked + .tog-slider:before { transform: translateX(18px); }
 
-/* Cell overlays */
-#cellOverlayContainer { position: fixed; top: 0; left: 0; pointer-events: none; }
+/* Cell overlays — positioned in ROTATED canvas space */
+#cellOverlayContainer { position: fixed; top: 0; left: 0; pointer-events: none; overflow: hidden; }
 .cell-overlay { position: absolute; display: flex; align-items: flex-end; justify-content: center; overflow: hidden; }
 .cell-overlay img { position: absolute; inset: 0; width: 100%; height: 100%; }
 .cell-overlay img.fit-contain { object-fit: contain; background: rgba(0,0,0,0.18); }
@@ -72,30 +75,33 @@ html, body { overflow: hidden; height: 100%; background: #000; }
 .cell-label { position: relative; z-index: 1; width: 100%; text-align: center; padding: 2px 4px; font-size: 11px; font-weight: bold; color: #fff; background: rgba(0,0,0,0.58); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cell-overlay.label-only { align-items: center; justify-content: center; background: rgba(0,0,0,0.12); }
 .cell-overlay.label-only .cell-label { background: rgba(0,0,80,0.55); border-radius: 4px; padding: 3px 6px; width: auto; font-size: 12px; }
-.cell-attrib { position: absolute; bottom: 18px; right: 2px; z-index: 2; font-size: 9px; color: rgba(255,255,255,0.7); background: rgba(0,0,0,0.45); padding: 1px 4px; border-radius: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 90%; }
+.cell-attrib { position: absolute; bottom: 18px; right: 2px; z-index: 2; font-size: 9px; color: rgba(255,255,255,0.75); background: rgba(0,0,0,0.5); padding: 1px 4px; border-radius: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 90%; }
+.cell-id { position: absolute; top: 2px; left: 3px; z-index: 2; font-size: 9px; color: rgba(255,255,255,0.6); background: rgba(0,0,0,0.4); padding: 1px 3px; border-radius: 3px; }
 
-/* Empty cell hit areas */
-#emptyCellHits { position: fixed; top: 0; left: 0; }
+#emptyCellHits { position: fixed; top: 0; left: 0; overflow: hidden; }
 .cell-empty-hit { position: absolute; border: 2px dashed rgba(100,180,255,0.0); transition: border-color .15s, background .15s; cursor: crosshair; }
 .cell-empty-hit:hover { border-color: rgba(100,180,255,0.6); background: rgba(100,180,255,0.07); }
 
 /* Quick-fill modal */
 #qfModal { display: none; position: fixed; inset: 0; z-index: 20000; background: rgba(0,0,0,0.82); align-items: center; justify-content: center; }
 #qfModal.open { display: flex; }
-#qfBox { background: #1a1a2e; border: 1px solid #555; border-radius: 12px; padding: 20px 22px; min-width: 300px; max-width: 500px; width: 92vw; display: flex; flex-direction: column; gap: 10px; font-family: Arial,sans-serif; max-height: 90vh; overflow-y: auto; }
+#qfBox { background: #1a1a2e; border: 1px solid #555; border-radius: 12px; padding: 18px 20px; min-width: 280px; max-width: 480px; width: 92vw; display: flex; flex-direction: column; gap: 10px; font-family: Arial,sans-serif; max-height: 94vh; overflow-y: auto; }
 #qfBox h3 { color: #8ef; font-size: 15px; }
 #qfBox label { font-size: 12px; color: #aaa; display: block; margin-bottom: 3px; }
-#qfBox input, #qfBox select { background: #0a0a1a; border: 1px solid #555; color: #fff; padding: 8px 10px; border-radius: 6px; font-size: 14px; width: 100%; }
+#qfBox input, #qfBox select { background: #0a0a1a; border: 1px solid #555; color: #fff; padding: 9px 10px; border-radius: 6px; font-size: 15px; width: 100%; }
 #qfBox input:focus, #qfBox select:focus { border-color: #8ef; outline: none; }
 #qfCname.has-prev { color: #6af; }
 #qfCname.has-prev:focus { color: #fff; }
 #qfLinkPreview { font-size: 11px; color: #888; word-break: break-all; min-height: 14px; }
-.qf-btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
-.qf-btns button { padding: 8px 18px; border-radius: 6px; border: 1px solid #555; background: #2a2a3e; color: #fff; font-size: 14px; cursor: pointer; }
+.qf-btns { display: flex; gap: 8px; justify-content: flex-end; }
+.qf-btns button { padding: 9px 20px; border-radius: 6px; border: 1px solid #555; background: #2a2a3e; color: #fff; font-size: 14px; cursor: pointer; }
+.qf-btns button.save { border-color: #5f5; color: #afa; }
 .qf-btns button:hover { background: #3a3a5e; }
-#qfPasteBtn { width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #4af; background: rgba(0,80,180,0.3); color: #8ef; font-size: 14px; cursor: pointer; margin-bottom: 2px; }
+#qfPasteBtn { width: 100%; padding: 11px; border-radius: 6px; border: 1px solid #4af; background: rgba(0,80,180,0.3); color: #8ef; font-size: 15px; cursor: pointer; }
 #qfPasteBtn:hover, #qfPasteBtn:active { background: rgba(0,80,180,0.55); }
 #qfError { color: #f66; font-size: 12px; min-height: 14px; }
+/* Desktop-only fields hidden on mobile */
+.desktop-only { }
 </style>
 </head>
 <body>
@@ -116,8 +122,16 @@ html, body { overflow: hidden; height: 100%; background: #000; }
         <label class="tog"><input type="checkbox" id="togImgFit"><span class="tog-slider"></span></label>
       </div>
       <div class="setting-row">
-        <span>Cell Labels</span>
-        <label class="tog"><input type="checkbox" id="togLabels" checked><span class="tog-slider"></span></label>
+        <span>Cell name</span>
+        <label class="tog"><input type="checkbox" id="togCellName"><span class="tog-slider"></span></label>
+      </div>
+      <div class="setting-row">
+        <span>cname label</span>
+        <label class="tog"><input type="checkbox" id="togCname" checked><span class="tog-slider"></span></label>
+      </div>
+      <div class="setting-row">
+        <span>Attribution badge</span>
+        <label class="tog"><input type="checkbox" id="togAttrib"><span class="tog-slider"></span></label>
       </div>
     </div>
     <div class="menu-divider"></div>
@@ -130,27 +144,35 @@ html, body { overflow: hidden; height: 100%; background: #000; }
 <div id="qfModal">
   <div id="qfBox">
     <h3 id="qfTitle">📌 Fill Cell</h3>
-    <!-- Explicit paste button for mobile (clipboard API needs user gesture) -->
+    <!-- Save at top -->
+    <div class="qf-btns">
+      <button id="qfCancelBtn">Cancel</button>
+      <button id="qfSaveBtn" class="save">Save</button>
+    </div>
     <button id="qfPasteBtn">📋 Paste URL from clipboard</button>
     <div><label>Image link</label><input type="text" id="qfLink" inputmode="url" autocomplete="off"><div id="qfLinkPreview"></div></div>
     <div><label>Common name (cname)</label><input type="text" id="qfCname" autocomplete="off"></div>
-    <div><label>Scientific name</label><input type="text" id="qfSname" autocomplete="off"></div>
-    <div><label>Attribution</label><input type="text" id="qfAttrib" placeholder="© Author / CC BY 4.0" autocomplete="off"></div>
-    <div><label>Comment</label><input type="text" id="qfComment" autocomplete="off"></div>
-    <div><label>Asset</label>
-      <select id="qfAsset"><option value="i">i — image</option><option value="v">v — video</option></select>
-    </div>
-    <div><label>Fit override</label>
-      <select id="qfFit">
-        <option value="">— default —</option>
-        <option value="ei">ei — entire image</option>
-        <option value="fc">fc — fill cell</option>
-      </select>
+    <!-- Desktop-only fields -->
+    <div id="qfDesktopFields">
+      <div style="margin-bottom:10px"><label>Scientific name</label><input type="text" id="qfSname" autocomplete="off"></div>
+      <div style="margin-bottom:10px"><label>Attribution</label><input type="text" id="qfAttrib" placeholder="© Author / CC BY 4.0" autocomplete="off"></div>
+      <div style="margin-bottom:10px"><label>Comment</label><input type="text" id="qfComment" autocomplete="off"></div>
+      <div style="margin-bottom:10px"><label>Asset</label>
+        <select id="qfAsset"><option value="i">i — image</option><option value="v">v — video</option></select>
+      </div>
+      <div><label>Fit override</label>
+        <select id="qfFit">
+          <option value="">— default —</option>
+          <option value="ei">ei — entire image</option>
+          <option value="fc">fc — fill cell</option>
+        </select>
+      </div>
     </div>
     <div id="qfError"></div>
+    <!-- Save at bottom too -->
     <div class="qf-btns">
-      <button id="qfCancelBtn">Cancel</button>
-      <button id="qfSaveBtn">Save</button>
+      <button id="qfCancelBtn2">Cancel</button>
+      <button id="qfSaveBtn2" class="save">Save</button>
     </div>
   </div>
 </div>
@@ -159,65 +181,85 @@ html, body { overflow: hidden; height: 100%; background: #000; }
 'use strict';
 
 const GRID_COLS = 7, GRID_ROWS = 7, COL_LETTERS = "abcdefg";
-const ISMOBILE = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+const ISMOBILE = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
 
 let GW=0, GH=0, cellW=0, cellH=0, isPortrait=false;
-let showCellLabels = true;
 let imgFitMode = localStorage.getItem("imgFitMode") || "fc";
-let linksData = [];
+let linksData  = [];
+
+// Display toggles — defaults: cname=on, others=off
+let showCellName  = false;  // cell coordinate badge e.g. "2b"
+let showCname     = true;   // cname label bar
+let showAttrib    = false;  // attribution badge
 
 const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
+const ctx    = canvas.getContext('2d');
 
-// ── helpers ────────────────────────────────────────────────────────
+// ── helpers ──────────────────────────────────────────────────────────
 function parseCell(s){ if(!s||s.length<2)return null; const r=parseInt(s[0]); const c=COL_LETTERS.indexOf(s[1].toLowerCase())+1; if(isNaN(r)||r<1||r>GRID_ROWS||c<1||c>GRID_COLS)return null; return{row:r,col:c}; }
 function makeCellStr(r,c){ return r+COL_LETTERS[c-1]; }
 function occupiedCells(){ const s=new Set(); linksData.forEach(it=>{ if(it.show==="1"){const p=parseCell(it.cell);if(p)s.add(makeCellStr(p.row,p.col));} }); return s; }
 
-// ── layout ─────────────────────────────────────────────────────────
+// ── layout ────────────────────────────────────────────────────────────
+// Key fix: on portrait mobile, we rotate canvas+overlays so landscape fills screen.
+// The canvas is drawn at GW x GH (landscape dims), then CSS-rotated.
+// The hamburger + modal are fixed in VIEWPORT coords, so they stay put.
+
 function setup(){
-  const pw = window.innerWidth  || 800;
-  const ph = window.innerHeight || 600;
-  isPortrait = pw < ph;
+  const vw = window.innerWidth  || 800;
+  const vh = window.innerHeight || 600;
+  isPortrait = vw < vh;
 
   if(isPortrait){
-    // Rotate canvas 90° to force landscape fill
-    GW = ph; GH = pw;
-    canvas.width = GW; canvas.height = GH;
+    // Landscape dims
+    GW = vh; GH = vw;
+    canvas.width  = GW;
+    canvas.height = GH;
+    // Rotate 90deg clockwise: top-left of rotated canvas lands at top-left of viewport
+    canvas.style.width  = GW + "px";
+    canvas.style.height = GH + "px";
+    canvas.style.top    = "0";
+    canvas.style.left   = "0";
     canvas.style.transformOrigin = "top left";
-    canvas.style.transform = `rotate(90deg) translateX(0) translateY(-${ph}px)`;
-    canvas.style.width  = GW + "px";
-    canvas.style.height = GH + "px";
+    canvas.style.transform = "rotate(90deg) translate(0, -" + vw + "px)";
   } else {
-    GW = pw; GH = ph;
-    canvas.width = GW; canvas.height = GH;
-    canvas.style.transform = "none";
+    GW = vw; GH = vh;
+    canvas.width  = GW;
+    canvas.height = GH;
     canvas.style.width  = GW + "px";
     canvas.style.height = GH + "px";
+    canvas.style.transformOrigin = "top left";
+    canvas.style.transform = "none";
+    canvas.style.top  = "0";
+    canvas.style.left = "0";
   }
   cellW = GW / GRID_COLS;
   cellH = GH / GRID_ROWS;
-  syncOverlayTransform();
+  applyOverlayTransform();
 }
 
-function syncOverlayTransform(){
-  const pw = window.innerWidth  || 800;
-  const ph = window.innerHeight || 600;
+function applyOverlayTransform(){
+  const vw = window.innerWidth  || 800;
   const oc = document.getElementById("cellOverlayContainer");
   const eh = document.getElementById("emptyCellHits");
   if(isPortrait){
-    const t = `rotate(90deg) translateX(0) translateY(-${ph}px)`;
-    oc.style.transformOrigin = "top left"; oc.style.transform = t;
-    eh.style.transformOrigin = "top left"; eh.style.transform = t;
+    const t = "rotate(90deg) translate(0, -" + vw + "px)";
+    [oc, eh].forEach(el=>{
+      el.style.width  = GW + "px";
+      el.style.height = GH + "px";
+      el.style.transformOrigin = "top left";
+      el.style.transform = t;
+    });
   } else {
-    oc.style.transform = "none";
-    eh.style.transform = "none";
+    [oc, eh].forEach(el=>{
+      el.style.width  = GW + "px";
+      el.style.height = GH + "px";
+      el.style.transform = "none";
+    });
   }
-  oc.style.width = GW+"px"; oc.style.height = GH+"px";
-  eh.style.width = GW+"px"; eh.style.height = GH+"px";
 }
 
-// ── render ─────────────────────────────────────────────────────────
+// ── render ────────────────────────────────────────────────────────────
 function renderGrid(){
   if(!GW||!GH) return;
   ctx.fillStyle = '#c8ddf0'; ctx.fillRect(0,0,GW,GH);
@@ -225,8 +267,8 @@ function renderGrid(){
   for(let i=1;i<GRID_COLS;i++){ const x=Math.round(GW*i/GRID_COLS)+0.5; ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,GH); ctx.stroke(); }
   for(let i=1;i<GRID_ROWS;i++){ const y=Math.round(GH*i/GRID_ROWS)+0.5; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(GW,y); ctx.stroke(); }
 
-  // Labels: desktop always, mobile only if toggled on
-  if(showCellLabels && !ISMOBILE){
+  // Cell coord labels — on desktop always (if toggled), on mobile never
+  if(showCellName && !ISMOBILE){
     const fs=Math.max(12,Math.floor(Math.min(cellW,cellH)*0.25));
     ctx.font=`bold ${fs}px Arial`; ctx.textAlign="center"; ctx.textBaseline="middle";
     for(let r=1;r<=GRID_ROWS;r++) for(let c=1;c<=GRID_COLS;c++){
@@ -240,18 +282,21 @@ function renderGrid(){
   updateEmptyHits();
 }
 
-// ── overlays ───────────────────────────────────────────────────────
+// ── overlays ──────────────────────────────────────────────────────────
 function updateCellOverlays(){
   const cont = document.getElementById("cellOverlayContainer");
   cont.innerHTML = "";
-  syncOverlayTransform();
+  applyOverlayTransform();
+
   linksData.forEach(it=>{
     if(it.show!=="1") return;
     const pos=parseCell(it.cell); if(!pos) return;
     const x=(pos.col-1)*cellW, y=(pos.row-1)*cellH;
+
     const div=document.createElement("div");
     div.className="cell-overlay";
     div.style.cssText=`left:${x}px;top:${y}px;width:${cellW}px;height:${cellH}px;`;
+
     const hasImg = it.asset==="i" && it.link;
     if(hasImg){
       const img=document.createElement("img");
@@ -261,16 +306,24 @@ function updateCellOverlays(){
       div.appendChild(img);
     } else if(!it.cname){ return; }
     if(!hasImg) div.classList.add("label-only");
-    // On mobile: images only, no text labels
-    if(it.cname && !ISMOBILE){
+
+    // cname label
+    if(it.cname && showCname){
       const lbl=document.createElement("div");
       lbl.className="cell-label"; lbl.textContent=it.cname;
       div.appendChild(lbl);
     }
-    if(it.attribution && !ISMOBILE){
+    // attribution badge (desktop only by default)
+    if(it.attribution && showAttrib && !ISMOBILE){
       const att=document.createElement("span");
       att.className="cell-attrib"; att.textContent=it.attribution;
       div.appendChild(att);
+    }
+    // cell coord badge
+    if(showCellName && !ISMOBILE){
+      const cid=document.createElement("span");
+      cid.className="cell-id"; cid.textContent=it.cell;
+      div.appendChild(cid);
     }
     cont.appendChild(div);
   });
@@ -278,64 +331,52 @@ function updateCellOverlays(){
 
 function updateEmptyHits(){
   const hits=document.getElementById("emptyCellHits");
-  hits.innerHTML=""; syncOverlayTransform();
+  hits.innerHTML="";
+  applyOverlayTransform();
   const occ=occupiedCells();
   for(let r=1;r<=GRID_ROWS;r++) for(let c=1;c<=GRID_COLS;c++){
     const cs=makeCellStr(r,c); if(occ.has(cs)) continue;
     const div=document.createElement("div");
     div.className="cell-empty-hit";
     div.style.cssText=`left:${(c-1)*cellW}px;top:${(r-1)*cellH}px;width:${cellW}px;height:${cellH}px;`;
-    div.title="Click to add — "+cs;
+    div.title="Add — "+cs;
     div.addEventListener("pointerup", e=>{ e.preventDefault(); openQF(cs); });
     hits.appendChild(div);
   }
 }
 
-// ── menu ───────────────────────────────────────────────────────────
+// ── menu ──────────────────────────────────────────────────────────────
 const menuBtn   = document.getElementById("menuBtn");
 const menuPanel = document.getElementById("menuPanel");
 function closeMenu(){ menuPanel.classList.remove("open"); document.getElementById("settingsPanel").classList.remove("open"); document.getElementById("miSettings").textContent="Settings ▸"; }
 menuBtn.addEventListener("pointerup", e=>{ e.stopPropagation(); menuPanel.classList.toggle("open"); });
 document.addEventListener("pointerup", ()=>{ if(menuPanel.classList.contains("open")) closeMenu(); });
 menuPanel.addEventListener("pointerup", e=>e.stopPropagation());
-document.getElementById("miTables").addEventListener("pointerup",e=>{ e.stopPropagation(); closeMenu(); alert("Tables admin — coming next build"); });
-document.getElementById("miHelp").addEventListener("pointerup",e=>{ e.stopPropagation(); closeMenu(); alert("Mlynx help\n\nTap empty cell — quick-fill dialog\nHamburger (lower-right) > Settings — fit mode & labels"); });
-document.getElementById("miSettings").addEventListener("pointerup",e=>{ e.stopPropagation(); const sp=document.getElementById("settingsPanel"); const open=sp.classList.toggle("open"); e.currentTarget.textContent=open?"Settings ▾":"Settings ▸"; });
+document.getElementById("miTables").addEventListener("pointerup", e=>{ e.stopPropagation(); closeMenu(); alert("Tables admin — coming next build"); });
+document.getElementById("miHelp").addEventListener("pointerup", e=>{ e.stopPropagation(); closeMenu(); alert("Mlynx\n\nTap/click empty cell → quick-fill\nHamburger (lower-right) → Settings"); });
+document.getElementById("miSettings").addEventListener("pointerup", e=>{ e.stopPropagation(); const sp=document.getElementById("settingsPanel"); const open=sp.classList.toggle("open"); e.currentTarget.textContent=open?"Settings ▾":"Settings ▸"; });
 
 function syncFitToggle(){ const chk=document.getElementById("togImgFit"); chk.checked=(imgFitMode==="ei"); document.getElementById("miImgFitLabel").textContent=imgFitMode==="ei"?"Img: Entire Image":"Img: Fill Cell"; }
 document.getElementById("togImgFit").addEventListener("change",function(){ imgFitMode=this.checked?"ei":"fc"; localStorage.setItem("imgFitMode",imgFitMode); syncFitToggle(); renderGrid(); });
-document.getElementById("togLabels").addEventListener("change",function(){ showCellLabels=this.checked; renderGrid(); });
-document.addEventListener("keydown",e=>{ if((e.ctrlKey||e.metaKey)&&e.key==="l"){ e.preventDefault(); showCellLabels=!showCellLabels; document.getElementById("togLabels").checked=showCellLabels; renderGrid(); } });
+document.getElementById("togCellName").addEventListener("change",function(){ showCellName=this.checked; renderGrid(); });
+document.getElementById("togCname").addEventListener("change",function(){ showCname=this.checked; renderGrid(); });
+document.getElementById("togAttrib").addEventListener("change",function(){ showAttrib=this.checked; renderGrid(); });
 
 // date stamp
 (()=>{ const d=new Date(); const el=document.getElementById("menuDateStamp"); if(el) el.textContent=d.toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric",year:"numeric"})+" "+d.toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"}); })();
 
-// ── quick-fill ─────────────────────────────────────────────────────
+// ── quick-fill ────────────────────────────────────────────────────────
+// Mobile: show only link + cname. Desktop: show all fields.
+function applyMobileQF(){
+  document.getElementById("qfDesktopFields").style.display = ISMOBILE ? "none" : "block";
+}
+
 let qfTargetCell="";
-
-// Explicit paste button — works on mobile without auto-clipboard read
-document.getElementById("qfPasteBtn").addEventListener("pointerup", async e=>{
-  e.stopPropagation();
-  try{
-    const text = await navigator.clipboard.readText();
-    if(/^https?:\/\//i.test(text.trim())){
-      document.getElementById("qfLink").value = text.trim();
-      document.getElementById("qfLinkPreview").textContent = text.trim();
-    } else {
-      alert("No URL found in clipboard.");
-    }
-  }catch(err){
-    // Fallback: focus the field so user can long-press paste themselves
-    document.getElementById("qfLink").focus();
-    alert("Tap the Image link field and use your browser's Paste option.");
-  }
-});
-
 async function openQF(cs){
   qfTargetCell=cs;
+  applyMobileQF();
   const ex=linksData.find(it=>it.cell===cs);
 
-  // Try clipboard silently (works on desktop)
   let linkVal = ex?(ex.link||""):"";
   if(!ISMOBILE){
     try{ const clip=(await navigator.clipboard.readText()).trim(); if(/^https?:\/\//i.test(clip)) linkVal=clip; }catch(e){}
@@ -343,47 +384,66 @@ async function openQF(cs){
 
   document.getElementById("qfLink").value    = linkVal;
   document.getElementById("qfLinkPreview").textContent = linkVal||"";
-  const cnameEl=document.getElementById("qfCname");
-  const prev=ex?(ex.cname||""):""; cnameEl.value=prev;
+  const cnameEl=document.getElementById("qfCname"); const prev=ex?(ex.cname||""):""; cnameEl.value=prev;
   if(prev){ cnameEl.classList.add("has-prev"); cnameEl.addEventListener("input",function h(){ cnameEl.classList.remove("has-prev"); cnameEl.removeEventListener("input",h); },{once:true}); } else cnameEl.classList.remove("has-prev");
-  document.getElementById("qfSname").value   = ex?(ex.sname||""):"";
-  document.getElementById("qfAttrib").value  = ex?(ex.attribution||""):"";
-  document.getElementById("qfComment").value = ex?(ex.comment||""):"";
-  document.getElementById("qfAsset").value   = ex?(ex.asset||"i"):"i";
-  document.getElementById("qfFit").value     = ex?(ex.fit||""):"";
-  document.getElementById("qfTitle").textContent = "📌 Fill Cell — "+cs;
+  if(!ISMOBILE){
+    document.getElementById("qfSname").value   = ex?(ex.sname||""):"";
+    document.getElementById("qfAttrib").value  = ex?(ex.attribution||""):"";
+    document.getElementById("qfComment").value = ex?(ex.comment||""):"";
+    document.getElementById("qfAsset").value   = ex?(ex.asset||"i"):"i";
+    document.getElementById("qfFit").value     = ex?(ex.fit||""):"";
+  }
+  document.getElementById("qfTitle").textContent = "📌 "+cs;
   document.getElementById("qfError").textContent = "";
   document.getElementById("qfModal").classList.add("open");
   setTimeout(()=>document.getElementById(linkVal?"qfCname":"qfLink").focus(),80);
 }
+
 function qfSave(){
-  const link=document.getElementById("qfLink").value.trim();
-  const cname=document.getElementById("qfCname").value.trim();
+  const link  = document.getElementById("qfLink").value.trim();
+  const cname = document.getElementById("qfCname").value.trim();
   if(!link&&!cname){ document.getElementById("qfError").textContent="Need link or cname"; return; }
-  const sname=document.getElementById("qfSname").value.trim();
-  const attrib=document.getElementById("qfAttrib").value.trim();
-  const comment=document.getElementById("qfComment").value.trim();
-  const asset=document.getElementById("qfAsset").value;
-  const fit=document.getElementById("qfFit").value;
+  const sname   = ISMOBILE ? "" : document.getElementById("qfSname").value.trim();
+  const attrib  = ISMOBILE ? "" : document.getElementById("qfAttrib").value.trim();
+  const comment = ISMOBILE ? "" : document.getElementById("qfComment").value.trim();
+  const asset   = ISMOBILE ? "i" : document.getElementById("qfAsset").value;
+  const fit     = ISMOBILE ? "" : document.getElementById("qfFit").value;
   let e=linksData.find(it=>it.cell===qfTargetCell);
   if(e){ Object.assign(e,{show:"1",asset,fit,link,cname,sname,attribution:attrib,comment}); }
   else  { linksData.push({show:"1",asset,cell:qfTargetCell,fit,link,cname,sname,attribution:attrib,comment}); }
   document.getElementById("qfModal").classList.remove("open");
   renderGrid();
 }
-document.getElementById("qfSaveBtn").addEventListener("pointerup", qfSave);
-document.getElementById("qfCancelBtn").addEventListener("pointerup", ()=>document.getElementById("qfModal").classList.remove("open"));
-document.getElementById("qfLink").addEventListener("input",function(){ document.getElementById("qfLinkPreview").textContent=this.value||""; });
 
-// ── bootstrap ──────────────────────────────────────────────────────
+function closeQF(){ document.getElementById("qfModal").classList.remove("open"); }
+
+document.getElementById("qfPasteBtn").addEventListener("pointerup", async e=>{
+  e.stopPropagation();
+  try{
+    const text=await navigator.clipboard.readText();
+    if(/^https?:\/\//i.test(text.trim())){ document.getElementById("qfLink").value=text.trim(); document.getElementById("qfLinkPreview").textContent=text.trim(); }
+    else alert("No URL found in clipboard.");
+  }catch(err){ document.getElementById("qfLink").focus(); alert("Tap the Image link field and use your browser Paste option."); }
+});
+
+document.getElementById("qfSaveBtn").addEventListener("pointerup",  e=>{ e.stopPropagation(); qfSave(); });
+document.getElementById("qfSaveBtn2").addEventListener("pointerup", e=>{ e.stopPropagation(); qfSave(); });
+document.getElementById("qfCancelBtn").addEventListener("pointerup",  e=>{ e.stopPropagation(); closeQF(); });
+document.getElementById("qfCancelBtn2").addEventListener("pointerup", e=>{ e.stopPropagation(); closeQF(); });
+document.getElementById("qfLink").addEventListener("input",function(){ document.getElementById("qfLinkPreview").textContent=this.value||""; });
+document.getElementById("qfModal").addEventListener("pointerup", e=>e.stopPropagation());
+
+// keyboard ctrl-L (desktop)
+document.addEventListener("keydown",e=>{ if((e.ctrlKey||e.metaKey)&&e.key==="l"){ e.preventDefault(); showCellName=!showCellName; document.getElementById("togCellName").checked=showCellName; renderGrid(); } });
+
+// ── bootstrap ─────────────────────────────────────────────────────────
 async function init(){
   setup();
   syncFitToggle();
   try{
-    // Cache-bust with timestamp
-    const resp = await fetch("links.json?v="+Date.now());
-    const data = await resp.json();
-    linksData = Array.isArray(data)?data:[];
+    const resp=await fetch("links.json?v="+Date.now());
+    const data=await resp.json();
+    linksData=Array.isArray(data)?data:[];
   }catch(e){ linksData=[]; }
   renderGrid();
 }
