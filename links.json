@@ -7,7 +7,8 @@
     "link": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/18/Dog_Breeds.jpg/320px-Dog_Breeds.jpg",
     "cname": "Dog",
     "sname": "Canis lupus familiaris",
-    "comment": "Diagonal 1a, uses site fit mode"
+    "attribution": "Wikimedia Commons / CC BY-SA",
+    "comment": "Diagonal 1a"
   },
   {
     "show": "1",
@@ -17,7 +18,8 @@
     "link": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Cat03.jpg/320px-Cat03.jpg",
     "cname": "Cat",
     "sname": "Felis catus",
-    "comment": "Diagonal 2b, force entire image"
+    "attribution": "Wikimedia Commons / CC BY-SA",
+    "comment": "Diagonal 2b \u2014 entire image"
   },
   {
     "show": "1",
@@ -27,6 +29,7 @@
     "link": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/45/A_small_cup_of_coffee.JPG/320px-A_small_cup_of_coffee.JPG",
     "cname": "Coffee",
     "sname": "Coffea arabica",
-    "comment": "Diagonal 3c, force fill cell"
+    "attribution": "Julius Schorzman / CC BY-SA 2.0",
+    "comment": "Diagonal 3c \u2014 fill cell"
   }
 ]
