@@ -6,330 +6,210 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>Brain Training</title>
+<title>SeeAndLearn</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { overflow: hidden; touch-action: manipulation; background: #000; }
 #rotateWrap { position: fixed; top: 0; left: 0; }
-#gameCanvas { display: block; }
+#gameCanvas  { display: block; }
 
+/* Hamburger */
 #menuWrap { position: fixed; z-index: 999; width: 48px; height: 48px; }
 #menuWrap.portrait-mode { transform: rotate(90deg); transform-origin: 24px 24px; }
 #menuBtn {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(30,30,30,0.82); border: none; border-radius: 10px; cursor: pointer;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 6px; padding: 10px; touch-action: manipulation;
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(30,30,30,0.82); border: none; border-radius: 10px;
+  cursor: pointer; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 6px; padding: 10px;
+  touch-action: manipulation;
 }
 #menuBtn.open { background: rgba(30,30,30,0.97); }
 #menuBtn span { display: block; width: 100%; height: 3px; background: #fff; border-radius: 2px; }
-
 #menuPanel {
-    position: absolute; bottom: 54px; right: 0; z-index: 998;
-    background: rgba(25,25,25,0.96); border-radius: 10px;
-    overflow-y: auto; max-height: 80vh;
-    display: none; flex-direction: column; min-width: 200px;
-    box-shadow: 0 4px 24px rgba(0,0,0,0.5);
-    scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.3) transparent;
+  position: absolute; bottom: 54px; right: 0; z-index: 998;
+  background: rgba(25,25,25,0.96); border-radius: 10px;
+  overflow-y: auto; max-height: 80vh;
+  display: none; flex-direction: column; min-width: 200px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+  scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.3) transparent;
 }
 #menuPanel::-webkit-scrollbar { width: 6px; }
 #menuPanel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.3); border-radius: 3px; }
 #menuPanel.open { display: flex; }
-
-/* Tiny date stamp at top of menu panel */
 #menuDateStamp {
-    padding: 6px 12px 2px 12px; font: 10px Arial, sans-serif;
-    color: rgba(255,255,255,0.35); text-align: right;
-    flex-shrink: 0; user-select: none; letter-spacing: 0.3px;
+  padding: 6px 12px 2px 12px; font: 10px Arial,sans-serif;
+  color: rgba(255,255,255,0.35); text-align: right;
+  flex-shrink: 0; user-select: none; letter-spacing: 0.3px;
 }
-
 .menu-item {
-    padding: 13px 18px; color: #fff; font: 15px Arial, sans-serif;
-    cursor: pointer; white-space: nowrap; border-bottom: 1px solid rgba(255,255,255,0.08); flex-shrink: 0;
+  padding: 13px 18px; color: #fff; font: 15px Arial,sans-serif;
+  cursor: pointer; white-space: nowrap;
+  border-bottom: 1px solid rgba(255,255,255,0.08); flex-shrink: 0;
 }
 .menu-item:last-child { border-bottom: none; }
 .menu-item:hover, .menu-item:active { background: rgba(255,255,255,0.12); }
-.menu-item.active-set { color: #6f6; }
 .menu-divider { height: 1px; background: rgba(255,255,255,0.15); margin: 2px 0; flex-shrink: 0; }
-
-.video-sub, .ytimg-sub, .ttvid-sub, .ttytimg-sub {
-    padding: 10px 18px 10px 30px; font: 14px Arial, sans-serif; cursor: pointer; white-space: nowrap;
-    border-bottom: 1px solid rgba(255,255,255,0.05); display: none; flex-shrink: 0;
+#settingsPanel { display: none; flex-direction: column; background: rgba(12,12,28,0.99); flex-shrink: 0; }
+#settingsPanel.open { display: flex; }
+.setting-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 11px 20px; border-bottom: 1px solid rgba(255,255,255,0.06);
 }
-.video-sub   { color: #8ef; }
-.ytimg-sub   { color: #f88; }
-.ttvid-sub   { color: #afa; }
-.ttytimg-sub { color: #fc8; }
-.video-sub.visible, .ytimg-sub.visible,
-.ttvid-sub.visible, .ttytimg-sub.visible { display: block; }
-.video-sub:hover,   .video-sub:active   { background: rgba(100,200,255,0.1); }
-.ytimg-sub:hover,   .ytimg-sub:active   { background: rgba(255,100,100,0.1); }
-.ttvid-sub:hover,   .ttvid-sub:active   { background: rgba(100,255,100,0.1); }
-.ttytimg-sub:hover, .ttytimg-sub:active  { background: rgba(255,200,100,0.1); }
+.setting-row span { color: #ccc; font: 14px Arial,sans-serif; }
+.tog { position: relative; display: inline-block; width: 42px; height: 22px; flex-shrink: 0; }
+.tog input { opacity: 0; width: 0; height: 0; }
+.tog-slider { position: absolute; cursor: pointer; inset: 0; background: #444; border-radius: 22px; transition: .2s; }
+.tog-slider:before { content:""; position: absolute; width: 16px; height: 16px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: .2s; }
+.tog input:checked + .tog-slider { background: #2a8a2a; }
+.tog input:checked + .tog-slider:before { transform: translateX(20px); }
 
-#videoWrap { display: none; position: absolute; z-index: 10; overflow: hidden; }
-#videoWrap.open { display: block; }
-#ytDiv { position: absolute; top: 0; left: 0; pointer-events: auto; }
+/* Cell overlays */
+.cell-overlay { position: absolute; overflow: hidden; cursor: pointer; display: flex; align-items: flex-end; justify-content: center; }
+.cell-overlay img { position: absolute; inset: 0; width: 100%; height: 100%; }
+.cell-overlay img.ei { object-fit: contain; background: rgba(0,0,0,0.15); }
+.cell-overlay img.fc { object-fit: cover; }
+.cell-label { position: relative; z-index: 1; width: 100%; text-align: center; padding: 2px 4px; font: bold 11px Arial,sans-serif; color: #fff; background: rgba(0,0,0,0.58); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cell-empty { position: absolute; cursor: crosshair; border: 2px dashed rgba(100,180,255,0); transition: border-color .15s, background .15s; }
+.cell-empty:hover { border-color: rgba(100,180,255,0.6); background: rgba(100,180,255,0.07); }
 
-.yt-game-wrap {
-    position: absolute; z-index: 10;
-    overflow: hidden; background: #000;
-    border: 2px solid #333; box-sizing: border-box;
-    visibility: hidden;
-}
-.yt-game-wrap iframe { position: absolute; pointer-events: none; border: 0; }
-.yt-cover { position: absolute; inset: 0; background: #000; z-index: 5; transition: none; }
-.yt-hitbox { position: absolute; inset: 0; z-index: 6; cursor: pointer; }
+/* Fullscreen */
+#fsWrap { display: none; position: fixed; inset: 0; z-index: 40000; background: rgba(0,0,0,0.95); align-items: center; justify-content: center; }
+#fsWrap.open { display: flex; }
+#fsWrap img { max-width: 95vw; max-height: 95vh; object-fit: contain; }
+#fsClose, #fsClose2 { position: absolute; width: 52px; height: 52px; background: rgba(255,255,255,0.22); border: none; border-radius: 50%; color: #fff; font-size: 30px; cursor: pointer; }
+#fsClose { top: 16px; right: 16px; }
+#fsClose2 { bottom: 16px; right: 16px; }
 
-#closeVideoBtn {
-    position: absolute; top: 4px; right: 4px; z-index: 20;
-    background: rgba(20,20,20,0.85); color: #fff; border: none; border-radius: 6px;
-    font-size: 16px; width: 28px; height: 28px; cursor: pointer;
-    display: flex; align-items: center; justify-content: center; touch-action: manipulation;
-}
+/* Quick-fill */
+#qfModal { display: none; position: fixed; inset: 0; z-index: 20000; background: rgba(0,0,0,0.82); align-items: center; justify-content: center; }
+#qfModal.open { display: flex; }
+#qfBox { background: #1a1a2e; border: 1px solid #555; border-radius: 12px; padding: 18px 20px; min-width: 280px; max-width: 480px; width: 92vw; display: flex; flex-direction: column; gap: 10px; font-family: Arial,sans-serif; max-height: 94vh; overflow-y: auto; }
+#qfBox h3 { color: #8ef; font-size: 15px; }
+#qfBox label { font-size: 12px; color: #aaa; display: block; margin-bottom: 3px; }
+#qfBox input, #qfBox select { background: #0a0a1a; border: 1px solid #555; color: #fff; padding: 9px 10px; border-radius: 6px; font-size: 15px; width: 100%; }
+#qfBox input:focus, #qfBox select:focus { border-color: #8ef; outline: none; }
+#qfLinkPrev { font-size: 11px; color: #888; word-break: break-all; min-height: 14px; }
+#qfError { color: #f66; font-size: 12px; min-height: 14px; }
+.qf-row { display: flex; gap: 8px; justify-content: flex-end; }
+.qf-row button { padding: 9px 18px; border-radius: 6px; border: 1px solid #555; background: #2a2a3e; color: #fff; font-size: 14px; cursor: pointer; }
+.qf-row button.save { border-color: #5f5; color: #afa; }
+.qf-row button:hover { background: #3a3a5e; }
+#qfPasteBtn { width: 100%; padding: 11px; border-radius: 6px; border: 1px solid #4af; background: rgba(0,80,180,0.3); color: #8ef; font-size: 15px; cursor: pointer; }
+#qfPasteBtn:hover, #qfPasteBtn:active { background: rgba(0,80,180,0.5); }
 
-/* ── Video Manager overlay ───────────────────────────────────────── */
-#vmOverlay {
-    display: none; position: fixed; inset: 0; z-index: 2000;
-    background: rgba(0,0,0,0.88); flex-direction: column;
-    font-family: Arial, sans-serif; color: #fff;
-}
-#vmOverlay.open { display: flex; }
+/* JSON Editor */
+#jsonModal { display: none; position: fixed; inset: 0; z-index: 25000; background: rgba(0,0,0,0.88); align-items: center; justify-content: center; }
+#jsonModal.open { display: flex; }
+#jsonBox { background: #1a1a2e; border: 1px solid #555; border-radius: 12px; padding: 20px; width: 90vw; height: 85vh; max-width: 820px; display: flex; flex-direction: column; font-family: 'Courier New',monospace; }
+#jsonTitle { color: #8ef; font-size: 17px; padding-bottom: 10px; border-bottom: 1px solid #444; margin-bottom: 8px; }
+#jsonText { flex: 1; background: #0a0a1a; border: 1px solid #444; color: #cfc; padding: 12px; font-size: 13px; line-height: 1.4; border-radius: 6px; resize: none; white-space: pre; overflow: auto; }
+#jsonText:focus { border-color: #8ef; outline: none; }
+#jsonBtns { display: flex; gap: 10px; justify-content: flex-end; padding-top: 10px; }
+#jsonBtns button { padding: 10px 18px; border-radius: 6px; border: 1px solid #555; background: #2a2a3e; color: #fff; font-size: 14px; cursor: pointer; }
+#jsonBtns button.save { border-color: #5f5; color: #afa; }
+#jsonBtns button:hover { background: #3a3a5e; }
+#jsonStatus { font-size: 12px; color: #888; min-height: 16px; padding-top: 4px; }
 
-#vmHeader {
-    display: flex; align-items: center; gap: 8px;
-    padding: 10px 14px; background: #1a1a2e; flex-shrink: 0;
-    border-bottom: 1px solid #333; flex-wrap: wrap;
-}
-#vmHeader h2 { font-size: 16px; color: #8ef; margin-right: 6px; }
-
-/* Admin badge shown when logged in */
-#vmAdminBadge {
-    display: none; padding: 3px 10px; border-radius: 12px;
-    background: #3a1a0a; border: 1px solid #f80; color: #fc8;
-    font-size: 11px; font-weight: bold;
-}
-#vmAdminBadge.visible { display: inline-block; }
-
-/* User badge */
-#vmUserBadge {
-    display: none; padding: 3px 10px; border-radius: 12px;
-    background: #0a2a1a; border: 1px solid #0f8; color: #afa;
-    font-size: 11px;
-}
-#vmUserBadge.visible { display: inline-block; }
-
-.vm-tab {
-    padding: 5px 14px; border-radius: 6px; cursor: pointer;
-    background: #2a2a3e; border: 1px solid #444; font-size: 13px; color: #ccc;
-}
-.vm-tab.active { background: #3a5a8a; border-color: #8ef; color: #fff; }
-.vm-tab:hover { background: #3a3a5e; }
-
-#vmToolbar {
-    display: flex; align-items: center; gap: 6px;
-    padding: 7px 14px; background: #111122; flex-shrink: 0;
-    border-bottom: 1px solid #333; flex-wrap: wrap;
-}
-.vm-btn {
-    padding: 5px 12px; border-radius: 5px; cursor: pointer; font-size: 12px;
-    border: 1px solid #555; background: #2a2a3e; color: #ddd;
-    white-space: nowrap;
-}
-.vm-btn:hover { background: #3a3a5e; border-color: #8ef; color: #fff; }
-.vm-btn.danger { border-color: #f55; color: #f88; }
-.vm-btn.danger:hover { background: #3e1a1a; }
-.vm-btn.success { border-color: #5f5; color: #afa; }
-.vm-btn.success:hover { background: #1a3e1a; }
-.vm-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-.vm-btn:disabled:hover { background: #2a2a3e; border-color: #555; color: #ddd; }
-
-#vmSelInfo { margin-left: auto; font-size: 12px; color: #888; white-space: nowrap; }
-
-#vmTableWrap {
-    flex: 1; overflow: auto;
-    scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.3) transparent;
-}
-#vmTableWrap::-webkit-scrollbar { width: 7px; height: 7px; }
-#vmTableWrap::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.25); border-radius: 4px; }
-
-#vmTable {
-    border-collapse: collapse; width: 100%; min-width: 500px;
-    font-size: 13px;
-}
-#vmTable th {
-    position: sticky; top: 0; background: #1e1e3a; color: #8ef;
-    padding: 8px 10px; text-align: left; white-space: nowrap;
-    border-bottom: 2px solid #444; user-select: none; cursor: pointer;
-    z-index: 2;
-}
-#vmTable th:hover { background: #2a2a5a; }
-#vmTable th.sort-asc::after  { content: " ▲"; font-size: 10px; }
-#vmTable th.sort-desc::after { content: " ▼"; font-size: 10px; }
-#vmTable th.no-sort { cursor: default; }
-
-#vmTable td {
-    padding: 6px 10px; border-bottom: 1px solid #222;
-    vertical-align: middle; white-space: nowrap;
-}
-#vmTable tr.vm-row { cursor: pointer; }
-#vmTable tr.vm-row:hover td { background: rgba(255,255,255,0.05); }
-#vmTable tr.vm-row.selected td { background: rgba(58,90,138,0.55); }
-
-#vmTable td.editable { cursor: text; }
-#vmTable td.editable:hover { background: rgba(100,200,255,0.08) !important; outline: 1px dashed #8ef4; }
-/* Lock icon on non-admin editable cells */
-#vmTable td.locked { cursor: default; color: #666; }
-#vmTable td.locked:hover { background: none !important; outline: none !important; }
-
-#vmTable input.vm-cell-input {
-    background: #0a0a1a; border: 1px solid #8ef; color: #fff;
-    padding: 2px 5px; border-radius: 3px; font-size: 13px;
-    width: 100%; min-width: 60px;
-}
-.vm-stars { color: #fc8; cursor: pointer; font-size: 15px; letter-spacing: 2px; }
-
-.vm-action-btn {
-    padding: 2px 8px; border-radius: 4px; cursor: pointer; font-size: 11px;
-    border: 1px solid #555; background: #1e1e2e; color: #ccc; margin: 0 2px;
-}
-.vm-action-btn:hover { background: #2e2e5e; border-color: #8ef; color: #fff; }
-
-/* Field Manager panel */
-#vmFieldPanel {
-    display: none; padding: 14px 18px; background: #111122;
-    border-top: 1px solid #333; flex-shrink: 0; flex-wrap: wrap; gap: 10px;
-}
-#vmFieldPanel.open { display: flex; align-items: flex-start; }
-#vmFieldPanel h3 { width: 100%; font-size: 14px; color: #fc8; margin-bottom: 6px; }
-
-.vm-field-chip {
-    display: inline-flex; align-items: center; gap: 5px;
-    padding: 4px 10px; border-radius: 20px; font-size: 12px;
-    border: 1px solid #555; background: #2a2a3e; color: #ddd;
-    cursor: grab; user-select: none;
-}
-.vm-field-chip.active-field { border-color: #5f5; color: #afa; background: #1a3a1a; }
-.vm-field-chip .chip-toggle { cursor: pointer; font-size: 14px; }
-.vm-field-chip.dragging { opacity: 0.4; }
-.vm-field-chip.drag-over { border-color: #fc8; background: #3a2a0a; }
-
-/* Admin login modal */
-#vmLoginModal {
-    display: none; position: fixed; inset: 0; z-index: 3000;
-    background: rgba(0,0,0,0.75); align-items: center; justify-content: center;
-}
-#vmLoginModal.open { display: flex; }
-#vmLoginBox {
-    background: #1a1a2e; border: 1px solid #555; border-radius: 12px;
-    padding: 28px 32px; min-width: 280px; display: flex; flex-direction: column; gap: 14px;
-}
-#vmLoginBox h3 { color: #8ef; font-size: 15px; }
-#vmLoginBox p  { color: #888; font-size: 12px; line-height: 1.5; }
-.vm-login-row { display: flex; flex-direction: column; gap: 4px; }
-.vm-login-row label { font-size: 12px; color: #aaa; }
-.vm-login-row input {
-    background: #0a0a1a; border: 1px solid #555; color: #fff;
-    padding: 7px 10px; border-radius: 6px; font-size: 14px;
-}
-.vm-login-row input:focus { border-color: #8ef; outline: none; }
-#vmLoginError { color: #f66; font-size: 12px; min-height: 16px; }
-.vm-login-btns { display: flex; gap: 8px; justify-content: flex-end; }
-
-/* User selector panel (future multi-user) */
-#vmUserPanel {
-    display: none; padding: 10px 14px; background: #0a1a0a;
-    border-bottom: 1px solid #1a3a1a; flex-shrink: 0;
-    align-items: center; gap: 10px; flex-wrap: wrap;
-}
-#vmUserPanel.open { display: flex; }
-#vmUserPanel label { font-size: 12px; color: #afa; }
-#vmUserSelect {
-    background: #0a0a1a; border: 1px solid #3a5a3a; color: #fff;
-    padding: 4px 8px; border-radius: 5px; font-size: 13px; cursor: pointer;
-}
-
-/* status bar */
-#vmStatus {
-    padding: 5px 14px; font-size: 11px; color: #888;
-    background: #0a0a1a; border-top: 1px solid #222; flex-shrink: 0;
-    display: flex; justify-content: space-between;
-}
-#vmStatus span { color: #afa; }
-
-/* ── FANCY TABLES (T) from braintrain ── */
-.vm-btn { padding: 5px 12px; border-radius: 5px; cursor: pointer; font-size: 12px; border: 1px solid #555; background: #2a2a3e; color: #ddd; white-space: nowrap; }
-.vm-btn:hover { background: #3a3a5e; border-color: #8ef; color: #fff; }
-.vm-btn.danger { border-color: #f55; color: #f88; }
-.vm-btn.danger:hover { background: #3e1a1a; }
-.vm-btn.success { border-color: #5f5; color: #afa; }
-.vm-btn.success:hover { background: #1a3e1a; }
-.vm-btn:disabled { opacity: .35; cursor: not-allowed; }
-.vm-btn:disabled:hover { background: #2a2a3e; border-color: #555; color: #ddd; }
-
-#vmOverlay { display: none; position: fixed; inset: 0; z-index: 30000; background: rgba(0,0,0,0.88); flex-direction: column; font-family: Arial,sans-serif; color: #fff; }
-#vmOverlay.open { display: flex; }
-#vmHeader { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: #1a1a2e; flex-shrink: 0; border-bottom: 1px solid #333; flex-wrap: wrap; }
-#vmHeader h2 { font-size: 16px; color: #8ef; margin-right: 6px; }
-#vmAdminBadge, #vmUserBadge { display: none; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: bold; }
-#vmAdminBadge.visible, #vmUserBadge.visible { display: inline-block; }
-#vmAdminBadge { background: #3a1a0a; border: 1px solid #f80; color: #fc8; }
-#vmUserBadge { background: #0a2a1a; border: 1px solid #0f8; color: #afa; }
-#vmToolbar { display: flex; align-items: center; gap: 6px; padding: 7px 14px; background: #111122; flex-shrink: 0; border-bottom: 1px solid #333; flex-wrap: wrap; }
-#vmSelInfo { margin-left: auto; font-size: 12px; color: #888; white-space: nowrap; }
-#vmFieldPanel { display: none; padding: 14px 18px; background: #111122; border-top: 1px solid #333; flex-shrink: 0; flex-wrap: wrap; gap: 8px; }
-#vmFieldPanel.open { display: flex; align-items: flex-start; }
-#vmFieldPanel h3 { width: 100%; font-size: 14px; color: #fc8; margin-bottom: 4px; }
-.vm-field-chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 20px; font-size: 12px; border: 1px solid #555; background: #2a2a3e; color: #ddd; cursor: grab; user-select: none; position: relative; }
-.vm-field-chip.active-field { border-color: #5f5; color: #afa; background: #1a3a1a; }
-.vm-field-chip .chip-toggle { cursor: pointer; font-size: 14px; }
-.vm-field-chip.dragging { opacity: 0.4; }
-.vm-field-chip.drag-over { border-color: #fc8; background: #3a2a0a; }
-.chip-width-input { width: 42px; background: #0a0a1a; border: 1px solid #555; color: #ccc; padding: 1px 4px; border-radius: 3px; font-size: 11px; text-align: center; }
-.chip-width-input:focus { border-color: #8ef; outline: none; }
-#vmTableWrap { flex: 1; overflow: auto; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.3) transparent; }
-#vmTableWrap::-webkit-scrollbar { width: 7px; height: 7px; }
-#vmTableWrap::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.25); border-radius: 4px; }
-#vmTable { border-collapse: collapse; width: 100%; font-size: 13px; }
-#vmTable th { position: sticky; top: 0; background: #1e1e3a; color: #8ef; padding: 8px 10px; text-align: left; white-space: nowrap; border-bottom: 2px solid #444; user-select: none; z-index: 2; }
-#vmTable th.sortable { cursor: pointer; }
-#vmTable th.sortable:hover { background: #2a2a5a; }
-#vmTable th.sort-asc::after { content: ' ▴'; font-size: 10px; }
-#vmTable th.sort-desc::after { content: ' ▾'; font-size: 10px; }
-#vmTable th.no-sort { cursor: default; }
-.vm-resize-handle { position: absolute; right: 0; top: 0; bottom: 0; width: 6px; cursor: col-resize; background: transparent; border-right: 2px solid transparent; }
-.vm-resize-handle:hover, .vm-resize-handle.resizing { border-right-color: #8ef; }
-#vmTable td { padding: 6px 10px; border-bottom: 1px solid #222; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#vmTable tr.vm-row { cursor: pointer; }
-#vmTable tr.vm-row:hover td { background: rgba(255,255,255,0.05); }
-#vmTable tr.vm-row.selected td { background: rgba(58,90,138,0.55); }
-#vmTable td.editable { cursor: text; }
-#vmTable td.editable:hover { background: rgba(100,200,255,0.08) !important; outline: 1px dashed #8ef4; }
-#vmTable td.locked { cursor: default; color: #666; }
-#vmTable td.locked:hover { background: none !important; outline: none !important; }
-#vmTable input.vm-cell-input { background: #0a0a1a; border: 1px solid #8ef; color: #fff; padding: 2px 5px; border-radius: 3px; font-size: 13px; width: 100%; min-width: 40px; }
-#vmStatus { padding: 5px 14px; font-size: 11px; color: #888; background: #0a0a1a; border-top: 1px solid #222; flex-shrink: 0; display: flex; justify-content: space-between; }
-#vmStatus span { color: #afa; }
-#vmLoginModal { display: none; position: fixed; inset: 0; z-index: 31000; background: rgba(0,0,0,0.75); align-items: center; justify-content: center; }
-#vmLoginModal.open { display: flex; }
-#vmLoginBox { background: #1a1a2e; border: 1px solid #555; border-radius: 12px; padding: 28px 32px; min-width: 280px; display: flex; flex-direction: column; gap: 14px; }
-#vmLoginBox h3 { color: #8ef; font-size: 15px; }
-#vmLoginBox p { color: #888; font-size: 12px; line-height: 1.5; }
-.vm-login-row { display: flex; flex-direction: column; gap: 4px; }
-.vm-login-row label { font-size: 12px; color: #aaa; }
-.vm-login-row input { background: #0a0a1a; border: 1px solid #555; color: #fff; padding: 7px 10px; border-radius: 6px; font-size: 14px; }
-.vm-login-row input:focus { border-color: #8ef; outline: none; }
-#vmLoginError { color: #f66; font-size: 12px; min-height: 16px; }
-.vm-login-btns { display: flex; gap: 8px; justify-content: flex-end; }
+/* TABLES FANCY */
+.vm-btn{padding:5px 12px;border-radius:5px;cursor:pointer;font-size:12px;border:1px solid #555;background:#2a2a3e;color:#ddd;white-space:nowrap;margin:0 2px;}
+.vm-btn:hover{background:#3a3a5e;border-color:#8ef;color:#fff;}
+.vm-btn.danger{border-color:#f55;color:#f88;}
+.vm-btn.danger:hover{background:#3e1a1a;}
+.vm-btn.success{border-color:#5f5;color:#afa;}
+.vm-btn.success:hover{background:#1a3e1a;}
+.vm-btn:disabled{opacity:.35;cursor:not-allowed;}
+.vm-btn:disabled:hover{background:#2a2a3e;border-color:#555;color:#ddd;}
+#vmOverlay{display:none;position:fixed;inset:0;z-index:30000;background:rgba(0,0,0,.88);flex-direction:column;font-family:Arial,sans-serif;color:#fff;}
+#vmOverlay.open{display:flex;}
+#vmHeader{display:flex;align-items:center;gap:8px;padding:10px 14px;background:#1a1a2e;flex-shrink:0;border-bottom:1px solid #333;flex-wrap:wrap;}
+#vmHeader h2{font-size:16px;color:#8ef;margin-right:6px;}
+#vmAdminBadge,#vmUserBadge{display:none;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:bold;}
+#vmAdminBadge.visible,#vmUserBadge.visible{display:inline-block;}
+#vmAdminBadge{background:#3a1a0a;border:1px solid #f80;color:#fc8;}
+#vmUserBadge{background:#0a2a1a;border:1px solid #0f8;color:#afa;}
+#vmToolbar{display:flex;align-items:center;gap:6px;padding:7px 14px;background:#111122;flex-shrink:0;border-bottom:1px solid #333;flex-wrap:wrap;}
+#vmSelInfo{margin-left:auto;font-size:12px;color:#888;white-space:nowrap;}
+#vmFieldPanel{display:none;padding:14px 18px;background:#111122;border-top:1px solid #333;flex-shrink:0;flex-wrap:wrap;gap:8px;}
+#vmFieldPanel.open{display:flex;align-items:flex-start;}
+#vmFieldPanel h3{width:100%;font-size:14px;color:#fc8;margin-bottom:4px;}
+.vm-field-chip{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;font-size:12px;border:1px solid #555;background:#2a2a3e;color:#ddd;cursor:grab;user-select:none;position:relative;}
+.vm-field-chip.active-field{border-color:#5f5;color:#afa;background:#1a3a1a;}
+.vm-field-chip .chip-toggle{cursor:pointer;font-size:14px;}
+.vm-field-chip.dragging{opacity:.4;}
+.vm-field-chip.drag-over{border-color:#fc8;background:#3a2a0a;}
+.chip-width-input{width:42px;background:#0a0a1a;border:1px solid #555;color:#ccc;padding:1px 4px;border-radius:3px;font-size:11px;text-align:center;}
+.chip-width-input:focus{border-color:#8ef;outline:none;}
+#vmTableWrap{flex:1;overflow:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.3) transparent;}
+#vmTableWrap::-webkit-scrollbar{width:7px;height:7px;}
+#vmTableWrap::-webkit-scrollbar-thumb{background:rgba(255,255,255,.25);border-radius:4px;}
+#vmTable{border-collapse:collapse;width:100%;font-size:13px;}
+#vmTable th{position:sticky;top:0;background:#1e1e3a;color:#8ef;padding:8px 10px;text-align:left;white-space:nowrap;border-bottom:2px solid #444;user-select:none;z-index:2;}
+#vmTable th.sortable{cursor:pointer;}
+#vmTable th.sortable:hover{background:#2a2a5a;}
+#vmTable th.sort-asc::after{content:' \u25B4';font-size:10px;}
+#vmTable th.sort-desc::after{content:' \u25BE';font-size:10px;}
+#vmTable th.no-sort{cursor:default;}
+.vm-resize-handle{position:absolute;right:0;top:0;bottom:0;width:6px;cursor:col-resize;background:transparent;border-right:2px solid transparent;}
+.vm-resize-handle:hover,.vm-resize-handle.resizing{border-right-color:#8ef;}
+#vmTable td{padding:6px 10px;border-bottom:1px solid #222;vertical-align:middle;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+#vmTable tr.vm-row{cursor:pointer;}
+#vmTable tr.vm-row:hover td{background:rgba(255,255,255,.05);}
+#vmTable tr.vm-row.selected td{background:rgba(58,90,138,.55);}
+#vmTable td.editable{cursor:text;}
+#vmTable td.editable:hover{background:rgba(100,200,255,.08)!important;outline:1px dashed #8ef4;}
+#vmTable td.locked{cursor:default;color:#666;}
+#vmTable td.locked:hover{background:none!important;outline:none!important;}
+#vmTable input.vm-cell-input{background:#0a0a1a;border:1px solid #8ef;color:#fff;padding:2px 5px;border-radius:3px;font-size:13px;width:100%;min-width:40px;}
+#vmStatus{padding:5px 14px;font-size:11px;color:#888;background:#0a0a1a;border-top:1px solid #222;flex-shrink:0;display:flex;justify-content:space-between;}
+#vmStatus span{color:#afa;}
+#vmLoginModal{display:none;position:fixed;inset:0;z-index:31000;background:rgba(0,0,0,.75);align-items:center;justify-content:center;}
+#vmLoginModal.open{display:flex;}
+#vmLoginBox{background:#1a1a2e;border:1px solid #555;border-radius:12px;padding:28px 32px;min-width:280px;display:flex;flex-direction:column;gap:14px;}
+#vmLoginBox h3{color:#8ef;font-size:15px;}
+#vmLoginBox p{color:#888;font-size:12px;line-height:1.5;}
+.vm-login-row{display:flex;flex-direction:column;gap:4px;}
+.vm-login-row label{font-size:12px;color:#aaa;}
+.vm-login-row input{background:#0a0a1a;border:1px solid #555;color:#fff;padding:7px 10px;border-radius:6px;font-size:14px;}
+.vm-login-row input:focus{border-color:#8ef;outline:none;}
+#vmLoginError{color:#f66;font-size:12px;min-height:16px;}
+.vm-login-btns{display:flex;gap:8px;justify-content:flex-end;}
 </style>
 </head>
 <body>
 
 <div id="rotateWrap">
-    <canvas id="gameCanvas"></canvas>
-    <div id="videoWrap">
-        <div id="ytDiv"></div>
+  <canvas id="gameCanvas"></canvas>
+</div>
 
+<div id="menuWrap">
+  <div id="menuPanel">
+    <div id="menuDateStamp"></div>
+    <div class="menu-item" id="miTables">Tables 📖</div>
+    <div class="menu-item" id="miJson">JSON 📋</div>
+    <div class="menu-item" id="miSaveJson">💾 Save JSON (Ctrl+Alt+S)</div>
+    <div class="menu-divider"></div>
+    <div class="menu-item" id="miSettings">Settings ▸</div>
+    <div id="settingsPanel">
+      <div class="setting-row">
+        <span id="fitLabel">Img: Fill Cell</span>
+        <label class="tog"><input type="checkbox" id="togFit"><span class="tog-slider"></span></label>
+      </div>
+      <div class="setting-row">
+        <span>Cell labels</span>
+        <label class="tog"><input type="checkbox" id="togCellLbl"><span class="tog-slider"></span></label>
+      </div>
+      <div class="setting-row">
+        <span>cname label</span>
+        <label class="tog"><input type="checkbox" id="togCname" checked><span class="tog-slider"></span></label>
+      </div>
+    </div>
+    <div class="menu-divider"></div>
+    <div class="menu-item" id="miHelp">Help</div>
+  </div>
+  <button id="menuBtn"><span></span><span></span><span></span></button>
+</div>
+
+<!-- Tables overlay -->
 <div id="vmOverlay">
   <div id="vmHeader">
     <h2>Tables</h2>
@@ -346,7 +226,7 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
     <div id="vmSelInfo">0 selected</div>
   </div>
   <div id="vmFieldPanel">
-    <h3>Columns: drag to reorder, click show/hide, resize width</h3>
+    <h3>Columns: drag reorder, click show/hide, resize width</h3>
   </div>
   <div id="vmTableWrap">
     <table id="vmTable">
@@ -358,7 +238,6 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
     <div id="vmStatusLeft">No data</div>
   </div>
 </div>
-
 <div id="vmLoginModal">
   <div id="vmLoginBox">
     <h3>Admin Sign In</h3>
@@ -375,267 +254,222 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
   </div>
 </div>
 
-        <button id="closeVideoBtn">X</button>
-   
-// ── FANCY TABLES (T) + SIMPLE JSON (J) ──
-let vmIsAdmin = false;
-const ADMINHASH = '29d68fe34bd2ed04d1de57410cb4662d3e4cb4309867ca28edfbd7d278ca3646';
-let fieldConfig = localStorage.getItem('mlynx-fields') ? JSON.parse(localStorage.getItem('mlynx-fields')) : [
-  {key:'cell', visible:true, width:80},
-  {key:'link', visible:true, width:300},
-  {key:'cname', visible:true, width:120},
-  {key:'sname', visible:true, width:140},
-  {key:'attribution', visible:true, width:160},
-  {key:'comment', visible:true, width:160},
-  {key:'asset', visible:true, width:70},
-  {key:'fit', visible:true, width:80},
-  {key:'show', visible:false, width:60}
+<!-- Fullscreen -->
+<div id="fsWrap">
+  <button id="fsClose">&times;</button>
+  <button id="fsClose2">&times;</button>
+  <img id="fsImg">
+</div>
+
+<!-- rest unchanged -->
+""" + base_html.split('<div id="fsWrap">')[1]
+
+# The script part - append the new JS
+script_add = """
+// TABLES(T) + JSON(J)
+let vmIsAdmin=false, vmSortCol=null, vmSortAsc=true, vmSelected=new Set(), vmLastClick=-1, vmDragKey=null;
+const ADMINHASH='29d68fe34bd2ed04d1de57410cb4662d3e4cb4309867ca28edfbd7d278ca3646';
+let fieldConfig=localStorage.getItem('mlynx-fields')?JSON.parse(localStorage.getItem('mlynx-fields')):[
+  {key:'cell',visible:true,width:80},{key:'link',visible:true,width:300},{key:'cname',visible:true,width:120},
+  {key:'sname',visible:true,width:140},{key:'attribution',visible:true,width:160},{key:'comment',visible:true,width:160},
+  {key:'asset',visible:true,width:70},{key:'fit',visible:true,width:80},{key:'show',visible:false,width:60}
 ];
 
-function vmFieldDef(key){
-  const defs = {
-    cell: {label:'Cell', editable:false},
-    link: {label:'Link', editable:true},
-    cname: {label:'cname', editable:true},
-    sname: {label:'sname', editable:true},
-    attribution: {label:'Attribution', editable:true},
-    comment: {label:'Comment', editable:true},
-    asset: {label:'Asset', editable:true},
-    fit: {label:'Fit', editable:true},
-    show: {label:'Show', editable:true}
-  };
-  return defs[key] || {label:key, editable:false};
+function vmFieldDef(key){ 
+  const defs={cell:{label:'Cell',editable:false},link:{label:'Link',editable:true},cname:{label:'cname',editable:true},sname:{label:'sname',editable:true},attribution:{label:'Attribution',editable:true},comment:{label:'Comment',editable:true},asset:{label:'Asset',editable:true},fit:{label:'Fit',editable:true},show:{label:'Show',editable:true}};
+  return defs[key]||{label:key,editable:false}; 
 }
+function vmVisibleFields(){return fieldConfig.filter(fc=>fc.visible).map(fc=>({...vmFieldDef(fc.key),width:fc.width}));}
+function vmSaveFields(){localStorage.setItem('mlynx-fields',JSON.stringify(fieldConfig));}
 
-function vmVisibleFields(){ return fieldConfig.filter(fc=>fc.visible).map(fc=>({...vmFieldDef(fc.key), width:fc.width})); }
-
-function vmSaveFields(){ localStorage.setItem('mlynx-fields', JSON.stringify(fieldConfig)); }
-
-function vmOpen(){ document.getElementById('vmOverlay').classList.add('open'); vmRefreshAdminUI(); vmRenderFieldPanel(); vmRenderTable(); }
-function vmClose(){ document.getElementById('vmOverlay').classList.remove('open'); }
-
+function vmOpen(){document.getElementById('vmOverlay').classList.add('open');vmRefreshAdminUI();vmRenderFieldPanel();vmRenderTable();}
+function vmClose(){document.getElementById('vmOverlay').classList.remove('open');}
 function vmRefreshAdminUI(){
-  document.getElementById('vmAdminBadge').classList.toggle('visible', vmIsAdmin);
-  document.getElementById('vmAdminLogout').style.display = vmIsAdmin ? '' : 'none';
-  document.getElementById('vmAdminLogin').style.display = vmIsAdmin ? 'none' : '';
-  ['vmExport','vmReset','vmFields'].forEach(id=>document.getElementById(id).disabled = !vmIsAdmin);
+  document.getElementById('vmAdminBadge').classList.toggle('visible',vmIsAdmin);
+  document.getElementById('vmAdminLogout').style.display=vmIsAdmin?\'\':\'none\';
+  document.getElementById('vmAdminLogin').style.display=vmIsAdmin?\'none\':\'\';
+  ['vmExport','vmReset','vmFields'].forEach(id=>document.getElementById(id).disabled=!vmIsAdmin);
 }
-
 async function vmHashPassword(pwd){
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pwd));
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(pwd));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
 }
 
-document.getElementById('miTables').onclick = e => { e.stopPropagation(); closeMenu(); vmOpen(); };
-document.getElementById('miJson').onclick = e => { e.stopPropagation(); closeMenu(); document.getElementById('jsonText').value = JSON.stringify(linksData, null, 2); document.getElementById('jsonModal').classList.add('open'); };
+document.getElementById('miTables').onclick=e=>{e.stopPropagation();closeMenu();vmOpen();};
+document.getElementById('miJson').onclick=e=>{e.stopPropagation();closeMenu();document.getElementById('jsonText').value=JSON.stringify(linksData,null,2);document.getElementById('jsonModal').classList.add('open');};
 
-document.getElementById('vmClose').onclick = vmClose;
-document.getElementById('vmAdminLogin').onclick = () => document.getElementById('vmLoginModal').classList.add('open');
-document.getElementById('vmAdminLogout').onclick = () => (vmIsAdmin = false, vmRefreshAdminUI());
-document.getElementById('vmLoginCancel').onclick = () => document.getElementById('vmLoginModal').classList.remove('open');
-document.getElementById('vmLoginSubmit').onclick = vmDoLogin;
-document.getElementById('vmLoginPwd').onkeydown = e => { if(e.key==='Enter') vmDoLogin(); };
+document.getElementById('vmClose').onclick=vmClose;
+document.getElementById('vmAdminLogin').onclick=()=>document.getElementById('vmLoginModal').classList.add('open');
+document.getElementById('vmAdminLogout').onclick=()=>(vmIsAdmin=false,vmRefreshAdminUI());
+document.getElementById('vmLoginCancel').onclick=()=>document.getElementById('vmLoginModal').classList.remove('open');
+document.getElementById('vmLoginSubmit').onclick=vmDoLogin;
+document.getElementById('vmLoginPwd').onkeydown=e=>{if(e.key==='Enter')vmDoLogin();};
 
 async function vmDoLogin(){
-  const pwd = document.getElementById('vmLoginPwd').value;
-  if(await vmHashPassword(pwd) === ADMINHASH){
-    vmIsAdmin = true;
-    document.getElementById('vmLoginModal').classList.remove('open');
-    vmRefreshAdminUI();
-  } else {
-    document.getElementById('vmLoginError').textContent = 'Wrong password';
-  }
+  const pwd=document.getElementById('vmLoginPwd').value;
+  if(await vmHashPassword(pwd)===ADMINHASH){
+    vmIsAdmin=true;document.getElementById('vmLoginModal').classList.remove('open');vmRefreshAdminUI();
+  }else document.getElementById('vmLoginError').textContent='Wrong password';
 }
 
-// Field chips panel
+// Field chips
 function vmRenderFieldPanel(){
-  const panel = document.getElementById('vmFieldPanel');
-  panel.innerHTML = '<h3>Columns: drag reorder, click show/hide, resize width</h3>';
-  fieldConfig.forEach(fc => {
-    const def = vmFieldDef(fc.key);
-    const chip = document.createElement('span');
-    chip.className = 'vm-field-chip' + (fc.visible ? ' active-field' : '');
-    chip.draggable = true;
-    chip.dataset.key = fc.key;
-    chip.innerHTML = `<span class="chip-toggle">${fc.visible ? '–' : '+'}</span> ${def.label}`;
-    chip.onclick = e => { e.stopPropagation(); fc.visible = !fc.visible; vmSaveFields(); vmRenderFieldPanel(); vmRenderTable(); };
-    chip.ondragstart = e => { vmDragKey = fc.key; chip.classList.add('dragging'); };
-    chip.ondragend = () => { chip.classList.remove('dragging'); vmDragKey = null; };
-    chip.ondragover = e => (e.preventDefault(), chip.classList.add('drag-over'));
-    chip.ondragleave = () => chip.classList.remove('drag-over');
-    chip.ondrop = e => {
-      e.preventDefault(); chip.classList.remove('drag-over');
-      if(!vmDragKey) return;
-      const fi = fieldConfig.findIndex(x=>x.key===vmDragKey);
-      const ti = fieldConfig.findIndex(x=>x.key===fc.key);
-      if(fi<0 || ti<0 || fi===ti) return;
-      const moved = fieldConfig.splice(fi,1)[0];
-      fieldConfig.splice(ti,0,moved);
-      vmSaveFields();
-      vmRenderFieldPanel();
-      vmRenderTable();
+  const panel=document.getElementById('vmFieldPanel');
+  panel.innerHTML='<h3>Columns: drag reorder, click show/hide, resize width</h3>';
+  fieldConfig.forEach(fc=>{
+    const def=vmFieldDef(fc.key);
+    const chip=document.createElement('span');
+    chip.className='vm-field-chip'+(fc.visible?' active-field':'');
+    chip.draggable=true;chip.dataset.key=fc.key;
+    chip.innerHTML=`<span class="chip-toggle">${fc.visible?'–': '+'}</span> ${def.label}`;
+    chip.onclick=e=>{e.stopPropagation();fc.visible=!fc.visible;vmSaveFields();vmRenderFieldPanel();vmRenderTable();};
+    chip.ondragstart=e=>{vmDragKey=fc.key;chip.classList.add('dragging');};
+    chip.ondragend=()=>{chip.classList.remove('dragging');vmDragKey=null;};
+    chip.ondragover=e=>(e.preventDefault(),chip.classList.add('drag-over'));
+    chip.ondragleave=()=>chip.classList.remove('drag-over');
+    chip.ondrop=e=>{
+      e.preventDefault();chip.classList.remove('drag-over');
+      if(!vmDragKey)return;
+      const fi=fieldConfig.findIndex(x=>x.key===vmDragKey);
+      const ti=fieldConfig.findIndex(x=>x.key===fc.key);
+      if(fi<0||ti<0||fi===ti)return;
+      const moved=fieldConfig.splice(fi,1)[0];
+      fieldConfig.splice(ti,0,moved);vmSaveFields();vmRenderFieldPanel();vmRenderTable();
     };
     if(vmIsAdmin){
-      const inp = document.createElement('input');
-      inp.type='number'; inp.className='chip-width-input'; inp.value=fc.width||100;
-      inp.min=40; inp.max=600; inp.onchange = () => {
-        fc.width = Math.max(40,Math.min(600,parseInt(inp.value)||100));
-        inp.value = fc.width;
-        vmSaveFields();
-        vmRenderTable();
-      };
-      chip.append(' ', inp);
-    }
-    panel.append(chip);
+      const inp=document.createElement('input');
+      inp.type='number';inp.className='chip-width-input';inp.value=fc.width||100;
+      inp.min=40;inp.max=600;inp.onchange=()=>{
+        fc.width=Math.max(40,Math.min(600,parseInt(inp.value)||100));
+        inp.value=fc.width;vmSaveFields();vmRenderTable();
+      };chip.append(' ',inp);
+    }panel.append(chip);
   });
 }
-
-document.getElementById('vmFields').onclick = () => {
-  const open = document.getElementById('vmFieldPanel').classList.toggle('open');
-  document.getElementById('vmFields').textContent = open ? 'Fields ◂' : 'Fields ▸';
+document.getElementById('vmFields').onclick=()=>{
+  const open=document.getElementById('vmFieldPanel').classList.toggle('open');
+  document.getElementById('vmFields').textContent=open?'Fields ◂':'Fields ▸';
 };
 
 // Table render
-let vmSortCol = null, vmSortAsc = true, vmSelected = new Set(), vmLastClick = -1;
 function vmRenderTable(){
-  const thead = document.getElementById('vmThead'), tbody = document.getElementById('vmTbody');
-  thead.innerHTML = ''; tbody.innerHTML = '';
-  if(!linksData.length){
-    tbody.innerHTML = '<tr><td colspan="99" style="color:#888;padding:20px">No items</td></tr>';
-    return;
-  }
-  const fields = vmVisibleFields();
+  const thead=document.getElementById('vmThead'),tbody=document.getElementById('vmTbody');
+  thead.innerHTML='';tbody.innerHTML='';
+  if(!linksData.length){tbody.innerHTML='<tr><td colspan="99" style="color:#888;padding:20px">No items</td></tr>';return;}
+  const fields=vmVisibleFields();
 
-  // Select checkbox header
-  const chkTh = document.createElement('th');
-  chkTh.className = 'no-sort'; chkTh.style.width = '32px';
-  const chkAll = document.createElement('input');
-  chkAll.type = 'checkbox';
-  chkAll.onchange = () => {
-    if(chkAll.checked) linksData.forEach((_,i)=>vmSelected.add(i));
-    else vmSelected.clear();
-    vmRenderTable();
-  };
-  chkTh.appendChild(chkAll); thead.appendChild(chkTh);
+  const chkTh=document.createElement('th');chkTh.className='no-sort';chkTh.style.width='32px';
+  const chkAll=document.createElement('input');chkAll.type='checkbox';
+  chkAll.onchange=()=>{if(chkAll.checked)linksData.forEach((_,i)=>vmSelected.add(i));else vmSelected.clear();vmRenderTable();};
+  chkTh.appendChild(chkAll);thead.appendChild(chkTh);
 
-  // Headers
-  fields.forEach(f => {
-    const th = document.createElement('th');
-    th.style.width = (f.width||100)+'px'; th.style.maxWidth = (f.width||100)+'px'; th.style.position = 'relative';
-    th.textContent = f.label; th.className = 'sortable';
-    if(f.key===vmSortCol) th.classList.add(vmSortAsc?'sort-asc':'sort-desc');
-    th.onclick = () => {
-      if(vmSortCol===f.key) vmSortAsc = !vmSortAsc;
-      else vmSortCol = f.key, vmSortAsc = true;
-      vmSortData(); vmRenderTable();
+  fields.forEach(f=>{
+    const th=document.createElement('th');
+    th.style.width=(f.width||100)+'px';th.style.maxWidth=(f.width||100)+'px';th.style.position='relative';
+    th.textContent=f.label;th.className='sortable';
+    if(f.key===vmSortCol)th.classList.add(vmSortAsc?'sort-asc':'sort-desc');
+    th.onclick=()=>{
+      if(vmSortCol===f.key)vmSortAsc=!vmSortAsc;
+      else vmSortCol=f.key,vmSortAsc=true;
+      vmSortData();vmRenderTable();
     };
-    const rh = document.createElement('div');
-    rh.className = 'vm-resize-handle';
-    rh.onmousedown = ev => {
-      ev.preventDefault(); ev.stopPropagation(); rh.classList.add('resizing');
-      const startX = ev.clientX, fc = fieldConfig.find(x=>x.key===f.key), startW = fc?.width || 100;
-      const onMove = me => {
-        const newW = Math.max(40, Math.min(600, startW + me.clientX - startX));
-        if(fc) fc.width = newW, th.style.width = th.style.maxWidth = newW + 'px';
-        tbody.querySelectorAll('tr').forEach(tr => {
-          const td = tr.children[fields.indexOf(f) + 1];
-          if(td) td.style.width = td.style.maxWidth = newW + 'px';
+    const rh=document.createElement('div');rh.className='vm-resize-handle';
+    rh.onmousedown=ev=>{
+      ev.preventDefault();ev.stopPropagation();rh.classList.add('resizing');
+      const startX=ev.clientX,fc=fieldConfig.find(x=>x.key===f.key),startW=fc?.width||100;
+      const onMove=me=>{
+        const newW=Math.max(40,Math.min(600,startW+me.clientX-startX));
+        if(fc)fc.width=newW,th.style.width=th.style.maxWidth=newW+'px';
+        tbody.querySelectorAll('tr').forEach(tr=>{
+          const td=tr.children[fields.indexOf(f)+1];if(td)td.style.width=td.style.maxWidth=newW+'px';
         });
       };
-      const onUp = () => { rh.classList.remove('resizing'); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); if(fc) vmSaveFields(); };
-      document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
-    };
-    th.appendChild(rh); thead.appendChild(th);
+      const onUp=()=>{
+        rh.classList.remove('resizing');
+        document.removeEventListener('mousemove',onMove);
+        document.removeEventListener('mouseup',onUp);
+        if(fc)vmSaveFields();
+      };document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);
+    };th.appendChild(rh);thead.appendChild(th);
   });
 
-  if(vmSortCol) vmSortData();
+  if(vmSortCol)vmSortData();
 
-  linksData.forEach((row,i) => {
-    const tr = document.createElement('tr');
-    tr.className = 'vm-row' + (vmSelected.has(i)?' selected':'');
+  linksData.forEach((row,i)=>{
+    const tr=document.createElement('tr');
+    tr.className='vm-row'+(vmSelected.has(i)?' selected':'');
 
-    const chkTd = document.createElement('td');
-    const chk = document.createElement('input');
-    chk.type = 'checkbox'; chk.checked = vmSelected.has(i);
-    chk.onchange = e => { e.stopPropagation(); (chk.checked ? vmSelected.add(i) : vmSelected.delete(i)); tr.classList.toggle('selected', vmSelected.has(i)); vmUpdateSelInfo(); };
-    chkTd.appendChild(chk); tr.appendChild(chkTd);
+    const chkTd=document.createElement('td');
+    const chk=document.createElement('input');chk.type='checkbox';chk.checked=vmSelected.has(i);
+    chk.onchange=e=>{e.stopPropagation();(chk.checked?vmSelected.add(i):vmSelected.delete(i));tr.classList.toggle('selected',vmSelected.has(i));vmUpdateSelInfo();};
+    chkTd.appendChild(chk);tr.appendChild(chkTd);
 
-    tr.onclick = e => {
-      if(['INPUT','BUTTON','SELECT'].includes(e.target.tagName)) return;
-      if(e.shiftKey && vmLastClick>=0){
-        const [lo,hi] = [Math.min(i,vmLastClick), Math.max(i,vmLastClick)];
-        for(let x=lo;x<=hi;x++) vmSelected.add(x);
-      } else if(e.ctrlKey || e.metaKey){
-        vmSelected.has(i) ? vmSelected.delete(i) : vmSelected.add(i);
-      } else {
-        vmSelected.clear(); vmSelected.add(i);
-      }
-      vmLastClick = i; vmRenderTable();
+    tr.onclick=e=>{
+      if(['INPUT','BUTTON','SELECT'].includes(e.target.tagName))return;
+      if(e.shiftKey&&vmLastClick>=0){
+        const[lo,hi]=[Math.min(i,vmLastClick),Math.max(i,vmLastClick)];
+        for(let x=lo;x<=hi;x++)vmSelected.add(x);
+      }else if(e.ctrlKey||e.metaKey){
+        vmSelected.has(i)?vmSelected.delete(i):vmSelected.add(i);
+      }else{vmSelected.clear();vmSelected.add(i);}
+      vmLastClick=i;vmRenderTable();
     };
 
-    fields.forEach(f => {
-      const td = document.createElement('td');
-      td.style.width = (f.width||100)+'px'; td.style.maxWidth = (f.width||100)+'px';
-      const val = row[f.key]; td.textContent = val !== undefined ? String(val) : '';
-      if(f.editable && vmIsAdmin){
-        td.className = 'editable';
-        td.onclick = e => { e.stopPropagation(); vmStartEdit(td, row, f); };
-      } else {
-        td.className = 'locked';
-      }
+    fields.forEach(f=>{
+      const td=document.createElement('td');
+      td.style.width=(f.width||100)+'px';td.style.maxWidth=(f.width||100)+'px';
+      const val=row[f.key];td.textContent=val!==undefined?String(val):'';
+      if(f.editable&&vmIsAdmin){
+        td.className='editable';
+        td.onclick=e=>{e.stopPropagation();vmStartEdit(td,row,f);};
+      }else td.className='locked';
       tr.appendChild(td);
-    });
-
-    tbody.appendChild(tr);
-  });
-  vmUpdateSelInfo();
+    });tbody.appendChild(tr);
+  });vmUpdateSelInfo();
 }
 
-function vmUpdateSelInfo(){
-  document.getElementById('vmSelInfo').textContent = vmSelected.size + ' selected / ' + linksData.length + ' total';
-}
+function vmUpdateSelInfo(){document.getElementById('vmSelInfo').textContent=vmSelected.size+' selected / '+linksData.length+' total';}
 
 function vmSortData(){
-  if(!vmSortCol) return;
-  const f = vmFieldDef(vmSortCol);
-  linksData.sort((a,b) => {
-    let av = a[vmSortCol] ?? '', bv = b[vmSortCol] ?? '';
-    if(!isNaN(parseFloat(av)) && !isNaN(parseFloat(bv))) { av=parseFloat(av); bv=parseFloat(bv); } 
-    else { av=String(av).toLowerCase(); bv=String(bv).toLowerCase(); }
-    return vmSortAsc ? (av < bv ? -1 : av > bv ? 1 : 0) : (av > bv ? -1 : av < bv ? 1 : 0);
+  if(!vmSortCol)return;
+  linksData.sort((a,b)=>{
+    let av=a[vmSortCol]??'',bv=b[vmSortCol]??'';
+    if(!isNaN(parseFloat(av))&&!isNaN(parseFloat(bv))){av=parseFloat(av);bv=parseFloat(bv);}
+    else{av=String(av).toLowerCase();bv=String(bv).toLowerCase();}
+    return vmSortAsc?(av<bv?-1:av>bv?1:0):(av>bv?-1:av<bv?1:0);
   });
 }
 
-function vmStartEdit(td, row, field){
-  if(td.querySelector('input')) return;
-  const prev = td.textContent; td.textContent = '';
-  const inp = document.createElement('input');
-  inp.type = field.type==='number' ? 'number' : 'text';
-  inp.value = row[field.key] !== undefined ? row[field.key] : '';
-  inp.className = 'vm-cell-input';
-  const commit = () => {
-    let val = inp.value.trim();
-    if(field.type==='number') val = val ? parseFloat(val) : undefined;
-    if(val === undefined) delete row[field.key]; else row[field.key] = val;
+function vmStartEdit(td,row,field){
+  if(td.querySelector('input'))return;
+  const prev=td.textContent;td.textContent='';
+  const inp=document.createElement('input');
+  inp.value=row[field.key]!==undefined?row[field.key]:'';
+  inp.className='vm-cell-input';
+  const commit=()=>{
+    let val=inp.value.trim();
+    if(val==='')delete row[field.key];else row[field.key]=val;
     saveJson();
-    td.textContent = val !== undefined ? String(val) : '';
-    td.className = 'editable';
+    td.textContent=row[field.key]!==undefined?String(row[field.key]):'';
+    td.className='editable';
   };
-  inp.onblur = commit;
-  inp.onkeydown = e => { if(e.key==='Enter') { e.preventDefault(); inp.blur(); } if(e.key==='Escape') { td.textContent=prev; td.className='editable'; } };
-  td.appendChild(inp); inp.focus(); inp.select();
+  inp.onblur=commit;
+  inp.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();inp.blur();}if(e.key==='Escape'){td.textContent=prev;td.className='editable';}};
+  td.appendChild(inp);inp.focus();inp.select();
 }
 
-// Toolbar
-document.getElementById('vmExport').onclick = () => {
-  const blob = new Blob([JSON.stringify(linksData,null,2)], {type:'application/json'});
-  const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='links.json';
-  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(a.href);
+document.getElementById('vmExport').onclick=()=>{
+  const blob=new Blob([JSON.stringify(linksData,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='links.json';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(a.href);
 };
-document.getElementById('vmReset').onclick = () => {
-  if(!confirm('Reset columns to defaults?')) return;
-  fieldConfig = [{key:'cell',visible:true,width:80},{key:'link',visible:true,width:300},{key:'cname',visible:true,width:120},{key:'sname',visible:true,width:140},{key:'attribution',visible:true,width:160},{key:'comment',visible:true,width:160},{key:'asset',visible:true,width:70},{key:'fit',visible:true,width:80},{key:'show',visible:false,width:60}];
-  vmSaveFields();
-  vmRenderFieldPanel(); vmRenderTable();
+document.getElementById('vmReset').onclick=()=>{
+  if(!confirm('Reset columns to defaults?'))return;
+  fieldConfig=[{key:'cell',visible:true,width:80},{key:'link',visible:true,width:300},{key:'cname',visible:true,width:120},{key:'sname',visible:true,width:140},{key:'attribution',visible:true,width:160},{key:'comment',visible:true,width:160},{key:'asset',visible:true,width:70},{key:'fit',visible:true,width:80},{key:'show',visible:false,width:60}];
+  vmSaveFields();vmRenderFieldPanel();vmRenderTable();
 };
- 
+"""
+
+working_base += script_add + """
+</body>
+</html>
