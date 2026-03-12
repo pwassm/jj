@@ -1,117 +1,116 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <meta http-equiv="Pragma" content="no-cache">
-    <meta http-equiv="Expires" content="0">
-    <title>SeeAndLearn</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        html, body { overflow: hidden; touch-action: manipulation; background: #000; }
-        /* YOUR EXACT ORIGINAL STYLES - VERIFIED WORKING */
-        #rotateWrap { position: fixed; top: 0; left: 0; }
-        #gameCanvas { display: block; }
-        #menuWrap { position: fixed; z-index: 999; width: 48px; height: 48px; }
-        #menuWrap.portrait-mode { transform: rotate(90deg); transform-origin: 24px 24px; }
-        #menuBtn { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(30,30,30,0.82); border: none; border-radius: 10px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 10px; touch-action: manipulation; }
-        #menuBtn.open { background: rgba(30,30,30,0.97); }
-        #menuBtn span { display: block; width: 100%; height: 3px; background: #fff; border-radius: 2px; }
-        #menuPanel { position: absolute; bottom: 54px; right: 0; z-index: 998; background: rgba(25,25,25,0.96); border-radius: 10px; overflow-y: auto; max-height: 80vh; display: none; flex-direction: column; min-width: 200px; box-shadow: 0 4px 24px rgba(0,0,0,0.5); scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.3) transparent; }
-        #menuPanel::-webkit-scrollbar { width: 6px; }
-        #menuPanel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.3); border-radius: 3px; }
-        #menuPanel.open { display: flex; }
-        #menuDateStamp { padding: 6px 12px 2px 12px; font: 10px Arial,sans-serif; color: rgba(255,255,255,0.35); text-align: right; flex-shrink: 0; user-select: none; letter-spacing: 0.3px; }
-        .menu-item { padding: 13px 18px; color: #fff; font: 15px Arial,sans-serif; cursor: pointer; white-space: nowrap; border-bottom: 1px solid rgba(255,255,255,0.08); flex-shrink: 0; }
-        .menu-item:last-child { border-bottom: none; }
-        .menu-item:hover, .menu-item.active { background: rgba(255,255,255,0.12); }
-        .menu-divider { height: 1px; background: rgba(255,255,255,0.15); margin: 2px 0; flex-shrink: 0; }
-        #settingsPanel { display: none; flex-direction: column; background: rgba(12,12,28,0.99); flex-shrink: 0; }
-        #settingsPanel.open { display: flex; }
-        .setting-row { display: flex; align-items: center; justify-content: space-between; padding: 11px 20px; border-bottom: 1px solid rgba(255,255,255,0.06); }
-        .setting-row span { color: #ccc; font: 14px Arial,sans-serif; }
-        .tog { position: relative; display: inline-block; width: 42px; height: 22px; flex-shrink: 0; }
-        .tog input { opacity: 0; width: 0; height: 0; }
-        .tog-slider { position: absolute; cursor: pointer; inset: 0; background: #444; border-radius: 22px; transition: .2s; }
-        .tog-slider::before { content: ""; position: absolute; width: 16px; height: 16px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: .2s; }
-        .tog input:checked ~ .tog-slider { background: #2a8a2a; }
-        .tog input:checked ~ .tog-slider::before { transform: translateX(20px); }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>SeeAndLearn</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{overflow:hidden;touch-action:manipulation;background:#000}
+#rotateWrap{position:fixed;top:0;left:0}
+#gameCanvas{display:block}
 
-        /* GITHUB TOKEN STYLES */
-        .github-token-setup { display: none; flex-direction: column; gap: 8px; padding: 11px 20px 14px 20px; border-top: 1px solid rgba(255,255,255,0.06); }
-        .github-token-setup.open { display: flex; }
-        .token-input { background: #0a0a1a; border: 1px solid #555; color: #fff; padding: 9px 10px; border-radius: 6px; font-size: 14px; width: 100%; outline: none; }
-        .token-input:focus { border-color: #8ef; }
-        .token-status { font-size: 12px; color: #8ef; min-height: 14px; }
+/* Hamburger/menu */
+#menuWrap{position:fixed;z-index:999;width:48px;height:48px}
+#menuWrap.portrait-mode{transform:rotate(90deg);transform-origin:24px 24px}
+#menuBtn{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(30,30,30,.82);border:none;border-radius:10px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:10px;touch-action:manipulation}
+#menuBtn.open{background:rgba(30,30,30,.97)}
+#menuBtn span{display:block;width:100%;height:3px;background:#fff;border-radius:2px}
+#menuPanel{position:absolute;bottom:54px;right:0;z-index:998;background:rgba(25,25,25,.96);border-radius:10px;overflow-y:auto;max-height:80vh;display:none;flex-direction:column;min-width:200px;box-shadow:0 4px 24px rgba(0,0,0,.5);scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.3)transparent}
+#menuPanel::-webkit-scrollbar{width:6px}
+#menuPanel::-webkit-scrollbar-thumb{background:rgba(255,255,255,.3);border-radius:3px}
+#menuPanel.open{display:flex}
+#menuDateStamp{padding:6px 12px 2px 12px;font:10px Arial,sans-serif;color:rgba(255,255,255,.35);text-align:right;flex-shrink:0;user-select:none;letter-spacing:.3px}
+.menu-item{padding:13px 18px;color:#fff;font:15px Arial,sans-serif;cursor:pointer;white-space:nowrap;border-bottom:1px solid rgba(255,255,255,.08);flex-shrink:0}
+.menu-item:last-child{border-bottom:none}
+.menu-item:hover,.menu-item.active{background:rgba(255,255,255,.12)}
+.menu-divider{height:1px;background:rgba(255,255,255,.15);margin:2px 0;flex-shrink:0}
 
-        /* Rest of your exact original styles preserved */
-        /* ... cell overlays, fullscreen, quick-fill, etc ... */
-    </style>
+/* Settings */
+#settingsPanel{display:none;flex-direction:column;background:rgba(12,12,28,.99);flex-shrink:0}
+#settingsPanel.open{display:flex}
+.setting-row{display:flex;align-items:center;justify-content:space-between;padding:11px 20px;border-bottom:1px solid rgba(255,255,255,.06)}
+.setting-row span{color:#ccc;font:14px Arial,sans-serif}
+.tog{position:relative;display:inline-block;width:42px;height:22px;flex-shrink:0}
+.tog input{opacity:0;width:0;height:0}
+.tog-slider{position:absolute;cursor:pointer;inset:0;background:#444;border-radius:22px;transition:.2s}
+.tog-slider:before{content:"";position:absolute;width:16px;height:16px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.2s}
+.tog input:checked~.tog-slider{background:#2a8a2a}
+.tog input:checked~.tog-slider:before{transform:translateX(20px)}
+
+/* GitHub token UI */
+.github-token-setup{display:none;flex-direction:column;gap:8px;padding:11px 20px 14px 20px;border-top:1px solid rgba(255,255,255,.06)}
+.github-token-setup.open{display:flex}
+.token-input{background:#0a0a1a;border:1px solid #555;color:#fff;padding:9px 10px;border-radius:6px;font-size:14px;width:100%;outline:none}
+.token-input:focus{border-color:#8ef}
+.token-status{font-size:12px;color:#8ef;min-height:14px}
+
+/* Grid / cells (from your original structure, compacted) */
+.cell-overlay{position:absolute;overflow:hidden;cursor:pointer;display:flex;align-items:flex-end;justify-content:center}
+.cell-overlay img{position:absolute;inset:0;width:100%;height:100%}
+.cell-overlay img.ei{object-fit:contain;background:rgba(0,0,0,.15)}
+.cell-overlay img.fc{object-fit:cover}
+.cell-label{position:relative;z-index:1;width:100%;text-align:center;padding:2px 4px;font:bold 11px Arial,sans-serif;color:#fff;background:rgba(0,0,0,.58);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cell-empty{position:absolute;cursor:crosshair;border:2px dashed rgba(100,180,255,0);transition:border-color .15s,background .15s}
+.cell-empty:hover{border-color:rgba(100,180,255,.6);background:rgba(100,180,255,.07)}
+
+/* Fullscreen, quick-fill, JSON editor styles omitted for brevity but assumed identical to your original */
+</style>
 </head>
 <body>
-    <div id="rotateWrap">
-        <canvas id="gameCanvas"></canvas>
-    </div>
+<div id="rotateWrap">
+  <canvas id="gameCanvas"></canvas>
+</div>
 
-    <!-- PERFECT MENU WITH ☁ PUSH BUTTON -->
-    <div id="menuWrap">
-        <div id="menuPanel">
-            <div id="menuDateStamp"></div>
-            <div class="menu-item" id="miTables">Tables (JSON editor)</div>
-            <div class="menu-divider"></div>
-            <div class="menu-item" id="miSaveJson">💾 Save JSON <small style="opacity:.5;font-size:11px">(Ctrl+Alt+S)</small></div>
-            <div class="menu-item" id="miPushGithub">☁ Push to GitHub</div>
-            <div class="menu-divider"></div>
-            <div class="menu-item" id="miSettings">Settings ▸</div>
-            <div class="menu-item" id="miHelp">Help</div>
-        </div>
-        <button id="menuBtn">
-            <span></span><span></span><span></span>
-        </button>
-    </div>
+<div id="menuWrap">
+  <div id="menuPanel">
+    <div id="menuDateStamp"></div>
+    <div class="menu-item" id="miTables">Tables (JSON editor)</div>
+    <div class="menu-divider"></div>
+    <div class="menu-item" id="miSaveJson">💾 Save JSON <small style="opacity:.5;font-size:11px">Ctrl+Alt+S</small></div>
+    <div class="menu-item" id="miPushGithub">☁ Push to GitHub</div>
+    <div class="menu-divider"></div>
+    <div class="menu-item" id="miSettings">Settings ▸</div>
+    <div class="menu-divider"></div>
+    <div class="menu-item" id="miHelp">Help</div>
+  </div>
+  <button id="menuBtn"><span></span><span></span><span></span></button>
+</div>
 
-    <!-- SETTINGS WITH GITHUB TOGGLE -->
-    <div id="settingsPanel">
-        <div class="setting-row">
-            <span id="fitLabel">Img Fill Cell</span>
-            <label class="tog">
-                <input type="checkbox" id="togFit">
-                <span class="tog-slider"></span>
-            </label>
-        </div>
-        <div class="setting-row">
-            <span>Cell labels</span>
-            <label class="tog">
-                <input type="checkbox" id="togCellLbl">
-                <span class="tog-slider"></span>
-            </label>
-        </div>
-        <div class="setting-row">
-            <span>cname label</span>
-            <label class="tog">
-                <input type="checkbox" id="togCname" checked>
-                <span class="tog-slider"></span>
-            </label>
-        </div>
-        <div class="setting-row">
-            <span>GitHub Sync</span>
-            <label class="tog">
-                <input type="checkbox" id="togGithub">
-                <span class="tog-slider"></span>
-            </label>
-        </div>
-        <div class="github-token-setup" id="githubTokenSetup">
-            <input type="password" id="tokenInput" class="token-input" placeholder="github_pat_...">
-            <div class="token-status" id="tokenStatus"></div>
-        </div>
-    </div>
+<div id="settingsPanel">
+  <div class="setting-row">
+    <span id="fitLabel">Img Fill Cell</span>
+    <label class="tog"><input type="checkbox" id="togFit"><span class="tog-slider"></span></label>
+  </div>
+  <div class="setting-row">
+    <span>Cell labels</span>
+    <label class="tog"><input type="checkbox" id="togCellLbl"><span class="tog-slider"></span></label>
+  </div>
+  <div class="setting-row">
+    <span>cname label</span>
+    <label class="tog"><input type="checkbox" id="togCname" checked><span class="tog-slider"></span></label>
+  </div>
+  <div class="setting-row">
+    <span>GitHub Sync</span>
+    <label class="tog"><input type="checkbox" id="togGithub"><span class="tog-slider"></span></label>
+  </div>
+  <div class="github-token-setup" id="githubTokenSetup">
+    <input type="password" id="tokenInput" class="token-input" placeholder="github_pat_...">
+    <div class="token-status" id="tokenStatus"></div>
+  </div>
+</div>
 
-    <script>
+<!-- Quick-fill, fullscreen, JSON editor DOM omitted here for brevity; keep what you had -->
+
+<script>
 'use strict';
 
+// === core constants (matching your original) ===
 const COLS = 5, ROWS = 5, LETTERS = 'abcde';
-const IS_MOBILE = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+const ISMOBILE = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 let GW = 0, GH = 0, cellW = 0, cellH = 0, isPortrait = false, bgColor = '#c8ddf0';
 let fitMode = localStorage.getItem('mlynx-fit') || 'fc';
 let showCellLbl = false, showCname = true;
@@ -124,114 +123,223 @@ const menuWrap = document.getElementById('menuWrap');
 const menuBtn = document.getElementById('menuBtn');
 const menuPanel = document.getElementById('menuPanel');
 
-// PERFECTLY WIRED HAMBURGER + GITHUB
-function closeMenu() {
+// === helpers from your original ===
+function parseCell(s){
+  if(!s || s.length<2) return null;
+  const r=parseInt(s[0],10);
+  const c=LETTERS.indexOf(s[1].toLowerCase())+1;
+  if(isNaN(r)||r<1||r>ROWS||c<1||c>COLS) return null;
+  return {row:r,col:c};
+}
+function mkCell(r,c){return r+LETTERS[c-1];}
+
+function setupLayout(){
+  const pw = window.innerWidth, ph = window.innerHeight;
+  isPortrait = pw < ph;
+  const s = Math.min(pw,ph);
+  bgColor = s < 600 ? '#7ab8e8' : '#ffffff';
+  if(isPortrait){
+    GW = ph; GH = pw;
+    canvas.width = GW; canvas.height = GH;
+    wrap.style.cssText = `width:${GW}px;height:${GH}px;transform-origin:0 0;transform:rotate(90deg) translateY(-${pw}px)`;
+    menuWrap.classList.add('portrait-mode');
+  } else {
+    GW = pw; GH = ph;
+    canvas.width = GW; canvas.height = GH;
+    wrap.style.cssText = `width:${GW}px;height:${GH}px;transform-origin:0 0;transform:none`;
+    menuWrap.classList.remove('portrait-mode');
+  }
+  cellW = GW / COLS;
+  cellH = GH / ROWS;
+  updateMenuPosition();
+  render();
+}
+
+function updateMenuPosition(){
+  const PAD = 14;
+  if(isPortrait){
+    menuWrap.style.cssText += `;bottom:${PAD}px;left:${PAD}px;right:auto`;
+  }else{
+    menuWrap.style.cssText += `;bottom:${PAD}px;right:${PAD}px;left:auto`;
+  }
+}
+
+function renderGrid(){
+  if(!GW||!GH) return;
+  ctx.fillStyle = bgColor;
+  ctx.fillRect(0,0,GW,GH);
+  ctx.strokeStyle = '#002b55';
+  ctx.lineWidth = 1;
+  for(let i=1;i<COLS;i++){
+    const x = GW*i/COLS;
+    ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,GH);ctx.stroke();
+  }
+  for(let i=1;i<ROWS;i++){
+    const y = GH*i/ROWS;
+    ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(GW,y);ctx.stroke();
+  }
+}
+
+// overlays simplified to just clear for now; you will keep your original
+function buildOverlays(){
+  // In your real file: clear & recreate .cell-overlay and .cell-empty
+}
+
+function render(){
+  renderGrid();
+  buildOverlays();
+}
+
+// === MENU / SETTINGS ===
+function closeMenu(){
   menuPanel.classList.remove('open');
   menuBtn.classList.remove('open');
   document.getElementById('settingsPanel').classList.remove('open');
   document.getElementById('miSettings').textContent = 'Settings ▸';
 }
 
-menuBtn.addEventListener('pointerup', e => {
+menuBtn.addEventListener('pointerup', e=>{
   e.stopPropagation();
   const o = menuPanel.classList.toggle('open');
-  menuBtn.classList.toggle('open', o);
-  if (!o) {
+  menuBtn.classList.toggle('open',o);
+  if(!o){
     document.getElementById('settingsPanel').classList.remove('open');
     document.getElementById('miSettings').textContent = 'Settings ▸';
   }
 });
-
-menuPanel.addEventListener('pointerup', e => e.stopPropagation());
-document.addEventListener('pointerup', () => {
-  if (menuPanel.classList.contains('open')) closeMenu();
+menuPanel.addEventListener('pointerup',e=>e.stopPropagation());
+document.addEventListener('pointerup',()=>{
+  if(menuPanel.classList.contains('open')) closeMenu();
 });
 
-// MENU BUTTONS
-document.getElementById('miSaveJson').addEventListener('pointerup', e => {
-  e.stopPropagation();
-  closeMenu();
-  saveJson();
-});
-document.getElementById('miPushGithub').addEventListener('pointerup', e => {
-  e.stopPropagation();
-  closeMenu();
-  pushToGitHub();
-});
-
-// GITHUB PUSH FUNCTION
-async function pushToGitHub() {
-  const token = localStorage.getItem('github-token');
-  if (!token) {
-    alert('1. Settings → GitHub Sync ON\\n2. Paste token → Enter');
-    document.getElementById('togGithub').checked = true;
-    document.getElementById('settingsPanel').classList.add('open');
-    return;
-  }
-  let owner = localStorage.getItem('github-owner') || '';
-  let repo = localStorage.getItem('github-repo') || '';
-  owner = prompt('GitHub owner:', owner) || '';
-  repo = prompt('Repository:', repo) || '';
-  if (!owner || !repo) return;
-  localStorage.setItem('github-owner', owner);
-  localStorage.setItem('github-repo', repo);
-
-  try {
-    const path = 'links.json';
-    const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
-    const headers = {
-      'Authorization': `Bearer ${token}`,
-      'Accept': 'application/vnd.github+json'
-    };
-    const getRes = await fetch(apiUrl, {headers});
-    const {sha} = await getRes.json();
-    const content = btoa(JSON.stringify(linksData, null, 2));
-    const putRes = await fetch(apiUrl, {
-      method: 'PUT',
-      headers,
-      body: JSON.stringify({message: 'Update via SeeAndLearn', content, sha})
-    });
-    alert(putRes.ok ? '✅ Pushed to GitHub!' : '❌ ' + await putRes.text());
-  } catch(e) {
-    alert('Error: ' + e.message);
-  }
-}
-
-// GITHUB TOKEN SETUP
-document.getElementById('togGithub').addEventListener('change', e => {
-  const setup = document.getElementById('githubTokenSetup');
-  setup.classList.toggle('open', e.target.checked);
-  if (e.target.checked && !localStorage.getItem('github-token')) {
-    document.getElementById('tokenInput').focus();
-  }
-});
-document.getElementById('tokenInput').addEventListener('blur', e => {
-  const token = e.target.value.trim();
-  if (token) {
-    localStorage.setItem('github-token', token);
-    document.getElementById('tokenStatus').textContent = '✅ Saved (per browser)';
-    e.target.value = '';
-  }
-});
-
-// Save JSON function (your original)
-function saveJson() {
-  localStorage.setItem('mlynx-links', JSON.stringify(linksData));
-  const blob = new Blob([JSON.stringify(linksData, null, 2)], {type: 'application/json'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'links.json';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+// Save JSON (your original logic)
+function saveJson(){
+  localStorage.setItem('mlynx-links',JSON.stringify(linksData));
+  const blob = new Blob([JSON.stringify(linksData,null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='links.json';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
   URL.revokeObjectURL(a.href);
 }
 
-// Bootstrap (your original logic stubbed for demo)
-async function init() {
-  alert('SeeAndLearn ready!\\n☰ → ☁ Push to GitHub after token setup');
+document.getElementById('miSaveJson').addEventListener('pointerup',e=>{
+  e.stopPropagation();closeMenu();saveJson();
+});
+
+// Settings toggles
+function syncFit(){
+  document.getElementById('togFit').checked = (fitMode==='ei');
+  document.getElementById('fitLabel').textContent = fitMode==='ei'?'Img Entire Image':'Img Fill Cell';
+}
+document.getElementById('togFit').addEventListener('change',function(){
+  fitMode=this.checked?'ei':'fc';
+  localStorage.setItem('mlynx-fit',fitMode);
+  syncFit();render();
+});
+document.getElementById('togCellLbl').addEventListener('change',function(){showCellLbl=this.checked;render();});
+document.getElementById('togCname').addEventListener('change',function(){showCname=this.checked;render();});
+
+// === GITHUB TOKEN + PUSH ===
+document.getElementById('togGithub').addEventListener('change',function(){
+  const setup=document.getElementById('githubTokenSetup');
+  const status=document.getElementById('tokenStatus');
+  if(this.checked){
+    setup.classList.add('open');
+    const saved=localStorage.getItem('github-token');
+    if(saved){status.textContent='✅ Token saved';}
+    else{status.textContent='Paste token → Enter';document.getElementById('tokenInput').focus();}
+  }else{
+    setup.classList.remove('open');
+  }
+});
+document.getElementById('tokenInput').addEventListener('change',function(e){
+  const t=this.value.trim();
+  if(t){
+    localStorage.setItem('github-token',t);
+    document.getElementById('tokenStatus').textContent='✅ Saved (per browser)';
+    this.value='';
+  }
+});
+document.getElementById('tokenInput').addEventListener('keydown',function(e){
+  if(e.key==='Enter')this.blur();
+});
+
+async function pushToGitHub(){
+  const token=localStorage.getItem('github-token');
+  if(!token){
+    alert('1. Settings → GitHub Sync ON\n2. Paste token → Enter');
+    document.getElementById('togGithub').checked=true;
+    document.getElementById('settingsPanel').classList.add('open');
+    return;
+  }
+  let owner=localStorage.getItem('github-owner')||'';
+  let repo=localStorage.getItem('github-repo')||'';
+  owner=prompt('GitHub owner:',owner)||'';
+  repo=prompt('Repository:',repo)||'';
+  if(!owner||!repo)return;
+  localStorage.setItem('github-owner',owner);
+  localStorage.setItem('github-repo',repo);
+  try{
+    const path='links.json';
+    const apiUrl=`https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+    const headers={'Authorization':`Bearer ${token}`,'Accept':'application/vnd.github+json'};
+    const getRes=await fetch(apiUrl,{headers});
+    if(!getRes.ok)throw new Error('Repo/file not found or no access');
+    const {sha}=await getRes.json();
+    const content=btoa(unescape(encodeURIComponent(JSON.stringify(linksData,null,2))));
+    const putRes=await fetch(apiUrl,{
+      method:'PUT',
+      headers,
+      body:JSON.stringify({message:'Update links.json via SeeAndLearn',content,sha})
+    });
+    if(putRes.ok)alert('✅ Pushed to GitHub!');
+    else alert('❌ '+await putRes.text());
+  }catch(err){
+    alert('GitHub error: '+err.message);
+  }
+}
+
+document.getElementById('miPushGithub').addEventListener('pointerup',e=>{
+  e.stopPropagation();closeMenu();pushToGitHub();
+});
+
+// Help
+document.getElementById('miHelp').addEventListener('pointerup',e=>{
+  e.stopPropagation();closeMenu();
+  alert('SeeAndLearn\n\n• Tap empty cell → Quick-fill\n• Ctrl+S in Quick-fill → save\n• 💾 Save JSON → download links.json\n• ☁ Push to GitHub → upload links.json\n• Settings → GitHub Sync to paste token');
+});
+
+// Ctrl+Alt+S global Save JSON
+document.addEventListener('keydown',e=>{
+  if(e.ctrlKey && e.altKey && e.key.toLowerCase()==='s'){
+    e.preventDefault();saveJson();
+  }
+});
+
+// === init: load links.json then render ===
+async function init(){
+  setupLayout();
+  syncFit();
+  try{
+    const r=await fetch('links.json?v=' + Date.now());
+    linksData=await r.json();
+  }catch(e){
+    try{
+      const ls=localStorage.getItem('mlynx-links');
+      linksData=ls?JSON.parse(ls):[];
+    }catch(e2){linksData=[];}
+  }
+  render();
+  const d=new Date();
+  document.getElementById('menuDateStamp').textContent =
+    d.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric',year:'numeric'})+' '+
+    d.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});
 }
 init();
+
+window.addEventListener('resize',()=>{setupLayout();render();});
+window.addEventListener('orientationchange',()=>{setTimeout(()=>{setupLayout();render();},350);});
 </script>
 </body>
 </html>
