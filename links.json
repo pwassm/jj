@@ -19,7 +19,7 @@
     "cname": "Cat",
     "sname": "Felis catus",
     "attribution": "Wikimedia / CC BY-SA",
-    "comment": "entire image"
+    "comment": ""
   },
   {
     "show": "1",
@@ -30,17 +30,6 @@
     "cname": "Coffee",
     "sname": "Coffea arabica",
     "attribution": "Julius Schorzman / CC BY-SA 2.0",
-    "comment": "fill cell"
-  },
-  {
-    "show": "1",
-    "asset": "i",
-    "cell": "2c",
-    "fit": "",
-    "link": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b8/Giant_Sea_Bass%2C_CAS.jpg/1920px-Giant_Sea_Bass%2C_CAS.jpg",
-    "cname": "giant sea bass",
-    "sname": "",
-    "attribution": "",
     "comment": ""
   }
 ]
