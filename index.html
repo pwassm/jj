@@ -9,321 +9,292 @@
 <title>Mlynx</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-html, body { overflow: hidden; height: 100vh; background: #000; touch-action: manipulation; }
+html, body { overflow: hidden; touch-action: manipulation; background: #000; }
 
-/* Canvas */
-#gameCanvas {
-  display: block;
-  position: fixed;
-  top: 0; left: 0;
-  width: 100vw;
-  height: 100vh;
-  background: #c8ddf0;
-}
+/* ── rotateWrap: braintrain exact pattern ── */
+#rotateWrap { position: fixed; top: 0; left: 0; }
+#gameCanvas  { display: block; }
 
-/* ── rotateWrap like braintrain ── */
-#rotateWrap {
-  position: fixed;
-  top: 0; left: 0;
-  width: 100vw;
-  height: 100vh;
-}
-
-/* Hamburger menu */
+/* ── Hamburger: fixed to viewport, outside rotateWrap ── */
 #menuWrap {
   position: fixed;
   z-index: 999;
-  width: 52px;
-  height: 52px;
+  width: 52px; height: 52px;
+  /* default landscape: bottom-right */
+  bottom: 14px; right: 14px; left: auto;
+  transition: none;
 }
+/* In portrait mode the whole wrap rotates so the three bars look "upright"
+   The position is kept in viewport coords via JS, same as braintrain */
 #menuWrap.portrait-mode {
   transform: rotate(90deg);
   transform-origin: 26px 26px;
 }
 #menuBtn {
-  position: absolute;
-  top: 0; left: 0;
+  position: absolute; top: 0; left: 0;
   width: 100%; height: 100%;
   background: rgba(30,30,30,0.92);
-  border: none;
-  border-radius: 12px;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 12px;
+  border: none; border-radius: 12px; cursor: pointer;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 5px; padding: 12px;
   touch-action: manipulation;
 }
-#menuBtn span {
-  display: block;
-  width: 100%; height: 3px;
-  background: #fff;
-  border-radius: 2px;
-}
+#menuBtn span { display: block; width: 100%; height: 3px; background: #fff; border-radius: 2px; }
 
 #menuPanel {
-  position: absolute;
-  bottom: 64px;
-  right: 0;
+  position: absolute; bottom: 64px; right: 0;
   z-index: 998;
-  background: rgba(25,25,25,0.96);
-  border-radius: 12px;
-  overflow-y: auto;
-  max-height: 80vh;
-  display: none;
-  flex-direction: column;
-  min-width: 210px;
+  background: rgba(25,25,25,0.96); border-radius: 12px;
+  overflow-y: auto; max-height: 80vh;
+  display: none; flex-direction: column;
+  min-width: 220px;
   box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+  scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.3) transparent;
 }
 #menuPanel.open { display: flex; }
-
-/* Menu items */
 #menuDateStamp {
-  padding: 6px 12px 2px 12px;
-  font: 10px Arial, sans-serif;
-  color: rgba(255,255,255,0.35);
-  text-align: right;
+  padding: 6px 12px 2px; font: 10px Arial,sans-serif;
+  color: rgba(255,255,255,0.35); text-align: right; flex-shrink: 0;
 }
 .menu-item {
-  padding: 13px 18px;
-  color: #fff;
-  font: 15px Arial, sans-serif;
-  cursor: pointer;
-  white-space: nowrap;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
+  padding: 13px 18px; color: #fff; font: 15px Arial,sans-serif;
+  cursor: pointer; white-space: nowrap;
+  border-bottom: 1px solid rgba(255,255,255,0.08); flex-shrink: 0;
 }
 .menu-item:last-child { border-bottom: none; }
-.menu-item:hover { background: rgba(255,255,255,0.12); }
-.menu-divider { height: 1px; background: rgba(255,255,255,0.15); margin: 2px 0; }
+.menu-item:hover, .menu-item:active { background: rgba(255,255,255,0.12); }
+.menu-divider { height: 1px; background: rgba(255,255,255,0.15); margin: 2px 0; flex-shrink: 0; }
 
-#settingsPanel {
-  display: none;
-  flex-direction: column;
-  background: rgba(15,15,30,0.98);
-  border-top: 1px solid rgba(255,255,255,0.1);
-}
+/* settings sub-panel */
+#settingsPanel { display: none; flex-direction: column; background: rgba(12,12,28,0.99); }
 #settingsPanel.open { display: flex; }
 .setting-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 20px;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 11px 20px; border-bottom: 1px solid rgba(255,255,255,0.06);
 }
 .setting-row span { color: #ccc; font: 14px Arial,sans-serif; }
-.tog {
-  position: relative;
-  display: inline-block;
-  width: 42px; height: 22px;
-  flex-shrink: 0;
-}
+.tog { position: relative; display: inline-block; width: 42px; height: 22px; flex-shrink: 0; }
 .tog input { opacity: 0; width: 0; height: 0; }
 .tog-slider {
-  position: absolute; cursor: pointer;
-  inset: 0; background: #444;
-  border-radius: 22px; transition: .2s;
+  position: absolute; cursor: pointer; inset: 0;
+  background: #444; border-radius: 22px; transition: .2s;
 }
 .tog-slider:before {
   content: ""; position: absolute;
-  width: 16px; height: 16px;
-  left: 3px; bottom: 3px;
-  background: #fff; border-radius: 50%;
-  transition: .2s;
+  width: 16px; height: 16px; left: 3px; bottom: 3px;
+  background: #fff; border-radius: 50%; transition: .2s;
 }
-.tog input:checked + .tog-slider { background: #3a8a3a; }
+.tog input:checked + .tog-slider { background: #2a8a2a; }
 .tog input:checked + .tog-slider:before { transform: translateX(20px); }
 
-/* Cell overlays */
-#cellOverlayContainer {
-  position: fixed;
-  top: 0; left: 0;
-  width: 100vw; height: 100vh;
-  pointer-events: none;
+/* ── Cell overlays – live in their own fixed div outside rotateWrap ── */
+#overlayRoot {
+  position: fixed; top: 0; left: 0;
+  pointer-events: none;        /* default off; each .cell-hit is pointer-events:auto */
+  z-index: 10;
 }
-.cell-overlay {
-  position: absolute;
-  display: flex; align-items: flex-end; justify-content: center;
-  overflow: hidden; cursor: pointer;
-  user-select: none;
+.cell-hit {
+  position: absolute; overflow: hidden;
+  pointer-events: auto; cursor: pointer; user-select: none;
+  display: flex; flex-direction: column;
 }
-.cell-overlay img {
-  position: absolute; inset: 0;
-  width: 100%; height: 100%;
+.cell-hit img {
+  position: absolute; inset: 0; width: 100%; height: 100%;
 }
-.cell-overlay img.fit-contain { object-fit: contain; background: rgba(0,0,0,0.18); }
-.cell-overlay img.fit-cover { object-fit: cover; }
+.cell-hit img.ei { object-fit: contain; background: rgba(0,0,0,0.12); }
+.cell-hit img.fc { object-fit: cover; }
 .cell-label {
-  position: relative; z-index: 1;
-  width: 100%; text-align: center;
-  padding: 2px 4px;
-  font-size: 11px; font-weight: bold;
-  color: #fff; background: rgba(0,0,0,0.58);
-  white-space: nowrap; overflow: hidden;
-  text-overflow: ellipsis;
-}
-.cell-overlay.label-only {
-  align-items: center; justify-content: center;
-  background: rgba(0,0,0,0.12);
-}
-.cell-overlay.label-only .cell-label {
-  background: rgba(0,0,80,0.55);
-  border-radius: 4px; padding: 3px 6px;
-  width: auto; font-size: 12px;
+  position: absolute; bottom: 0; left: 0; right: 0; z-index: 2;
+  text-align: center; padding: 2px 4px;
+  font: bold 11px Arial,sans-serif; color: #fff;
+  background: rgba(0,0,0,0.58);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .cell-attrib {
-  position: absolute; bottom: 18px; right: 2px; z-index: 2;
-  font-size: 9px; color: rgba(255,255,255,0.75);
-  background: rgba(0,0,0,0.5);
-  padding: 1px 4px; border-radius: 3px;
-  white-space: nowrap; overflow: hidden;
-  text-overflow: ellipsis; max-width: 90%;
+  position: absolute; bottom: 18px; right: 2px; z-index: 3;
+  font-size: 9px; color: rgba(255,255,255,0.8);
+  background: rgba(0,0,0,0.5); padding: 1px 4px; border-radius: 3px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 90%;
 }
 .cell-id {
-  position: absolute; top: 2px; left: 3px; z-index: 2;
+  position: absolute; top: 2px; left: 3px; z-index: 3;
   font-size: 9px; color: rgba(255,255,255,0.6);
-  background: rgba(0,0,0,0.4);
-  padding: 1px 3px; border-radius: 3px;
+  background: rgba(0,0,0,0.4); padding: 1px 3px; border-radius: 3px;
 }
+.cell-empty {
+  position: absolute; pointer-events: auto; cursor: crosshair;
+  border: 2px dashed transparent; transition: border-color .15s, background .15s;
+}
+.cell-empty:hover { border-color: rgba(100,180,255,0.6); background: rgba(100,180,255,0.07); }
 
-/* Empty hits */
-#emptyCellHits {
-  position: fixed; top: 0; left: 0;
-  width: 100vw; height: 100vh;
+/* ── Fullscreen ── */
+#fsWrap {
+  display: none; position: fixed; inset: 0; z-index: 40000;
+  background: rgba(0,0,0,0.95); align-items: center; justify-content: center;
 }
-.cell-empty-hit {
-  position: absolute;
-  border: 2px dashed rgba(100,180,255,0.0);
-  transition: border-color .15s, background .15s;
-  cursor: crosshair;
+#fsWrap.open { display: flex; }
+#fsWrap img { max-width: 95vw; max-height: 95vh; object-fit: contain; }
+.fs-close {
+  position: absolute; width: 52px; height: 52px;
+  background: rgba(255,255,255,0.25); border: none; border-radius: 50%;
+  color: #fff; font-size: 28px; cursor: pointer; backdrop-filter: blur(6px);
 }
-.cell-empty-hit:hover {
-  border-color: rgba(100,180,255,0.6);
-  background: rgba(100,180,255,0.07);
-}
+#fsBtnTR { top: 18px; right: 18px; }
+#fsBtnBR { bottom: 18px; right: 18px; }
 
-/* Fullscreen */
-#fullscreenImg {
-  display: none;
-  position: fixed; inset: 0; z-index: 30000;
-  background: rgba(0,0,0,0.95);
-  align-items: center; justify-content: center;
-}
-#fullscreenImg.open { display: flex; }
-#fullscreenImg img {
-  max-width: 95vw; max-height: 95vh;
-  object-fit: contain;
-  touch-action: manipulation;
-}
-#fsCloseBtn, #fsCloseBtn2 {
-  position: absolute;
-  width: 52px; height: 52px;
-  background: rgba(255,255,255,0.25);
-  border: none; border-radius: 50%;
-  color: #fff; font-size: 28px;
-  cursor: pointer; backdrop-filter: blur(6px);
-}
-#fsCloseBtn { top: 18px; right: 18px; }
-#fsCloseBtn2 { bottom: 18px; right: 18px; }
-
-/* Quick-fill */
+/* ── Quick-fill modal ── */
 #qfModal {
   display: none; position: fixed; inset: 0; z-index: 20000;
-  background: rgba(0,0,0,0.82);
-  align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.82); align-items: center; justify-content: center;
 }
 #qfModal.open { display: flex; }
 #qfBox {
-  background: #1a1a2e;
-  border: 1px solid #555;
-  border-radius: 12px;
-  padding: 18px 20px;
-  min-width: 280px;
-  max-width: 480px;
-  width: 92vw;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  font-family: Arial, sans-serif;
-  max-height: 94vh;
-  overflow-y: auto;
+  background: #1a1a2e; border: 1px solid #555; border-radius: 12px;
+  padding: 18px 20px; width: 92vw; max-width: 480px;
+  display: flex; flex-direction: column; gap: 10px;
+  font-family: Arial,sans-serif; max-height: 94vh; overflow-y: auto;
 }
 #qfBox h3 { color: #8ef; font-size: 15px; }
-#qfBox label {
-  font-size: 12px; color: #aaa;
-  display: block; margin-bottom: 3px;
-}
+#qfBox label { font-size: 12px; color: #aaa; display: block; margin-bottom: 3px; }
 #qfBox input, #qfBox select {
-  background: #0a0a1a;
-  border: 1px solid #555;
-  color: #fff;
-  padding: 9px 10px;
-  border-radius: 6px;
-  font-size: 15px;
-  width: 100%;
+  background: #0a0a1a; border: 1px solid #555; color: #fff;
+  padding: 9px 10px; border-radius: 6px; font-size: 15px; width: 100%;
 }
-#qfBox input:focus, #qfBox select:focus {
-  border-color: #8ef; outline: none;
+#qfBox input:focus, #qfBox select:focus { border-color: #8ef; outline: none; }
+#qfLinkPrev { font-size: 11px; color: #888; word-break: break-all; min-height: 14px; }
+#qfError { color: #f66; font-size: 12px; min-height: 14px; }
+.qf-row { display: flex; gap: 8px; justify-content: flex-end; }
+.qf-row button {
+  padding: 9px 18px; border-radius: 6px; border: 1px solid #555;
+  background: #2a2a3e; color: #fff; font-size: 14px; cursor: pointer;
 }
-#qfCname.has-prev { color: #6af; }
-#qfCname.has-prev:focus { color: #fff; }
-#qfLinkPreview {
-  font-size: 11px; color: #888;
-  word-break: break-all; min-height: 14px;
-}
-.qf-btns {
-  display: flex; gap: 8px;
-  justify-content: flex-end;
-}
-.qf-btns button {
-  padding: 9px 20px;
-  border-radius: 6px;
-  border: 1px solid #555;
-  background: #2a2a3e;
-  color: #fff; font-size: 14px;
-  cursor: pointer;
-}
-.qf-btns button.save {
-  border-color: #5f5; color: #afa;
-}
-.qf-btns button:hover { background: #3a3a5e; }
+.qf-row button.save { border-color: #5f5; color: #afa; }
+.qf-row button:hover { background: #3a3a5e; }
 #qfPasteBtn {
-  width: 100%; padding: 11px;
-  border-radius: 6px;
-  border: 1px solid #4af;
-  background: rgba(0,80,180,0.3);
-  color: #8ef; font-size: 15px;
-  cursor: pointer;
+  width: 100%; padding: 11px; border-radius: 6px;
+  border: 1px solid #4af; background: rgba(0,80,180,0.3);
+  color: #8ef; font-size: 15px; cursor: pointer;
 }
-#qfPasteBtn:hover, #qfPasteBtn:active {
-  background: rgba(0,80,180,0.55);
+#qfPasteBtn:hover { background: rgba(0,80,180,0.5); }
+
+/* ── Tables modal (full Braintrain-style manager) ── */
+#tmOverlay {
+  display: none; position: fixed; inset: 0; z-index: 25000;
+  background: rgba(0,0,0,0.88); flex-direction: column;
+  font-family: Arial,sans-serif; color: #fff;
 }
-#qfError {
-  color: #f66; font-size: 12px;
-  min-height: 14px;
+#tmOverlay.open { display: flex; }
+#tmHeader {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px; background: #1a1a2e;
+  border-bottom: 1px solid #333; flex-shrink: 0; flex-wrap: wrap;
 }
-#qfDesktopFields { }
+#tmHeader h2 { font-size: 16px; color: #8ef; margin-right: 6px; }
+#tmToolbar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 14px; background: #111122;
+  border-bottom: 1px solid #333; flex-shrink: 0; flex-wrap: wrap;
+}
+.tm-btn {
+  padding: 5px 12px; border-radius: 5px; cursor: pointer;
+  font-size: 12px; border: 1px solid #555; background: #2a2a3e;
+  color: #ddd; white-space: nowrap;
+}
+.tm-btn:hover { background: #3a3a5e; border-color: #8ef; color: #fff; }
+.tm-btn.success { border-color: #5f5; color: #afa; }
+.tm-btn.success:hover { background: #1a3e1a; }
+.tm-btn.danger  { border-color: #f55; color: #f88; }
+.tm-btn.danger:hover  { background: #3e1a1a; }
+#tmSelInfo { margin-left: auto; font-size: 12px; color: #888; white-space: nowrap; }
+#tmTableWrap {
+  flex: 1; overflow: auto;
+  scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.3) transparent;
+}
+#tmTable { border-collapse: collapse; width: 100%; min-width: 520px; font-size: 13px; }
+#tmTable th {
+  position: sticky; top: 0; background: #1e1e3a; color: #8ef;
+  padding: 8px 10px; text-align: left; white-space: nowrap;
+  border-bottom: 2px solid #444; cursor: pointer; z-index: 2;
+}
+#tmTable th:hover { background: #2a2a5a; }
+#tmTable td { padding: 6px 10px; border-bottom: 1px solid #222; vertical-align: middle; white-space: nowrap; }
+#tmTable tr.tm-row { cursor: pointer; }
+#tmTable tr.tm-row:hover td { background: rgba(255,255,255,0.05); }
+#tmTable tr.tm-row.selected td { background: rgba(58,90,138,0.55); }
+#tmTable td.editable { cursor: text; }
+#tmTable td.editable:hover { background: rgba(100,200,255,0.08) !important; outline: 1px dashed rgba(100,200,255,0.25); }
+#tmTable input.tm-inp {
+  background: #0a0a1a; border: 1px solid #8ef; color: #fff;
+  padding: 2px 5px; border-radius: 3px; font-size: 13px; width: 100%; min-width: 60px;
+}
+.tm-del-btn {
+  padding: 2px 8px; border-radius: 4px; cursor: pointer;
+  font-size: 11px; border: 1px solid #f55; background: #1e1e2e; color: #f88;
+}
+.tm-del-btn:hover { background: #3e1a1a; }
+#tmStatus {
+  padding: 5px 14px; font-size: 11px; color: #888; background: #0a0a1a;
+  border-top: 1px solid #222; flex-shrink: 0; display: flex; justify-content: space-between;
+}
+#tmStatus span { color: #afa; }
+
+/* ── JSON editor modal ── */
+#jsonModal {
+  display: none; position: fixed; inset: 0; z-index: 30000;
+  background: rgba(0,0,0,0.9); align-items: center; justify-content: center;
+}
+#jsonModal.open { display: flex; }
+#jsonBox {
+  background: #1a1a2e; border: 1px solid #555; border-radius: 12px;
+  padding: 20px; width: 90vw; height: 85vh; max-width: 820px;
+  display: flex; flex-direction: column; font-family: 'Courier New',monospace;
+}
+#jsonTitle { color: #8ef; font-size: 17px; padding-bottom: 10px; border-bottom: 1px solid #444; }
+#jsonText {
+  flex: 1; background: #0a0a1a; border: 1px solid #444; color: #cfc;
+  padding: 12px; font-size: 13px; line-height: 1.4; border-radius: 6px;
+  resize: none; white-space: pre; overflow: auto; margin: 10px 0;
+}
+#jsonText:focus { border-color: #8ef; outline: none; }
+#jsonBtns { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+#jsonBtns button {
+  padding: 10px 18px; border-radius: 6px; border: 1px solid #555;
+  background: #2a2a3e; color: #fff; font-size: 14px; cursor: pointer;
+}
+#jsonBtns button.save { border-color: #5f5; color: #afa; }
+#jsonBtns button:hover { background: #3a3a5e; }
+#jsonStatus { font-size: 12px; color: #888; min-height: 16px; padding-top: 6px; }
+
+/* ── Upload local JSON ── */
+#importBtn { display: none; }
 </style>
 </head>
 <body>
 
+<!-- rotateWrap: canvas only, same as braintrain -->
 <div id="rotateWrap">
   <canvas id="gameCanvas"></canvas>
-  <div id="cellOverlayContainer"></div>
-  <div id="emptyCellHits"></div>
 </div>
 
+<!-- overlays live OUTSIDE rotateWrap in viewport space -->
+<div id="overlayRoot"></div>
+
+<!-- Hamburger: also outside rotateWrap so transform is viewport-relative -->
 <div id="menuWrap">
   <div id="menuPanel">
     <div id="menuDateStamp"></div>
     <div class="menu-item" id="miTables">Tables</div>
     <div class="menu-divider"></div>
+    <div class="menu-item" id="miSaveJson">💾 Save JSON  <small style="opacity:.5;font-size:11px">Ctrl+Alt+S</small></div>
+    <div class="menu-item" id="miLoadJson">📂 Load JSON from file</div>
+    <input type="file" id="importBtn" accept=".json">
+    <div class="menu-divider"></div>
     <div class="menu-item" id="miSettings">Settings ▸</div>
     <div id="settingsPanel">
       <div class="setting-row">
-        <span id="miImgFitLabel">Img: Fill Cell</span>
-        <label class="tog"><input type="checkbox" id="togImgFit"><span class="tog-slider"></span></label>
+        <span id="fitLabel">Img: Fill Cell</span>
+        <label class="tog"><input type="checkbox" id="togFit"><span class="tog-slider"></span></label>
       </div>
       <div class="setting-row">
         <span>Cell name</span>
@@ -341,30 +312,29 @@ html, body { overflow: hidden; height: 100vh; background: #000; touch-action: ma
     <div class="menu-divider"></div>
     <div class="menu-item" id="miHelp">Help</div>
   </div>
-  <button id="menuBtn">
-    <span></span><span></span><span></span>
-  </button>
+  <button id="menuBtn"><span></span><span></span><span></span></button>
 </div>
 
-<!-- Fullscreen image -->
-<div id="fullscreenImg">
-  <button id="fsCloseBtn" title="Close">×</button>
-  <button id="fsCloseBtn2" title="Close">×</button>
+<!-- Fullscreen -->
+<div id="fsWrap">
+  <button class="fs-close" id="fsBtnTR">×</button>
+  <button class="fs-close" id="fsBtnBR">×</button>
   <img id="fsImg">
 </div>
 
-<!-- Quick-fill modal -->
+<!-- Quick-fill -->
 <div id="qfModal">
   <div id="qfBox">
     <h3 id="qfTitle">📌 Fill Cell</h3>
-    <div class="qf-btns">
-      <button id="qfCancelBtn">Cancel</button>
-      <button id="qfSaveBtn" class="save">Save</button>
+    <div class="qf-row">
+      <button id="qfCancel">Cancel</button>
+      <button class="save" id="qfSave">Save  <small style="opacity:.5;font-size:11px">Ctrl+S</small></button>
     </div>
     <button id="qfPasteBtn">📋 Paste URL from clipboard</button>
-    <div><label>Image link</label><input type="text" id="qfLink" inputmode="url" autocomplete="off"><div id="qfLinkPreview"></div></div>
+    <div><label>Image link</label><input type="text" id="qfLink" inputmode="url" autocomplete="off"></div>
+    <div id="qfLinkPrev"></div>
     <div><label>Common name (cname)</label><input type="text" id="qfCname" autocomplete="off"></div>
-    <div id="qfDesktopFields">
+    <div id="qfDesktop">
       <div><label>Scientific name</label><input type="text" id="qfSname" autocomplete="off"></div>
       <div><label>Attribution</label><input type="text" id="qfAttrib" placeholder="© Author / CC BY 4.0" autocomplete="off"></div>
       <div><label>Comment</label><input type="text" id="qfComment" autocomplete="off"></div>
@@ -380,321 +350,488 @@ html, body { overflow: hidden; height: 100vh; background: #000; touch-action: ma
       </div>
     </div>
     <div id="qfError"></div>
-    <div class="qf-btns">
-      <button id="qfCancelBtn2">Cancel</button>
-      <button id="qfSaveBtn2" class="save">Save</button>
+    <div class="qf-row">
+      <button id="qfCancel2">Cancel</button>
+      <button class="save" id="qfSave2">Save  <small style="opacity:.5;font-size:11px">Ctrl+S</small></button>
     </div>
+  </div>
+</div>
+
+<!-- Tables Manager -->
+<div id="tmOverlay">
+  <div id="tmHeader">
+    <h2>Tables — links.json</h2>
+    <button class="tm-btn" id="tmJsonBtn">Edit Raw JSON</button>
+    <button class="tm-btn success" id="tmSaveBtn">💾 Save JSON</button>
+    <button class="tm-btn" id="tmLoadBtn">📂 Load from file</button>
+    <input type="file" id="tmImportBtn" accept=".json" style="display:none">
+    <button class="tm-btn danger" id="tmAddBtn">+ Add row</button>
+    <div id="tmSelInfo">0 selected</div>
+    <button class="tm-btn" id="tmCloseBtn" style="margin-left:auto">Close</button>
+  </div>
+  <div id="tmTableWrap">
+    <table id="tmTable">
+      <thead><tr id="tmThead"></tr></thead>
+      <tbody id="tmTbody"></tbody>
+    </table>
+  </div>
+  <div id="tmStatus"><div id="tmStatusL">No data</div><div id="tmStatusR"><span id="tmCount">0</span> rows</div></div>
+</div>
+
+<!-- JSON Raw Editor -->
+<div id="jsonModal">
+  <div id="jsonBox">
+    <div id="jsonTitle">📋 links.json — Raw Editor</div>
+    <textarea id="jsonText"></textarea>
+    <div id="jsonBtns">
+      <button id="jsonCancel">Cancel</button>
+      <button class="save" id="jsonApply">Apply  (Ctrl+S)</button>
+      <button id="jsonDownload">Download links.json</button>
+    </div>
+    <div id="jsonStatus"></div>
   </div>
 </div>
 
 <script>
 'use strict';
 
-const GRID_COLS = 5, GRID_ROWS = 5, COL_LETTERS = "abcde";
-const ISMOBILE = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+// ── constants ──────────────────────────────────────────────────────────────
+const COLS = 5, ROWS = 5, LETTERS = "abcde";
+const ISMOBILE = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+const FIELDS = ["show","asset","cell","fit","link","cname","sname","attribution","comment"];
 
+// ── state ──────────────────────────────────────────────────────────────────
 let GW=0, GH=0, cellW=0, cellH=0, isPortrait=false;
-let imgFitMode = localStorage.getItem("mlynx-fit") || "fc";
-let linksData  = [];
-let showCellName = false, showCname = true, showAttrib = false;
+let fitMode  = localStorage.getItem("mlynx-fit") || "fc";
+let showCellName=false, showCname=true, showAttrib=false;
+let linksData = [];
 
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
-const rotateWrap = document.getElementById('rotateWrap');
+// ── DOM refs ───────────────────────────────────────────────────────────────
+const canvas       = document.getElementById('gameCanvas');
+const ctx          = canvas.getContext('2d');
+const rotateWrap   = document.getElementById('rotateWrap');
+const overlayRoot  = document.getElementById('overlayRoot');
+const menuWrap     = document.getElementById('menuWrap');
+const menuPanel    = document.getElementById('menuPanel');
+const menuBtn      = document.getElementById('menuBtn');
 
-// ── helpers ──
-function parseCell(s){ if(!s||s.length<2)return null; const r=parseInt(s[0]); const c=COL_LETTERS.indexOf(s[1].toLowerCase())+1; if(isNaN(r)||r<1||r>GRID_ROWS||c<1||c>GRID_COLS)return null; return{row:r,col:c}; }
-function makeCellStr(r,c){ return r+COL_LETTERS[c-1]; }
-function occupiedCells(){ const s=new Set(); linksData.forEach(it=>{ if(it.show==="1"){const p=parseCell(it.cell);if(p)s.add(makeCellStr(p.row,p.col));} }); return s; }
+// ── helpers ────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+function parseCell(s){
+  if(!s||s.length<2) return null;
+  const r=parseInt(s[0]);
+  const c=LETTERS.indexOf(s[1].toLowerCase())+1;
+  if(isNaN(r)||r<1||r>ROWS||c<1||c>COLS) return null;
+  return {row:r,col:c};
+}
+function mkCell(r,c){ return r+LETTERS[c-1]; }
+function occupiedSet(){
+  const s=new Set();
+  linksData.forEach(it=>{ if(it.show==="1"){ const p=parseCell(it.cell); if(p) s.add(mkCell(p.row,p.col)); } });
+  return s;
+}
 
-// ── layout (braintrain style) ──
+// ── layout — exact braintrain pattern ─────────────────────────────────────
 function setup(){
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
+  const vw=window.innerWidth, vh=window.innerHeight;
   isPortrait = vw < vh;
 
   if(isPortrait){
-    GW = vh; GH = vw;
-    canvas.width  = GW;
-    canvas.height = GH;
-    rotateWrap.style.width  = GW + "px";
-    rotateWrap.style.height = GH + "px";
-    rotateWrap.style.transformOrigin = "0 0";
-    rotateWrap.style.transform = "rotate(90deg) translateY(-" + vw + "px)";
+    // canvas is landscape (wider), rotated 90° to fill portrait screen
+    GW=vh; GH=vw;
+    canvas.width=GW; canvas.height=GH;
+    rotateWrap.style.width=GW+"px"; rotateWrap.style.height=GH+"px";
+    rotateWrap.style.transformOrigin="0 0";
+    rotateWrap.style.transform="rotate(90deg) translateY(-"+vw+"px)";
+    // hamburger: bottom-left in viewport (appears bottom-right after rotation)
     menuWrap.classList.add("portrait-mode");
-    menuWrap.style.bottom = "14px";
-    menuWrap.style.left = "14px";
-    menuWrap.style.right = "auto";
+    menuWrap.style.bottom="14px"; menuWrap.style.left="14px"; menuWrap.style.right="auto";
   } else {
-    GW = vw; GH = vh;
-    canvas.width  = GW;
-    canvas.height = GH;
-    rotateWrap.style.width  = GW + "px";
-    rotateWrap.style.height = GH + "px";
-    rotateWrap.style.transformOrigin = "0 0";
-    rotateWrap.style.transform = "none";
+    GW=vw; GH=vh;
+    canvas.width=GW; canvas.height=GH;
+    rotateWrap.style.width=GW+"px"; rotateWrap.style.height=GH+"px";
+    rotateWrap.style.transformOrigin="0 0";
+    rotateWrap.style.transform="none";
     menuWrap.classList.remove("portrait-mode");
-    menuWrap.style.bottom = "14px";
-    menuWrap.style.right = "14px";
-    menuWrap.style.left = "auto";
+    menuWrap.style.bottom="14px"; menuWrap.style.right="14px"; menuWrap.style.left="auto";
   }
-  cellW = GW / GRID_COLS;
-  cellH = GH / GRID_ROWS;
-  applyOverlayTransform();
+  cellW=GW/COLS; cellH=GH/ROWS;
+  buildOverlays();
 }
 
-function applyOverlayTransform(){
-  const vw = window.innerWidth;
-  const oc = document.getElementById("cellOverlayContainer");
-  const eh = document.getElementById("emptyCellHits");
-  if(isPortrait){
-    const t = `rotate(90deg) translate(0px, -${vw}px)`;
-    [oc, eh].forEach(el=>{
-      el.style.width  = GW + "px";
-      el.style.height = GH + "px";
-      el.style.transformOrigin = "0 0";
-      el.style.transform = t;
-    });
-  } else {
-    [oc, eh].forEach(el=>{
-      el.style.width  = "100vw";
-      el.style.height = "100vh";
-      el.style.transform = "none";
-    });
-  }
-}
-
-// ── render ──
+// ── canvas render ──────────────────────────────────────────────────────────
 function renderGrid(){
   if(!GW||!GH) return;
-  ctx.fillStyle = '#c8ddf0'; ctx.fillRect(0,0,GW,GH);
-  ctx.strokeStyle = '#002b55'; ctx.lineWidth = 2;
-  for(let i=1;i<GRID_COLS;i++){ const x=Math.round(GW*i/GRID_COLS)+0.5; ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,GH); ctx.stroke(); }
-  for(let i=1;i<GRID_ROWS;i++){ const y=Math.round(GH*i/GRID_ROWS)+0.5; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(GW,y); ctx.stroke(); }
-
-  if(showCellName && !ISMOBILE){
+  ctx.fillStyle='#c8ddf0'; ctx.fillRect(0,0,GW,GH);
+  ctx.strokeStyle='#002b55'; ctx.lineWidth=2;
+  for(let i=1;i<COLS;i++){ const x=Math.round(GW*i/COLS)+.5; ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,GH); ctx.stroke(); }
+  for(let i=1;i<ROWS;i++){ const y=Math.round(GH*i/ROWS)+.5; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(GW,y); ctx.stroke(); }
+  if(showCellName){
     const fs=Math.max(14,Math.floor(Math.min(cellW,cellH)*0.25));
     ctx.font=`bold ${fs}px Arial`; ctx.textAlign="center"; ctx.textBaseline="middle";
-    for(let r=1;r<=GRID_ROWS;r++) for(let c=1;c<=GRID_COLS;c++){
-      const cx=(c-0.5)*cellW, cy=(r-0.5)*cellH, label=r+COL_LETTERS[c-1];
-      ctx.fillStyle="rgba(0,0,0,0.4)"; ctx.fillText(label,cx+1,cy+1);
-      ctx.fillStyle="#ffffff"; ctx.fillText(label,cx,cy);
+    for(let r=1;r<=ROWS;r++) for(let c=1;c<=COLS;c++){
+      const cx=(c-.5)*cellW, cy=(r-.5)*cellH, lbl=mkCell(r,c);
+      ctx.fillStyle="rgba(0,0,0,0.4)"; ctx.fillText(lbl,cx+1,cy+1);
+      ctx.fillStyle="#fff"; ctx.fillText(lbl,cx,cy);
     }
     ctx.textAlign="left"; ctx.textBaseline="alphabetic";
   }
-  updateCellOverlays();
-  updateEmptyHits();
 }
 
-// ── overlays ──
-function updateCellOverlays(){
-  const cont = document.getElementById("cellOverlayContainer");
-  cont.innerHTML = "";
-  applyOverlayTransform();
+// ── overlays: positioned in viewport space, mapping GW/GH coords to viewport ──
+function cellRect(row,col){
+  // cell position in GW/GH space
+  const gx=(col-1)*cellW, gy=(row-1)*cellH;
+  if(isPortrait){
+    // rotateWrap is rotate(90deg) translateY(-vw)
+    // inverse: viewport x = gy, viewport y = vw - gx - cellW... 
+    // braintrain toGame: portrait => x=py, y=vw-px
+    // so cell top-left in viewport: vx=gy, vy= GH - gx - cellW  (GH=vw)
+    const vx=gy, vy=GH - gx - cellW;
+    return {left:vx, top:vy, width:cellH, height:cellW};
+  } else {
+    return {left:gx, top:gy, width:cellW, height:cellH};
+  }
+}
 
+function buildOverlays(){
+  overlayRoot.innerHTML="";
+  overlayRoot.style.width="100vw"; overlayRoot.style.height="100vh";
+
+  const occ=occupiedSet();
+
+  // filled cells
   linksData.forEach(it=>{
     if(it.show!=="1") return;
     const pos=parseCell(it.cell); if(!pos) return;
-    const x=(pos.col-1)*cellW, y=(pos.row-1)*cellH;
+    const r=cellRect(pos.row,pos.col);
 
     const div=document.createElement("div");
-    div.className="cell-overlay";
-    div.style.cssText=`left:${x}px;top:${y}px;width:${cellW}px;height:${cellH}px;`;
-    div.addEventListener("pointerup", e=>{ e.stopPropagation(); showFullscreen(it); });
+    div.className="cell-hit";
+    div.style.cssText=`left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;`;
+    div.addEventListener("pointerup",e=>{ e.stopPropagation(); openFS(it); });
 
-    const hasImg = it.asset==="i" && it.link;
-    if(hasImg){
+    if(it.asset==="i" && it.link){
       const img=document.createElement("img");
       img.src=it.link; img.alt=it.cname||"";
-      const fit=it.fit||imgFitMode;
-      img.className=(fit==="ei")?"fit-contain":"fit-cover";
+      const fit=it.fit||fitMode;
+      img.className=(fit==="ei")?"ei":"fc";
       div.appendChild(img);
-    } else if(!it.cname){ return; }
-    if(!hasImg) div.classList.add("label-only");
-
+    }
     if(it.cname && showCname){
       const lbl=document.createElement("div");
       lbl.className="cell-label"; lbl.textContent=it.cname;
       div.appendChild(lbl);
     }
-    if(it.attribution && showAttrib && !ISMOBILE){
+    if(it.attribution && showAttrib){
       const att=document.createElement("span");
       att.className="cell-attrib"; att.textContent=it.attribution;
       div.appendChild(att);
     }
-    if(showCellName && !ISMOBILE){
+    if(showCellName){
       const cid=document.createElement("span");
       cid.className="cell-id"; cid.textContent=it.cell;
       div.appendChild(cid);
     }
-    cont.appendChild(div);
+    overlayRoot.appendChild(div);
   });
-}
 
-function updateEmptyHits(){
-  const hits = document.getElementById("emptyCellHits");
-  hits.innerHTML = "";
-  applyOverlayTransform();
-  const occ = occupiedCells();
-  for(let r=1;r<=GRID_ROWS;r++) for(let c=1;c<=GRID_COLS;c++){
-    const cs = makeCellStr(r,c); if(occ.has(cs)) continue;
-    const div = document.createElement("div");
-    div.className = "cell-empty-hit";
-    div.style.cssText = `left:${(c-1)*cellW}px;top:${(r-1)*cellH}px;width:${cellW}px;height:${cellH}px;`;
-    div.title = "Add — " + cs;
-    div.addEventListener("pointerup", e=>{ e.preventDefault(); openQF(cs); });
-    hits.appendChild(div);
+  // empty cells
+  for(let row=1;row<=ROWS;row++) for(let col=1;col<=COLS;col++){
+    const cs=mkCell(row,col); if(occ.has(cs)) continue;
+    const r=cellRect(row,col);
+    const div=document.createElement("div");
+    div.className="cell-empty";
+    div.style.cssText=`left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;`;
+    div.title="Add — "+cs;
+    div.addEventListener("pointerup",e=>{ e.preventDefault(); openQF(cs); });
+    overlayRoot.appendChild(div);
   }
 }
 
-// ── fullscreen ──
-function showFullscreen(item){
-  const fs = document.getElementById("fullscreenImg");
-  const img = document.getElementById("fsImg");
-  img.src = item.link;
-  img.alt = item.cname + " — " + (item.attribution || "");
-  fs.classList.add("open");
+function render(){ renderGrid(); buildOverlays(); }
+
+// ── fullscreen ─────────────────────────────────────────────────────────────
+function openFS(item){
+  $('fsImg').src=item.link;
+  $('fsImg').alt=(item.cname||"")+" — "+(item.attribution||"");
+  $('fsWrap').classList.add("open");
 }
-document.getElementById("fsCloseBtn").addEventListener("pointerup", ()=>document.getElementById("fullscreenImg").classList.remove("open"));
-document.getElementById("fsCloseBtn2").addEventListener("pointerup", ()=>document.getElementById("fullscreenImg").classList.remove("open"));
-document.getElementById("fullscreenImg").addEventListener("pointerup", e=>{
-  if(e.target===document.getElementById("fullscreenImg")) document.getElementById("fullscreenImg").classList.remove("open");
+['fsBtnTR','fsBtnBR'].forEach(id=>$(id).addEventListener("pointerup",()=>$('fsWrap').classList.remove("open")));
+$('fsWrap').addEventListener("pointerup",e=>{ if(e.target===$('fsWrap')) $('fsWrap').classList.remove("open"); });
+
+// ── menu ───────────────────────────────────────────────────────────────────
+function closeMenu(){
+  menuPanel.classList.remove("open");
+  $('settingsPanel').classList.remove("open");
+  $('miSettings').textContent="Settings ▸";
+}
+menuBtn.addEventListener("pointerup",e=>{ e.stopPropagation(); menuPanel.classList.toggle("open"); });
+document.addEventListener("pointerup",()=>{ if(menuPanel.classList.contains("open")) closeMenu(); });
+menuPanel.addEventListener("pointerup",e=>e.stopPropagation());
+
+$('miTables').addEventListener("pointerup",e=>{ e.stopPropagation(); closeMenu(); openTM(); });
+$('miSaveJson').addEventListener("pointerup",e=>{ e.stopPropagation(); closeMenu(); saveJson(); });
+$('miLoadJson').addEventListener("pointerup",e=>{ e.stopPropagation(); closeMenu(); $('importBtn').click(); });
+$('importBtn').addEventListener("change",e=>{ const f=e.target.files[0]; if(f) loadJsonFile(f); e.target.value=""; });
+
+$('miSettings').addEventListener("pointerup",e=>{
+  e.stopPropagation();
+  const open=$('settingsPanel').classList.toggle("open");
+  e.currentTarget.textContent=open?"Settings ▾":"Settings ▸";
+});
+$('miHelp').addEventListener("pointerup",e=>{
+  e.stopPropagation(); closeMenu();
+  alert("Mlynx\n\n• Tap image cell → fullscreen\n• Tap empty cell → quick-fill (Ctrl+S to save)\n• Hamburger → Tables (edit rows), Save JSON (Ctrl+Alt+S), Load JSON from file\n• Tables → Edit Raw JSON tab for bulk edits");
 });
 
-// ── menu ──
-const menuBtn = document.getElementById("menuBtn");
-const menuPanel = document.getElementById("menuPanel");
-function closeMenu(){ menuPanel.classList.remove("open"); document.getElementById("settingsPanel").classList.remove("open"); document.getElementById("miSettings").textContent="Settings ▸"; }
-menuBtn.addEventListener("pointerup", e=>{ e.stopPropagation(); menuPanel.classList.toggle("open"); });
-document.addEventListener("pointerup", ()=>{ if(menuPanel.classList.contains("open")) closeMenu(); });
-menuPanel.addEventListener("pointerup", e=>e.stopPropagation());
-document.getElementById("miTables").addEventListener("pointerup", e=>{ e.stopPropagation(); closeMenu(); alert("Tables admin — coming next build"); });
-document.getElementById("miHelp").addEventListener("pointerup", e=>{ e.stopPropagation(); closeMenu(); alert("Mlynx\n\nTap image → fullscreen\nTap empty → quick-fill\nHamburger → Settings"); });
-document.getElementById("miSettings").addEventListener("pointerup", e=>{ e.stopPropagation(); const sp=document.getElementById("settingsPanel"); const open=sp.classList.toggle("open"); e.currentTarget.textContent=open?"Settings ▾":"Settings ▸"; });
-
-function syncFitToggle(){ const chk=document.getElementById("togImgFit"); chk.checked=(imgFitMode==="ei"); document.getElementById("miImgFitLabel").textContent=imgFitMode==="ei"?"Img: Entire Image":"Img: Fill Cell"; }
-document.getElementById("togImgFit").addEventListener("change",function(){ imgFitMode=this.checked?"ei":"fc"; localStorage.setItem("mlynx-fit",imgFitMode); syncFitToggle(); renderGrid(); });
-document.getElementById("togCellName").addEventListener("change",function(){ showCellName=this.checked; renderGrid(); });
-document.getElementById("togCname").addEventListener("change",function(){ showCname=this.checked; renderGrid(); });
-document.getElementById("togAttrib").addEventListener("change",function(){ showAttrib=this.checked; renderGrid(); });
+// settings toggles
+function syncFit(){
+  const c=$('togFit'); c.checked=(fitMode==="ei");
+  $('fitLabel').textContent=fitMode==="ei"?"Img: Entire Image":"Img: Fill Cell";
+}
+$('togFit').addEventListener("change",function(){ fitMode=this.checked?"ei":"fc"; localStorage.setItem("mlynx-fit",fitMode); syncFit(); render(); });
+$('togCellName').addEventListener("change",function(){ showCellName=this.checked; render(); });
+$('togCname').addEventListener("change",function(){ showCname=this.checked; render(); });
+$('togAttrib').addEventListener("change",function(){ showAttrib=this.checked; render(); });
 
 // date stamp
-(()=>{ const d=new Date(); const el=document.getElementById("menuDateStamp"); if(el) el.textContent=d.toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric",year:"numeric"})+" "+d.toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"}); })();
+(()=>{ const d=new Date(); $('menuDateStamp').textContent=d.toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric",year:"numeric"})+" "+d.toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"}); })();
 
-// ── quick-fill with PERSISTENT SAVE ──
-let qfTargetCell = "";
-function applyMobileQF(){ document.getElementById("qfDesktopFields").style.display = ISMOBILE ? "none" : "block"; }
-
-async function openQF(cs){
-  qfTargetCell = cs;
-  applyMobileQF();
-  const ex = linksData.find(it=>it.cell===cs);
-  let linkVal = ex ? (ex.link || "") : "";
-  if(!ISMOBILE){
-    try{ const clip = (await navigator.clipboard.readText()).trim(); if(/^https?:\/\//i.test(clip)) linkVal = clip; }catch(e){}
-  }
-  document.getElementById("qfLink").value = linkVal;
-  document.getElementById("qfLinkPreview").textContent = linkVal || "";
-  const cnameEl = document.getElementById("qfCname");
-  const prev = ex ? (ex.cname || "") : "";
-  cnameEl.value = prev;
-  if(prev){
-    cnameEl.classList.add("has-prev");
-    cnameEl.addEventListener("input", function h(){ cnameEl.classList.remove("has-prev"); cnameEl.removeEventListener("input",h); }, {once:true});
-  } else cnameEl.classList.remove("has-prev");
-  if(!ISMOBILE){
-    document.getElementById("qfSname").value   = ex ? (ex.sname || "") : "";
-    document.getElementById("qfAttrib").value  = ex ? (ex.attribution || "") : "";
-    document.getElementById("qfComment").value = ex ? (ex.comment || "") : "";
-    document.getElementById("qfAsset").value   = ex ? (ex.asset || "i") : "i";
-    document.getElementById("qfFit").value     = ex ? (ex.fit || "") : "";
-  }
-  document.getElementById("qfTitle").textContent = "📌 " + cs;
-  document.getElementById("qfError").textContent = "";
-  document.getElementById("qfModal").classList.add("open");
-  setTimeout(()=>document.getElementById(linkVal ? "qfCname" : "qfLink").focus(), 80);
-}
-
-async function qfSave(){
-  const link  = document.getElementById("qfLink").value.trim();
-  const cname = document.getElementById("qfCname").value.trim();
-  if(!link && !cname){ document.getElementById("qfError").textContent="Need link or cname"; return; }
-  const sname   = ISMOBILE ? "" : document.getElementById("qfSname").value.trim();
-  const attrib  = ISMOBILE ? "" : document.getElementById("qfAttrib").value.trim();
-  const comment = ISMOBILE ? "" : document.getElementById("qfComment").value.trim();
-  const asset   = ISMOBILE ? "i" : document.getElementById("qfAsset").value;
-  const fit     = ISMOBILE ? "" : document.getElementById("qfFit").value;
-
-  let e = linksData.find(it=>it.cell===qfTargetCell);
-  if(e){
-    Object.assign(e, {show:"1", asset, fit, link, cname, sname, attribution: attrib, comment});
-  } else {
-    linksData.push({show:"1", asset, cell: qfTargetCell, fit, link, cname, sname, attribution: attrib, comment});
-  }
-
-  // PERSISTENT SAVE — sync to localStorage AND download links.json
-  localStorage.setItem("mlynx-links", JSON.stringify(linksData));
-  saveLinksJson();
-
-  document.getElementById("qfModal").classList.remove("open");
-  renderGrid();
-}
-
-function saveLinksJson(){
-  const blob = new Blob([JSON.stringify(linksData, null, 2)], {type: 'application/json'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'links.json';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(a.href);
-}
-
-function closeQF(){ document.getElementById("qfModal").classList.remove("open"); }
-
-document.getElementById("qfPasteBtn").addEventListener("pointerup", async e=>{
-  e.stopPropagation();
-  try{
-    const text = await navigator.clipboard.readText();
-    if(/^https?:\/\//i.test(text.trim())){
-      document.getElementById("qfLink").value = text.trim();
-      document.getElementById("qfLinkPreview").textContent = text.trim();
-    } else alert("No URL found in clipboard.");
-  }catch(err){
-    document.getElementById("qfLink").focus();
-    alert("Tap the Image link field and use your browser Paste option.");
-  }
+// ── Hotkey Ctrl+Alt+S → Save JSON ─────────────────────────────────────────
+document.addEventListener("keydown",e=>{
+  if(e.ctrlKey && e.altKey && e.key.toLowerCase()==="s"){ e.preventDefault(); saveJson(); }
 });
 
-["qfSaveBtn", "qfSaveBtn2"].forEach(id=>document.getElementById(id).addEventListener("pointerup", e=>{ e.stopPropagation(); qfSave(); }));
-["qfCancelBtn", "qfCancelBtn2"].forEach(id=>document.getElementById(id).addEventListener("pointerup", e=>{ e.stopPropagation(); closeQF(); }));
-document.getElementById("qfLink").addEventListener("input", function(){ document.getElementById("qfLinkPreview").textContent = this.value || ""; });
-document.getElementById("qfModal").addEventListener("pointerup", e=>e.stopPropagation());
-
-// ── bootstrap with PERSISTENT LOAD ──
-async function init(){
-  setup();
-  syncFitToggle();
-
-  // Load from links.json FIRST (shared), then localStorage backup
-  try{
-    const resp = await fetch("links.json?v=" + Date.now());
-    linksData = await resp.json();
-  }catch(e){
-    // Fallback to localStorage
+// ── Save / Load JSON ───────────────────────────────────────────────────────
+function saveJson(){
+  localStorage.setItem("mlynx-links",JSON.stringify(linksData));
+  const blob=new Blob([JSON.stringify(linksData,null,2)],{type:"application/json"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob); a.download="links.json";
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(a.href);
+}
+function loadJsonFile(file){
+  const reader=new FileReader();
+  reader.onload=ev=>{
     try{
-      const ls = localStorage.getItem("mlynx-links");
-      linksData = ls ? JSON.parse(ls) : [];
-    }catch(e2){ linksData = []; }
+      const data=JSON.parse(ev.target.result);
+      if(!Array.isArray(data)) throw new Error("Expected JSON array");
+      linksData=data;
+      localStorage.setItem("mlynx-links",JSON.stringify(linksData));
+      render(); tmRender();
+    }catch(e){ alert("Could not load JSON:\n"+e.message); }
+  };
+  reader.readAsText(file);
+}
+
+// ── Quick-fill ─────────────────────────────────────────────────────────────
+let qfCell="";
+$('qfDesktop').style.display=ISMOBILE?"none":"block";
+
+async function openQF(cs){
+  qfCell=cs;
+  const ex=linksData.find(it=>it.cell===cs);
+  let link=ex?(ex.link||""):"";
+  if(!ISMOBILE){ try{ const c=await navigator.clipboard.readText(); if(/^https?:\/\//i.test(c.trim())) link=c.trim(); }catch(e){} }
+  $('qfLink').value=link; $('qfLinkPrev').textContent=link;
+  $('qfCname').value=ex?(ex.cname||")":"";
+  if(!ISMOBILE){
+    $('qfSname').value=ex?(ex.sname||""):"";
+    $('qfAttrib').value=ex?(ex.attribution||""):"";
+    $('qfComment').value=ex?(ex.comment||""):"";
+    $('qfAsset').value=ex?(ex.asset||"i"):"i";
+    $('qfFit').value=ex?(ex.fit||""):"";
+  }
+  $('qfTitle').textContent="📌 "+cs;
+  $('qfError').textContent="";
+  $('qfModal').classList.add("open");
+  setTimeout(()=>$(link?"qfCname":"qfLink").focus(),80);
+}
+async function qfSave(){
+  const link=$('qfLink').value.trim();
+  const cname=$('qfCname').value.trim();
+  if(!link&&!cname){ $('qfError').textContent="Need link or cname"; return; }
+  const sname=ISMOBILE?"":$('qfSname').value.trim();
+  const attrib=ISMOBILE?"":$('qfAttrib').value.trim();
+  const comment=ISMOBILE?"":$('qfComment').value.trim();
+  const asset=ISMOBILE?"i":$('qfAsset').value;
+  const fit=ISMOBILE?"":$('qfFit').value;
+  let e=linksData.find(it=>it.cell===qfCell);
+  if(e) Object.assign(e,{show:"1",asset,fit,link,cname,sname,attribution:attrib,comment});
+  else linksData.push({show:"1",asset,cell:qfCell,fit,link,cname,sname,attribution:attrib,comment});
+  localStorage.setItem("mlynx-links",JSON.stringify(linksData));
+  $('qfModal').classList.remove("open");
+  render(); tmRender();
+}
+['qfSave','qfSave2'].forEach(id=>$(id).addEventListener("pointerup",e=>{ e.stopPropagation(); qfSave(); }));
+['qfCancel','qfCancel2'].forEach(id=>$(id).addEventListener("pointerup",e=>{ e.stopPropagation(); $('qfModal').classList.remove("open"); }));
+$('qfLink').addEventListener("input",function(){ $('qfLinkPrev').textContent=this.value; });
+$('qfModal').addEventListener("pointerup",e=>e.stopPropagation());
+$('qfPasteBtn').addEventListener("pointerup",async e=>{
+  e.stopPropagation();
+  try{
+    const t=await navigator.clipboard.readText();
+    if(/^https?:\/\//i.test(t.trim())){ $('qfLink').value=t.trim(); $('qfLinkPrev').textContent=t.trim(); }
+    else alert("No URL found in clipboard.");
+  }catch(err){ $('qfLink').focus(); alert("Use the Image link field and paste manually."); }
+});
+// Ctrl+S inside qfModal
+$('qfModal').addEventListener("keydown",e=>{ if(e.ctrlKey && e.key==="s"){ e.preventDefault(); qfSave(); } });
+
+// ── Tables Manager ─────────────────────────────────────────────────────────
+const TM_FIELDS=[
+  {key:"show",    label:"Show",  w:"50px"},
+  {key:"cell",    label:"Cell",  w:"55px"},
+  {key:"cname",   label:"cname", w:"130px"},
+  {key:"link",    label:"Link",  w:"200px"},
+  {key:"sname",   label:"sname", w:"140px"},
+  {key:"asset",   label:"asset", w:"55px"},
+  {key:"fit",     label:"fit",   w:"55px"},
+  {key:"attribution",label:"attrib",w:"130px"},
+  {key:"comment", label:"comment",w:"120px"},
+];
+let tmSel=new Set(), tmSortCol=null, tmSortAsc=true, tmLastClick=-1;
+
+function openTM(){ $('tmOverlay').classList.add("open"); tmRender(); }
+function closeTM(){ $('tmOverlay').classList.remove("open"); }
+$('tmCloseBtn').addEventListener("click",closeTM);
+$('tmOverlay').addEventListener("keydown",e=>{ if(e.key==="Escape") closeTM(); });
+
+$('tmSaveBtn').addEventListener("click",saveJson);
+$('tmLoadBtn').addEventListener("click",()=>$('tmImportBtn').click());
+$('tmImportBtn').addEventListener("change",e=>{ const f=e.target.files[0]; if(f) loadJsonFile(f); e.target.value=""; });
+$('tmAddBtn').addEventListener("click",()=>{
+  // find first empty cell
+  const occ=occupiedSet();
+  let found=null;
+  outer: for(let r=1;r<=ROWS;r++) for(let c=1;c<=COLS;c++){ const cs=mkCell(r,c); if(!occ.has(cs)){found=cs;break outer;} }
+  linksData.push({show:"0",asset:"i",cell:found||"1a",fit:"",link:"",cname:"",sname:"",attribution:"",comment:""});
+  tmRender(); render();
+});
+$('tmJsonBtn').addEventListener("click",()=>{ closeTM(); openRawJson(); });
+
+function tmRender(){
+  const thead=$('tmThead'), tbody=$('tmTbody');
+  thead.innerHTML=""; tbody.innerHTML="";
+
+  // header
+  const chkTh=document.createElement("th"); chkTh.style.width="32px";
+  const chkAll=document.createElement("input"); chkAll.type="checkbox";
+  chkAll.addEventListener("change",()=>{ if(chkAll.checked) linksData.forEach((_,i)=>tmSel.add(i)); else tmSel.clear(); tmRender(); });
+  chkTh.appendChild(chkAll); thead.appendChild(chkTh);
+  TM_FIELDS.forEach(f=>{
+    const th=document.createElement("th");
+    th.textContent=f.label; th.style.width=f.w||"auto";
+    if(f.key===tmSortCol) th.textContent+=(tmSortAsc?" ↑":" ↓");
+    th.addEventListener("click",()=>{ if(tmSortCol===f.key) tmSortAsc=!tmSortAsc; else{tmSortCol=f.key;tmSortAsc=true;} tmRender(); });
+    thead.appendChild(th);
+  });
+  const actTh=document.createElement("th"); actTh.textContent="Del"; thead.appendChild(actTh);
+
+  // sort
+  let rows=linksData.map((it,i)=>({it,i}));
+  if(tmSortCol){
+    rows.sort((a,b)=>{
+      let av=a.it[tmSortCol]??"", bv=b.it[tmSortCol]??"";
+      av=String(av).toLowerCase(); bv=String(bv).toLowerCase();
+      return tmSortAsc?(av<bv?-1:av>bv?1:0):(av>bv?-1:av<bv?1:0);
+    });
   }
 
-  renderGrid();
+  rows.forEach(({it,i})=>{
+    const tr=document.createElement("tr"); tr.className="tm-row";
+    if(tmSel.has(i)) tr.classList.add("selected");
+    tr.addEventListener("click",e=>{
+      if(e.target.tagName==="INPUT"||e.target.tagName==="BUTTON") return;
+      if(e.shiftKey && tmLastClick>=0){
+        const lo=Math.min(i,tmLastClick),hi=Math.max(i,tmLastClick);
+        for(let x=lo;x<=hi;x++) tmSel.add(x);
+      } else if(e.ctrlKey||e.metaKey){ tmSel.has(i)?tmSel.delete(i):tmSel.add(i); }
+      else { tmSel.clear(); tmSel.add(i); }
+      tmLastClick=i; tmRender();
+    });
+
+    const chkTd=document.createElement("td");
+    const chk=document.createElement("input"); chk.type="checkbox"; chk.checked=tmSel.has(i);
+    chk.addEventListener("change",e=>{ e.stopPropagation(); chk.checked?tmSel.add(i):tmSel.delete(i); tr.classList.toggle("selected",tmSel.has(i)); });
+    chkTd.appendChild(chk); tr.appendChild(chkTd);
+
+    TM_FIELDS.forEach(f=>{
+      const td=document.createElement("td");
+      td.className="editable";
+      td.textContent=it[f.key]??"";
+      td.addEventListener("click",e=>{ e.stopPropagation(); tmStartEdit(td,it,f.key); });
+      tr.appendChild(td);
+    });
+
+    const delTd=document.createElement("td");
+    const delBtn=document.createElement("button"); delBtn.className="tm-del-btn"; delBtn.textContent="✕";
+    delBtn.addEventListener("click",e=>{ e.stopPropagation(); linksData.splice(i,1); tmSel.clear(); tmRender(); render(); });
+    delTd.appendChild(delBtn); tr.appendChild(delTd);
+
+    tbody.appendChild(tr);
+  });
+
+  $('tmCount').textContent=linksData.length;
+  $('tmStatusL').textContent=tmSel.size+" selected";
+}
+
+function tmStartEdit(td,it,key){
+  if(td.querySelector("input")) return;
+  const prev=td.textContent; td.textContent="";
+  const inp=document.createElement("input"); inp.className="tm-inp"; inp.value=it[key]??"";
+  function commit(){
+    it[key]=inp.value.trim();
+    td.textContent=it[key];
+    td.className="editable";
+    localStorage.setItem("mlynx-links",JSON.stringify(linksData));
+    render();
+  }
+  inp.addEventListener("blur",commit);
+  inp.addEventListener("keydown",e=>{ if(e.key==="Enter"){e.preventDefault();inp.blur();} if(e.key==="Escape"){td.textContent=prev;td.className="editable";} });
+  td.appendChild(inp); inp.focus(); inp.select();
+}
+
+// ── Raw JSON editor ────────────────────────────────────────────────────────
+function openRawJson(){
+  $('jsonText').value=JSON.stringify(linksData,null,2);
+  $('jsonStatus').textContent="";
+  $('jsonModal').classList.add("open");
+}
+$('jsonApply').addEventListener("pointerup",()=>{
+  try{
+    const d=JSON.parse($('jsonText').value);
+    if(!Array.isArray(d)) throw new Error("Expected JSON array");
+    linksData=d;
+    localStorage.setItem("mlynx-links",JSON.stringify(linksData));
+    $('jsonModal').classList.remove("open");
+    $('jsonStatus').textContent="✅ Applied";
+    render(); tmRender();
+  }catch(e){ $('jsonStatus').textContent="❌ "+e.message; }
+});
+$('jsonDownload').addEventListener("pointerup",saveJson);
+$('jsonCancel').addEventListener("pointerup",()=>$('jsonModal').classList.remove("open"));
+$('jsonModal').addEventListener("pointerup",e=>e.stopPropagation());
+$('jsonText').addEventListener("keydown",e=>{ if(e.ctrlKey&&e.key==="s"){e.preventDefault();$('jsonApply').dispatchEvent(new Event("pointerup"));} });
+
+// ── bootstrap ──────────────────────────────────────────────────────────────
+async function init(){
+  setup(); syncFit();
+  try{
+    const resp=await fetch("links.json?v="+Date.now());
+    linksData=await resp.json();
+  }catch(e){
+    try{ const ls=localStorage.getItem("mlynx-links"); linksData=ls?JSON.parse(ls):[]; }
+    catch(e2){ linksData=[]; }
+  }
+  render();
 }
 
 init();
-window.addEventListener("resize", ()=>{ setup(); renderGrid(); });
-window.addEventListener("orientationchange", ()=>setTimeout(()=>{ setup(); renderGrid(); }, 350));
+window.addEventListener("resize",()=>{ setup(); render(); });
+window.addEventListener("orientationchange",()=>setTimeout(()=>{ setup(); render(); },350));
 </script>
 </body>
 </html>
