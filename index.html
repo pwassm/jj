@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>Mlynx</title>
+<title>SeeAndLearn</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { overflow: hidden; touch-action: manipulation; background: #000; }
@@ -279,7 +279,7 @@ const COLS=5, ROWS=5, LETTERS="abcde";
 const ISMOBILE = ('ontouchstart' in window) || navigator.maxTouchPoints>0;
 
 let GW=0, GH=0, cellW=0, cellH=0, isPortrait=false, bgColor='#c8ddf0';
-let fitMode = localStorage.getItem("mlynx-fit")||"fc";
+let fitMode = localStorage.getItem("seeandlearn-fit")||"fc";
 let showCellLbl=false, showCname=true;
 let linksData=[];
 
@@ -396,7 +396,16 @@ function render(){ renderGrid(); }
 // fullscreen
 function openFS(it){
   document.getElementById('fsImg').src=it.link;
-  document.getElementById('fsWrap').classList.add('open');
+  
+  if (typeof screen !== 'undefined' && screen.orientation && screen.orientation.lock) {
+    screen.orientation.lock('landscape').catch(() => console.log('Landscape lock failed'));
+  }
+
+  document.getElementById('fsImg').addEventListener('click', function(e) {
+    e.stopPropagation();
+    document.getElementById('fsWrap').classList.remove('open');
+  }, {once: true});
+document.getElementById('fsWrap').classList.add('open');
 }
 ['fsClose','fsClose2'].forEach(id=>
   document.getElementById(id).addEventListener('pointerup',()=>document.getElementById('fsWrap').classList.remove('open'))
@@ -444,7 +453,7 @@ function syncFit(){
   document.getElementById('fitLabel').textContent=fitMode==='ei'?'Img: Entire Image':'Img: Fill Cell';
 }
 document.getElementById('togFit').addEventListener('change',function(){
-  fitMode=this.checked?'ei':'fc'; localStorage.setItem('mlynx-fit',fitMode); syncFit(); render();
+  fitMode=this.checked?'ei':'fc'; localStorage.setItem('seeandlearn-fit',fitMode); syncFit(); render();
 });
 document.getElementById('togCellLbl').addEventListener('change',function(){ showCellLbl=this.checked; render(); });
 document.getElementById('togCname').addEventListener('change',function(){ showCname=this.checked; render(); });
@@ -463,7 +472,7 @@ document.addEventListener('keydown',e=>{
 
 // Save JSON
 function saveJson(){
-  localStorage.setItem('mlynx-links',JSON.stringify(linksData));
+  localStorage.setItem('seeandlearn-links',JSON.stringify(linksData));
   const blob=new Blob([JSON.stringify(linksData,null,2)],{type:'application/json'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob); a.download='links.json';
@@ -510,7 +519,7 @@ function qfSave(){
   let e=linksData.find(it=>it.cell===qfCell);
   if(e) Object.assign(e,{show:'1',asset,fit,link,cname,sname,attribution:attrib,comment});
   else  linksData.push({show:'1',asset,cell:qfCell,fit,link,cname,sname,attribution:attrib,comment});
-  localStorage.setItem('mlynx-links',JSON.stringify(linksData));
+  localStorage.setItem('seeandlearn-links',JSON.stringify(linksData));
   document.getElementById('qfModal').classList.remove('open');
   render();
 }
@@ -546,7 +555,7 @@ document.getElementById('jsonApply').addEventListener('pointerup',()=>{
     const d=JSON.parse(document.getElementById('jsonText').value);
     if(!Array.isArray(d)) throw new Error('Expected array');
     linksData=d;
-    localStorage.setItem('mlynx-links',JSON.stringify(linksData));
+    localStorage.setItem('seeandlearn-links',JSON.stringify(linksData));
     document.getElementById('jsonModal').classList.remove('open');
     render();
   }catch(e){ document.getElementById('jsonStatus').textContent='Error: '+e.message; }
@@ -655,7 +664,7 @@ async function init(){
     const r=await fetch('links.json?v='+Date.now());
     linksData=await r.json();
   }catch(e){
-    try{ const ls=localStorage.getItem('mlynx-links'); linksData=ls?JSON.parse(ls):[]; }catch(e2){ linksData=[]; }
+    try{ const ls=localStorage.getItem('seeandlearn-links'); linksData=ls?JSON.parse(ls):[]; }catch(e2){ linksData=[]; }
   }
   render();
 }
