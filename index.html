@@ -159,6 +159,20 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
 #jsonBtns button.save { border-color: #5f5; color: #afa; }
 #jsonBtns button:hover { background: #3a3a5e; }
 #jsonStatus { font-size: 12px; color: #888; min-height: 16px; padding-top: 4px; }
+
+.github-token-setup {
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  padding: 11px 20px 14px 20px;
+  background: #0d0d20;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+.github-token-setup label { font: 12px Arial,sans-serif; color: #aaa; margin-bottom: 2px; }
+.github-token-setup.open { display: flex; }
+.token-input { background: #0a0a1a; border: 1px solid #555; color: #fff; padding: 9px 10px; border-radius: 6px; font-size: 14px; width: 100%; outline: none; }
+.token-input:focus { border-color: #8ef; }
+.token-status { font-size: 12px; color: #8ef; min-height: 14px; }
 </style>
 </head>
 <body>
@@ -174,6 +188,7 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
     <div class="menu-item" id="miTables">Tables (JSON editor)</div>
     <div class="menu-divider"></div>
     <div class="menu-item" id="miSaveJson">&#x1F4BE; Save JSON &nbsp;<small style="opacity:.5;font-size:11px">Ctrl+Alt+S</small></div>
+    <div class="menu-item" id="miPushGithub">&#x2601; Push to GitHub</div>
     <div class="menu-divider"></div>
     <div class="menu-item" id="miSettings">Settings &#x25B8;</div>
     <div id="settingsPanel">
@@ -188,6 +203,15 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
       <div class="setting-row">
         <span>cname label</span>
         <label class="tog"><input type="checkbox" id="togCname" checked><span class="tog-slider"></span></label>
+      </div>
+      <div class="setting-row">
+        <span>GitHub Sync</span>
+        <label class="tog"><input type="checkbox" id="togGithub"><span class="tog-slider"></span></label>
+      </div>
+      <div class="github-token-setup" id="githubTokenSetup">
+        <label for="tokenInput">GitHub Fine-Grained PAT (Contents:Write)</label>
+        <input type="password" id="tokenInput" class="token-input" placeholder="github_pat_...">
+        <div class="token-status" id="tokenStatus"></div>
       </div>
     </div>
     <div class="menu-divider"></div>
@@ -535,6 +559,96 @@ document.getElementById('jsonText').addEventListener('keydown',e=>{
 });
 
 // bootstrap
+// --- GITHUB INTEGRATION ---
+async function pushToGitHub() {
+  const token = localStorage.getItem('github-token');
+  if (!token) {
+    alert("1. Open Settings -> Turn on GitHub Sync\n2. Paste your token and press Enter");
+    document.getElementById('settingsPanel').classList.add('open');
+    const tg = document.getElementById('togGithub');
+    if (tg) tg.checked = true;
+    const setup = document.getElementById('githubTokenSetup');
+    if (setup) setup.classList.add('open');
+    const inp = document.getElementById('tokenInput');
+    if (inp) inp.focus();
+    return;
+  }
+  let owner = localStorage.getItem('github-owner') || '';
+  let repo = localStorage.getItem('github-repo') || '';
+  owner = prompt('GitHub Owner (username):', owner) || '';
+  repo = prompt('Repository Name:', repo) || '';
+  if (!owner || !repo) return;
+
+  localStorage.setItem('github-owner', owner);
+  localStorage.setItem('github-repo', repo);
+
+  try {
+    const path = 'links.json';
+    const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+    const headers = { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json' };
+
+    const getRes = await fetch(apiUrl, { headers });
+    if (!getRes.ok) throw new Error('Could not find repository or file. Check permissions.');
+    const { sha } = await getRes.json();
+
+    const jsonText = JSON.stringify(linksData, null, 2);
+    const contentB64 = btoa(unescape(encodeURIComponent(jsonText)));
+
+    const putRes = await fetch(apiUrl, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({ message: 'Update links.json via SeeAndLearn', content: contentB64, sha })
+    });
+
+    if (putRes.ok) alert('✅ Successfully pushed to GitHub!');
+    else throw new Error(await putRes.text());
+  } catch (err) {
+    alert('❌ GitHub error: ' + err.message);
+  }
+}
+
+document.getElementById('miPushGithub').addEventListener('pointerup', function(e) {
+  e.stopPropagation();
+  closeMenu();
+  pushToGitHub();
+});
+
+const togGithubEl = document.getElementById('togGithub');
+if (togGithubEl) {
+  togGithubEl.addEventListener('change', function() {
+    const setup = document.getElementById('githubTokenSetup');
+    const status = document.getElementById('tokenStatus');
+    if (this.checked) {
+      if (setup) setup.classList.add('open');
+      const saved = localStorage.getItem('github-token');
+      if (status) status.textContent = saved ? '✅ Token loaded from browser' : 'Paste token → press Enter';
+      if (!saved) {
+        const inp = document.getElementById('tokenInput');
+        if (inp) inp.focus();
+      }
+    } else {
+      if (setup) setup.classList.remove('open');
+    }
+  });
+}
+
+const tokenInputEl = document.getElementById('tokenInput');
+if (tokenInputEl) {
+  tokenInputEl.addEventListener('change', function() {
+    const t = this.value.trim();
+    if (t) {
+      localStorage.setItem('github-token', t);
+      const status = document.getElementById('tokenStatus');
+      if (status) status.textContent = '✅ Saved securely in browser';
+      this.value = '';
+      this.blur();
+    }
+  });
+  tokenInputEl.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') this.blur();
+  });
+}
+
 async function init(){
   setupLayout(); syncFit();
   try{
