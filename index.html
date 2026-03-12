@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>SeeAndLearn</title>
+<title>Mlynx</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { overflow: hidden; touch-action: manipulation; background: #000; }
@@ -159,20 +159,6 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
 #jsonBtns button.save { border-color: #5f5; color: #afa; }
 #jsonBtns button:hover { background: #3a3a5e; }
 #jsonStatus { font-size: 12px; color: #888; min-height: 16px; padding-top: 4px; }
-
-.github-token-setup {
-  display: none;
-  flex-direction: column;
-  gap: 8px;
-  padding: 11px 20px 14px 20px;
-  background: #0d0d20;
-  border-top: 1px solid rgba(255,255,255,0.06);
-}
-.github-token-setup label { font: 12px Arial,sans-serif; color: #aaa; margin-bottom: 2px; }
-.github-token-setup.open { display: flex; }
-.token-input { background: #0a0a1a; border: 1px solid #555; color: #fff; padding: 9px 10px; border-radius: 6px; font-size: 14px; width: 100%; outline: none; }
-.token-input:focus { border-color: #8ef; }
-.token-status { font-size: 12px; color: #8ef; min-height: 14px; }
 </style>
 </head>
 <body>
@@ -202,15 +188,6 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
       <div class="setting-row">
         <span>cname label</span>
         <label class="tog"><input type="checkbox" id="togCname" checked><span class="tog-slider"></span></label>
-      </div>
-      <div class="setting-row">
-        <span>GitHub Sync</span>
-        <label class="tog"><input type="checkbox" id="togGithub"><span class="tog-slider"></span></label>
-      </div>
-      <div class="github-token-setup" id="githubTokenSetup">
-        <label>GitHub Fine-Grained PAT (Contents:Write)</label>
-        <input type="password" id="tokenInput" class="token-input" placeholder="github_pat_...">
-        <div class="token-status" id="tokenStatus"></div>
       </div>
     </div>
     <div class="menu-divider"></div>
