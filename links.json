@@ -31,5 +31,16 @@
     "sname": "Sebastes flavidus",
     "attribution": "My picture!",
     "comment": "Hemifacial melanosis"
+  },
+  {
+    "show": "1",
+    "asset": "i",
+    "cell": "4d",
+    "fit": "",
+    "link": "https://upload.wikimedia.org/wikipedia/commons/5/55/Pigeon_guillemot_%2820277377431%29.jpg",
+    "cname": "Pigeon Guillemot",
+    "sname": "",
+    "attribution": "",
+    "comment": ""
   }
 ]
