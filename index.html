@@ -89,7 +89,7 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
   background: rgba(0,0,0,0.95); align-items: center; justify-content: center;
 }
 #fsWrap.open { display: flex; }
-#fsWrap img { max-width: 95vw; max-height: 95vh; object-fit: contain; cursor: pointer; }
+#fsWrap img { object-fit: contain; cursor: pointer; transition: transform 0.2s; }
 #fsClose, #fsClose2 {
   position: absolute; width: 52px; height: 52px;
   background: rgba(255,255,255,0.22); border: none; border-radius: 50%;
@@ -262,7 +262,9 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
 <div id="fastLinkModal" style="display:none; position:fixed; inset:0; z-index:30000; background:rgba(0,0,0,0.95); align-items:center; justify-content:center; flex-direction:column; gap:16px; font-family:sans-serif;">
   <h3 style="color:#8ef; margin:0;">Fast Link Paste</h3>
   <div style="color:#aaa; font-size:13px; margin-bottom:10px;">Auto-saves and assigns unused pin</div>
+  <button id="fastLinkPasteTop" style="padding:8px 16px; font-size:14px; border-radius:6px; border:1px solid #4af; background:#1a2a3a; color:#8ef; cursor:pointer;">&#128187; Paste from Clipboard</button>
   <input type="text" id="fastLinkInput" placeholder="Paste link here..." autocomplete="off" style="width:80vw; max-width:400px; padding:15px; font-size:16px; border-radius:8px; border:1px solid #555; background:#111; color:#fff; outline:none;">
+  <button id="fastLinkPasteBot" style="padding:8px 16px; font-size:14px; border-radius:6px; border:1px solid #4af; background:#1a2a3a; color:#8ef; cursor:pointer;">&#128187; Paste from Clipboard</button>
   <div style="color:#888; font-size:14px; min-height:20px;" id="fastLinkStatus">Ready.</div>
   <button id="fastLinkExit" style="padding:10px 30px; font-size:16px; border-radius:8px; border:1px solid #f66; background:#3a1a1a; color:#f66; cursor:pointer; margin-top:20px;">Exit</button>
 </div>
@@ -431,7 +433,17 @@ function render(){ renderGrid(); }
 
 // fullscreen
 function openFS(it){
-  document.getElementById('fsImg').src=it.link;
+  const img = document.getElementById('fsImg');
+  img.src = it.link;
+  if(isPortrait) {
+    img.style.transform = 'rotate(90deg)';
+    img.style.maxWidth = '95vh';
+    img.style.maxHeight = '95vw';
+  } else {
+    img.style.transform = 'none';
+    img.style.maxWidth = '95vw';
+    img.style.maxHeight = '95vh';
+  }
   document.getElementById('fsWrap').classList.add('open');
 }
 document.getElementById('fsImg').addEventListener('pointerup',e=>{
@@ -471,12 +483,10 @@ function initTableKeys() {
   tableKeys = Array.from(keys);
   if(tableKeys.length===0) tableKeys = ['show','asset','cell','fit','link','cname','sname','attribution','comment'];
 }
-
 function updateSelectedRowsButton() {
   const btn = document.getElementById('deleteSelectedRows');
   if(btn) btn.style.display = selectedRows.size > 0 ? 'block' : 'none';
 }
-
 window.renderTableEditor = function() {
   const container = document.getElementById('tableEditor');
   if(!container) return;
@@ -486,19 +496,13 @@ window.renderTableEditor = function() {
   updateSelectedRowsButton();
 
   let html = '<div style="display:table; width:100%; border-collapse:collapse; color:#fff; font-family:sans-serif; font-size:13px;">';
-
   html += '<div style="display:table-row; background:#222; font-weight:bold; position:sticky; top:0; z-index:10;">';
   html += `<div style="display:table-cell; padding:8px; border:1px solid #444; width:60px; text-align:center;">
              <input type="checkbox" onchange="toggleSelectAll(this.checked)" ${selectedRows.size>0 && selectedRows.size===linksData.length?'checked':''}>
              <span style="margin-left:4px;">Del</span>
            </div>`;
-
   tableKeys.forEach((k, i) => {
-    html += `<div style="display:table-cell; border:1px solid #444; background:#222;"
-                  draggable="true"
-                  ondragstart="colDragStart(event, ${i})"
-                  ondragover="event.preventDefault()"
-                  ondrop="colDrop(event, ${i})">
+    html += `<div style="display:table-cell; border:1px solid #444; background:#222;" draggable="true" ondragstart="colDragStart(event, ${i})" ondragover="event.preventDefault()" ondrop="colDrop(event, ${i})">
                <div style="display:flex; justify-content:space-between; align-items:center; resize:horizontal; overflow:hidden; min-width:100px; padding:6px;">
                  <span style="cursor:pointer; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" onclick="sortData('${k}')" title="Sort by ${k}">${k} ${sortCol===k?(sortAsc?'\u25B2':'\u25BC'):''}</span>
                  <span style="display:flex; gap:4px; margin-left:8px;">
@@ -508,8 +512,7 @@ window.renderTableEditor = function() {
                </div>
              </div>`;
   });
-  html += '<div style="display:table-cell; padding:8px; border:1px solid #444; width:60px;"><button onclick="addCol()" style="cursor:pointer;background:#2a2a3e;color:#fff;border:1px solid #555;padding:4px 8px;border-radius:4px;">+ Col</button></div>';
-  html += '</div>';
+  html += '<div style="display:table-cell; padding:8px; border:1px solid #444; width:60px;"><button onclick="addCol()" style="cursor:pointer;background:#2a2a3e;color:#fff;border:1px solid #555;padding:4px 8px;border-radius:4px;">+ Col</button></div></div>';
 
   linksData.forEach((row, rIdx) => {
     const isSel = selectedRows.has(rIdx);
@@ -527,36 +530,19 @@ window.renderTableEditor = function() {
     html += `<div style="display:table-cell; padding:4px; border:1px solid #444; text-align:center; min-width:40px;">
                <button onclick="moveRow(${rIdx}, -1)" style="cursor:pointer;background:none;border:none;color:#aaa;font-size:16px;">&#9650;</button>
                <button onclick="moveRow(${rIdx}, 1)" style="cursor:pointer;background:none;border:none;color:#aaa;font-size:16px;">&#9660;</button>
-             </div>`;
-    html += `</div>`;
+             </div></div>`;
   });
-
   html += '</div>';
   container.innerHTML = html;
 };
-
-window.toggleRowSelect = function(idx, state) {
-  if(state) selectedRows.add(idx);
-  else selectedRows.delete(idx);
-  renderTableEditor();
-};
-window.toggleSelectAll = function(state) {
-  if(state) {
-    linksData.forEach((_, i) => selectedRows.add(i));
-  } else {
-    selectedRows.clear();
-  }
-  renderTableEditor();
-};
-
+window.toggleRowSelect = function(idx, state) { if(state) selectedRows.add(idx); else selectedRows.delete(idx); renderTableEditor(); };
+window.toggleSelectAll = function(state) { if(state) { linksData.forEach((_, i) => selectedRows.add(i)); } else { selectedRows.clear(); } renderTableEditor(); };
 window.updateCell = function(r, k, v) { linksData[r][k] = v; };
 window.colDragStart = function(e, i) { draggedCol = i; };
 window.colDrop = function(e, i) {
   if(draggedCol === -1 || draggedCol === i) return;
   const key = tableKeys.splice(draggedCol, 1)[0];
-  tableKeys.splice(i, 0, key);
-  rebuildLinksDataKeys();
-  renderTableEditor();
+  tableKeys.splice(i, 0, key); rebuildLinksDataKeys(); renderTableEditor();
 };
 window.rebuildLinksDataKeys = function() {
   linksData = linksData.map(obj => {
@@ -567,118 +553,71 @@ window.rebuildLinksDataKeys = function() {
   });
 }
 window.sortData = function(k) {
-  if(sortCol === k) sortAsc = !sortAsc;
-  else { sortCol = k; sortAsc = true; }
+  if(sortCol === k) sortAsc = !sortAsc; else { sortCol = k; sortAsc = true; }
   linksData.sort((a,b) => {
-    let v1 = a[k]!==undefined?a[k]:'';
-    let v2 = b[k]!==undefined?b[k]:'';
+    let v1 = a[k]!==undefined?a[k]:''; let v2 = b[k]!==undefined?b[k]:'';
     if(!isNaN(v1) && !isNaN(v2) && v1!=='' && v2!=='') { v1=Number(v1); v2=Number(v2); }
-    if(v1 < v2) return sortAsc ? -1 : 1;
-    if(v1 > v2) return sortAsc ? 1 : -1;
-    return 0;
+    if(v1 < v2) return sortAsc ? -1 : 1; if(v1 > v2) return sortAsc ? 1 : -1; return 0;
   });
-  selectedRows.clear();
-  renderTableEditor();
+  selectedRows.clear(); renderTableEditor();
 };
 window.renameCol = function(oldK) {
   const newK = prompt('Rename column:', oldK);
   if(!newK || newK === oldK || tableKeys.includes(newK)) return;
   tableKeys[tableKeys.indexOf(oldK)] = newK;
-  linksData.forEach(row => {
-    if(row.hasOwnProperty(oldK)) {
-      row[newK] = row[oldK];
-      delete row[oldK];
-    }
-  });
-  rebuildLinksDataKeys();
-  renderTableEditor();
+  linksData.forEach(row => { if(row.hasOwnProperty(oldK)) { row[newK] = row[oldK]; delete row[oldK]; } });
+  rebuildLinksDataKeys(); renderTableEditor();
 };
 window.deleteCol = function(k) {
   if(!confirm('Delete column "' + k + '" from ALL rows?')) return;
-  tableKeys = tableKeys.filter(x => x !== k);
-  linksData.forEach(row => delete row[k]);
-  renderTableEditor();
+  tableKeys = tableKeys.filter(x => x !== k); linksData.forEach(row => delete row[k]); renderTableEditor();
 };
 window.addCol = function() {
   const newK = prompt('New column name:');
   if(!newK || tableKeys.includes(newK)) return;
-  tableKeys.push(newK);
-  linksData.forEach(row => row[newK] = "");
-  rebuildLinksDataKeys();
-  renderTableEditor();
+  tableKeys.push(newK); linksData.forEach(row => row[newK] = ""); rebuildLinksDataKeys(); renderTableEditor();
 };
 window.addRow = function() {
-  const newRow = {};
-  tableKeys.forEach(k => newRow[k] = "");
-  linksData.push(newRow);
-  renderTableEditor();
+  const newRow = {}; tableKeys.forEach(k => newRow[k] = ""); linksData.push(newRow); renderTableEditor();
 };
 window.deleteRow = function(idx) {
-  if(confirm('Delete row?')) {
-    linksData.splice(idx, 1);
-    selectedRows.delete(idx);
-    renderTableEditor();
-  }
+  if(confirm('Delete row?')) { linksData.splice(idx, 1); selectedRows.delete(idx); renderTableEditor(); }
 };
 document.getElementById('deleteSelectedRows').addEventListener('click', () => {
   if(selectedRows.size === 0) return;
   if(confirm(`Delete ${selectedRows.size} selected rows?`)) {
     const indices = Array.from(selectedRows).sort((a,b)=>b-a);
     indices.forEach(i => linksData.splice(i, 1));
-    selectedRows.clear();
-    renderTableEditor();
+    selectedRows.clear(); renderTableEditor();
   }
 });
 window.moveRow = function(idx, dir) {
   if(idx+dir < 0 || idx+dir >= linksData.length) return;
-  const temp = linksData[idx];
-  linksData[idx] = linksData[idx+dir];
-  linksData[idx+dir] = temp;
-
-  if(selectedRows.has(idx) && !selectedRows.has(idx+dir)) {
-    selectedRows.delete(idx); selectedRows.add(idx+dir);
-  } else if(!selectedRows.has(idx) && selectedRows.has(idx+dir)) {
-    selectedRows.add(idx); selectedRows.delete(idx+dir);
-  }
-
+  const temp = linksData[idx]; linksData[idx] = linksData[idx+dir]; linksData[idx+dir] = temp;
+  if(selectedRows.has(idx) && !selectedRows.has(idx+dir)) { selectedRows.delete(idx); selectedRows.add(idx+dir); } 
+  else if(!selectedRows.has(idx) && selectedRows.has(idx+dir)) { selectedRows.add(idx); selectedRows.delete(idx+dir); }
   renderTableEditor();
 };
-
 document.getElementById('addTableItem').addEventListener('click', window.addRow);
 document.getElementById('toggleRawJson').addEventListener('click', function() {
-  rawJsonMode = !rawJsonMode;
-  this.textContent = rawJsonMode ? 'Show Visual Editor' : 'Show Raw JSON';
+  rawJsonMode = !rawJsonMode; this.textContent = rawJsonMode ? 'Show Visual Editor' : 'Show Raw JSON';
   if(rawJsonMode) {
     document.getElementById('jsonText').value = JSON.stringify(linksData, null, 2);
-    document.getElementById('tableEditor').style.display = 'none';
-    document.getElementById('jsonText').style.display = 'block';
-    document.getElementById('addTableItem').style.display = 'none';
-    document.getElementById('deleteSelectedRows').style.display = 'none';
+    document.getElementById('tableEditor').style.display = 'none'; document.getElementById('jsonText').style.display = 'block';
+    document.getElementById('addTableItem').style.display = 'none'; document.getElementById('deleteSelectedRows').style.display = 'none';
   } else {
-    try {
-      linksData = JSON.parse(document.getElementById('jsonText').value);
-    } catch(e) { alert("Invalid JSON"); rawJsonMode = true; return; }
-    document.getElementById('tableEditor').style.display = 'block';
-    document.getElementById('jsonText').style.display = 'none';
-    document.getElementById('addTableItem').style.display = 'block';
-    initTableKeys();
-    renderTableEditor();
+    try { linksData = JSON.parse(document.getElementById('jsonText').value); } catch(e) { alert("Invalid JSON"); rawJsonMode = true; return; }
+    document.getElementById('tableEditor').style.display = 'block'; document.getElementById('jsonText').style.display = 'none';
+    document.getElementById('addTableItem').style.display = 'block'; initTableKeys(); renderTableEditor();
   }
 });
-
 document.getElementById('miTables').addEventListener('pointerup',e=>{
   e.stopPropagation(); closeMenu();
   if(typeof isAdmin === 'function' && !isAdmin()) { alert('Admin privileges required.'); return; }
-  rawJsonMode = false;
-  selectedRows.clear();
-  document.getElementById('toggleRawJson').textContent = 'Show Raw JSON';
-  document.getElementById('tableEditor').style.display = 'block';
-  document.getElementById('jsonText').style.display = 'none';
-  document.getElementById('addTableItem').style.display = 'block';
-  initTableKeys();
-  renderTableEditor();
-  document.getElementById('jsonStatus').textContent='';
-  document.getElementById('jsonModal').classList.add('open');
+  rawJsonMode = false; selectedRows.clear(); document.getElementById('toggleRawJson').textContent = 'Show Raw JSON';
+  document.getElementById('tableEditor').style.display = 'block'; document.getElementById('jsonText').style.display = 'none';
+  document.getElementById('addTableItem').style.display = 'block'; initTableKeys(); renderTableEditor();
+  document.getElementById('jsonStatus').textContent=''; document.getElementById('jsonModal').classList.add('open');
 });
 document.getElementById('miSaveJson').addEventListener('pointerup',e=>{ e.stopPropagation(); closeMenu(); saveJson(); });
 document.getElementById('miHelp').addEventListener('pointerup',e=>{
@@ -935,6 +874,21 @@ document.getElementById('miFastLinks').addEventListener('pointerup', e => {
   setTimeout(() => document.getElementById('fastLinkInput').focus(), 100);
 });
 
+async function handleFastPasteBtn() {
+  try {
+    const text = await navigator.clipboard.readText();
+    if (!text) return;
+    const inp = document.getElementById('fastLinkInput');
+    inp.value = text;
+    inp.dispatchEvent(new Event('input'));
+  } catch (err) {
+    document.getElementById('fastLinkStatus').textContent = 'Clipboard access denied or failed.';
+    document.getElementById('fastLinkStatus').style.color = '#f66';
+  }
+}
+document.getElementById('fastLinkPasteTop').addEventListener('click', handleFastPasteBtn);
+document.getElementById('fastLinkPasteBot').addEventListener('click', handleFastPasteBtn);
+
 document.getElementById('fastLinkExit').addEventListener('pointerup', () => {
   document.getElementById('fastLinkModal').style.display = 'none';
   render();
@@ -947,19 +901,14 @@ document.getElementById('fastLinkInput').addEventListener('input', function() {
     document.getElementById('fastLinkStatus').textContent = 'Waiting for valid URL...';
     return;
   }
-
   const occ = occupied();
   let nextCell = "";
   outer: for(let r=1; r<=ROWS; r++) {
     for(let c=1; c<=COLS; c++) {
       const cs = mkCell(r, c);
-      if(!occ.has(cs)) {
-        nextCell = cs;
-        break outer;
-      }
+      if(!occ.has(cs)) { nextCell = cs; break outer; }
     }
   }
-
   const d = new Date();
   const yy = String(d.getFullYear()).slice(-2);
   const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -967,23 +916,13 @@ document.getElementById('fastLinkInput').addEventListener('input', function() {
   const dateAdded = yy + '_' + mm + '__' + sec;
 
   linksData.push({
-    show: "1",
-    asset: "i",
-    cell: nextCell,
-    fit: "fc",
-    link: val,
-    cname: "",
-    sname: "",
-    attribution: "",
-    comment: "",
-    DateAdded: dateAdded
+    show: "1", asset: "i", cell: nextCell, fit: "fc", link: val,
+    cname: "", sname: "", attribution: "", comment: "", DateAdded: dateAdded
   });
-
   localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
   document.getElementById('fastLinkStatus').textContent = `Saved to ${nextCell || 'blank cell'}: ${val.substring(0,25)}...`;
   document.getElementById('fastLinkStatus').style.color = '#9f9';
   setTimeout(() => { document.getElementById('fastLinkStatus').style.color = '#888'; }, 1000);
-
   this.value = '';
 });
 </script>
