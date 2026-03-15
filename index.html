@@ -140,9 +140,9 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
 }
 #jsonModal.open { display: flex; }
 #jsonBox {
-  background: #1a1a2e; border: 1px solid #555; border-radius: 12px;
-  padding: 20px; width: 90vw; height: 85vh; max-width: 820px;
-  display: flex; flex-direction: column; font-family: 'Courier New',monospace;
+  background: #1a1a2e; border: none; border-radius: 0;
+  padding: 10px; width: 100vw; height: 100vh; max-width: none;
+  display: flex; flex-direction: column; font-family: sans-serif; box-sizing: border-box;
 }
 #jsonTitle { color: #8ef; font-size: 17px; padding-bottom: 10px; border-bottom: 1px solid #444; margin-bottom: 8px; }
 #jsonText {
@@ -263,10 +263,10 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
     <div id="jsonTitle">&#x1F4CB; links.json Editor</div>
     <div id="tableEditorWrap" style="flex:1; display:flex; flex-direction:column; overflow:hidden; gap:10px;">
       <div style="display:flex; justify-content:space-between; align-items:center;">
-        <button id="addTableItem" style="padding:6px 12px; border-radius:6px; border:1px solid #4af; background:rgba(0,80,180,0.3); color:#8ef; cursor:pointer;">+ Add Row</button>
-        <button id="toggleRawJson" style="padding:6px 12px; border-radius:6px; border:1px solid #555; background:#2a2a3e; color:#fff; cursor:pointer;">Show Raw JSON</button>
+        <button id="addTableItem" style="padding:8px 16px; border-radius:6px; border:1px solid #4af; background:rgba(0,80,180,0.3); color:#8ef; cursor:pointer;">+ Add Row</button>
+        <button id="toggleRawJson" style="padding:8px 16px; border-radius:6px; border:1px solid #555; background:#2a2a3e; color:#fff; cursor:pointer;">Show Raw JSON</button>
       </div>
-      <div id="tableEditor" style="flex:1; overflow-y:auto; background:#0a0a1a; border:1px solid #444; border-radius:6px; padding:8px; display:flex; flex-direction:column; gap:6px;"></div>
+      <div id="tableEditor" style="flex:1; overflow:auto; background:#0a0a1a; border:1px solid #444; border-radius:6px;"></div>
       <textarea id="jsonText" style="display:none; flex:1; background:#0a0a1a; border:1px solid #444; color:#cfc; padding:12px; font-size:13px; font-family:monospace; line-height:1.4; border-radius:6px; resize:none; overflow:auto;"></textarea>
     </div>
     <div id="jsonBtns">
@@ -447,24 +447,148 @@ menuPanel.addEventListener('pointerup',e=>e.stopPropagation());
 document.addEventListener('pointerup',()=>{ if(menuPanel.classList.contains('open')) closeMenu(); });
 
 let rawJsonMode = false;
+let tableKeys = [];
+let sortCol = null;
+let sortAsc = true;
+let draggedCol = -1;
+
+function initTableKeys() {
+  const keys = new Set();
+  linksData.forEach(r => Object.keys(r).forEach(k => keys.add(k)));
+  tableKeys = Array.from(keys);
+  if(tableKeys.length===0) tableKeys = ['show','asset','cell','fit','link','cname','sname','attribution','comment'];
+}
+
 window.renderTableEditor = function() {
   const container = document.getElementById('tableEditor');
   if(!container) return;
-  container.innerHTML = '';
-  linksData.forEach((item, index) => {
-    const row = document.createElement('div');
-    row.style.cssText = "display:flex; gap:6px; background:#111; padding:6px; border:1px solid #333; border-radius:4px; align-items:center;";
-    row.innerHTML = `
-      <input type="text" value="${item.cell || ''}" style="width:40px; background:#000; color:#fff; border:1px solid #555; padding:4px;" title="Cell" oninput="linksData[${index}].cell=this.value">
-      <input type="text" value="${item.cname || ''}" style="flex:1; background:#000; color:#fff; border:1px solid #555; padding:4px;" placeholder="Name" oninput="linksData[${index}].cname=this.value">
-      <input type="text" value="${item.link || ''}" style="flex:2; background:#000; color:#fff; border:1px solid #555; padding:4px;" placeholder="Link URL" oninput="linksData[${index}].link=this.value">
-      <button style="cursor:pointer; padding:4px 8px; background:#2a2a3e; color:#fff; border:1px solid #555; border-radius:4px;" onclick="moveRow(${index}, -1)">&#8593;</button>
-      <button style="cursor:pointer; padding:4px 8px; background:#2a2a3e; color:#fff; border:1px solid #555; border-radius:4px;" onclick="moveRow(${index}, 1)">&#8595;</button>
-      <button style="cursor:pointer; padding:4px 8px; background:#3a1a1a; color:#f66; border:1px solid #633; border-radius:4px;" onclick="deleteRow(${index})">&#10006;</button>
-    `;
-    container.appendChild(row);
+  if(tableKeys.length===0) initTableKeys();
+
+  let html = '<div style="display:table; width:100%; border-collapse:collapse; color:#fff; font-family:sans-serif; font-size:13px;">';
+
+  // Header row
+  html += '<div style="display:table-row; background:#222; font-weight:bold; position:sticky; top:0; z-index:10;">';
+  html += '<div style="display:table-cell; padding:8px; border:1px solid #444; width:30px; text-align:center;">#</div>';
+
+  tableKeys.forEach((k, i) => {
+    html += `<div style="display:table-cell; border:1px solid #444; background:#222;"
+                  draggable="true"
+                  ondragstart="colDragStart(event, ${i})"
+                  ondragover="event.preventDefault()"
+                  ondrop="colDrop(event, ${i})">
+               <div style="display:flex; justify-content:space-between; align-items:center; resize:horizontal; overflow:hidden; min-width:100px; padding:6px;">
+                 <span style="cursor:pointer; flex:1;" onclick="sortData('${k}')">${k} ${sortCol===k?(sortAsc?'\u25B2':'\u25BC'):''}</span>
+                 <span style="display:flex; gap:4px; margin-left:8px;">
+                   <button onclick="renameCol('${k}')" style="background:none;border:none;color:#8ef;cursor:pointer;font-size:13px;" title="Rename Column">&#9998;</button>
+                   <button onclick="deleteCol('${k}')" style="background:none;border:none;color:#f66;cursor:pointer;font-size:13px;" title="Delete Column">&#10006;</button>
+                 </span>
+               </div>
+             </div>`;
   });
+  html += '<div style="display:table-cell; padding:8px; border:1px solid #444; width:60px;"><button onclick="addCol()" style="cursor:pointer;background:#2a2a3e;color:#fff;border:1px solid #555;padding:4px 8px;border-radius:4px;">+ Col</button></div>';
+  html += '</div>';
+
+  // Body rows
+  linksData.forEach((row, rIdx) => {
+    html += `<div style="display:table-row; background:${rIdx%2===0?'#111':'#1a1a1a'};">`;
+    html += `<div style="display:table-cell; padding:4px; border:1px solid #444; text-align:center;">
+               <button onclick="deleteRow(${rIdx})" style="color:#f66;background:none;border:none;cursor:pointer;font-size:14px;" title="Delete Row">&#10006;</button>
+             </div>`;
+    tableKeys.forEach(k => {
+      const val = (row[k] === undefined || row[k] === null) ? '' : String(row[k]).replace(/"/g, '&quot;');
+      html += `<div style="display:table-cell; padding:0; border:1px solid #444;">
+                 <input type="text" value="${val}" onchange="updateCell(${rIdx}, '${k}', this.value)" style="width:100%; height:100%; min-height:30px; background:transparent; color:#fff; border:none; padding:4px 8px; box-sizing:border-box;">
+               </div>`;
+    });
+    html += `<div style="display:table-cell; padding:4px; border:1px solid #444; text-align:center;">
+               <button onclick="moveRow(${rIdx}, -1)" style="cursor:pointer;background:none;border:none;color:#aaa;font-size:16px;">&#9650;</button>
+               <button onclick="moveRow(${rIdx}, 1)" style="cursor:pointer;background:none;border:none;color:#aaa;font-size:16px;">&#9660;</button>
+             </div>`;
+    html += `</div>`;
+  });
+
+  html += '</div>';
+  container.innerHTML = html;
 };
+
+window.updateCell = function(r, k, v) { linksData[r][k] = v; };
+
+window.colDragStart = function(e, i) { draggedCol = i; };
+window.colDrop = function(e, i) {
+  if(draggedCol === -1 || draggedCol === i) return;
+  const key = tableKeys.splice(draggedCol, 1)[0];
+  tableKeys.splice(i, 0, key);
+  rebuildLinksDataKeys();
+  renderTableEditor();
+};
+
+window.rebuildLinksDataKeys = function() {
+  linksData = linksData.map(obj => {
+    const newObj = {};
+    tableKeys.forEach(k => { if(obj.hasOwnProperty(k)) newObj[k] = obj[k]; });
+    Object.keys(obj).forEach(k => { if(!tableKeys.includes(k)) newObj[k] = obj[k]; });
+    return newObj;
+  });
+}
+
+window.sortData = function(k) {
+  if(sortCol === k) sortAsc = !sortAsc;
+  else { sortCol = k; sortAsc = true; }
+  linksData.sort((a,b) => {
+    let v1 = a[k]!==undefined?a[k]:'';
+    let v2 = b[k]!==undefined?b[k]:'';
+    if(!isNaN(v1) && !isNaN(v2) && v1!=='' && v2!=='') { v1=Number(v1); v2=Number(v2); }
+    if(v1 < v2) return sortAsc ? -1 : 1;
+    if(v1 > v2) return sortAsc ? 1 : -1;
+    return 0;
+  });
+  renderTableEditor();
+};
+
+window.renameCol = function(oldK) {
+  const newK = prompt('Rename column:', oldK);
+  if(!newK || newK === oldK || tableKeys.includes(newK)) return;
+  tableKeys[tableKeys.indexOf(oldK)] = newK;
+  linksData.forEach(row => {
+    if(row.hasOwnProperty(oldK)) {
+      row[newK] = row[oldK];
+      delete row[oldK];
+    }
+  });
+  rebuildLinksDataKeys();
+  renderTableEditor();
+};
+
+window.deleteCol = function(k) {
+  if(!confirm('Delete column "' + k + '" from ALL rows?')) return;
+  tableKeys = tableKeys.filter(x => x !== k);
+  linksData.forEach(row => delete row[k]);
+  renderTableEditor();
+};
+
+window.addCol = function() {
+  const newK = prompt('New column name:');
+  if(!newK || tableKeys.includes(newK)) return;
+  tableKeys.push(newK);
+  linksData.forEach(row => row[newK] = "");
+  rebuildLinksDataKeys();
+  renderTableEditor();
+};
+
+window.addRow = function() {
+  const newRow = {};
+  tableKeys.forEach(k => newRow[k] = "");
+  linksData.push(newRow);
+  renderTableEditor();
+};
+
+window.deleteRow = function(idx) {
+  if(confirm('Delete row?')) {
+    linksData.splice(idx, 1);
+    renderTableEditor();
+  }
+};
+
 window.moveRow = function(idx, dir) {
   if(idx+dir < 0 || idx+dir >= linksData.length) return;
   const temp = linksData[idx];
@@ -472,16 +596,9 @@ window.moveRow = function(idx, dir) {
   linksData[idx+dir] = temp;
   renderTableEditor();
 };
-window.deleteRow = function(idx) {
-  if(confirm('Delete ' + (linksData[idx].cname||'this item') + '?')) {
-    linksData.splice(idx, 1);
-    renderTableEditor();
-  }
-};
-document.getElementById('addTableItem').addEventListener('click', () => {
-  linksData.push({show:"1", asset:"i", cell:"", fit:"fc", link:"", cname:"", sname:"", attribution:"", comment:""});
-  renderTableEditor();
-});
+
+document.getElementById('addTableItem').addEventListener('click', window.addRow);
+
 document.getElementById('toggleRawJson').addEventListener('click', function() {
   rawJsonMode = !rawJsonMode;
   this.textContent = rawJsonMode ? 'Show Visual Editor' : 'Show Raw JSON';
@@ -494,21 +611,23 @@ document.getElementById('toggleRawJson').addEventListener('click', function() {
     try {
       linksData = JSON.parse(document.getElementById('jsonText').value);
     } catch(e) { alert("Invalid JSON"); rawJsonMode = true; return; }
-    document.getElementById('tableEditor').style.display = 'flex';
+    document.getElementById('tableEditor').style.display = 'block';
     document.getElementById('jsonText').style.display = 'none';
     document.getElementById('addTableItem').style.display = 'block';
+    initTableKeys();
     renderTableEditor();
   }
 });
 
 document.getElementById('miTables').addEventListener('pointerup',e=>{
   e.stopPropagation(); closeMenu();
-  if(!isAdmin()) { alert('Admin privileges required.'); return; }
+  if(typeof isAdmin === 'function' && !isAdmin()) { alert('Admin privileges required.'); return; }
   rawJsonMode = false;
   document.getElementById('toggleRawJson').textContent = 'Show Raw JSON';
-  document.getElementById('tableEditor').style.display = 'flex';
+  document.getElementById('tableEditor').style.display = 'block';
   document.getElementById('jsonText').style.display = 'none';
   document.getElementById('addTableItem').style.display = 'block';
+  initTableKeys();
   renderTableEditor();
   document.getElementById('jsonStatus').textContent='';
   document.getElementById('jsonModal').classList.add('open');
@@ -516,7 +635,7 @@ document.getElementById('miTables').addEventListener('pointerup',e=>{
 document.getElementById('miSaveJson').addEventListener('pointerup',e=>{ e.stopPropagation(); closeMenu(); saveJson(); });
 document.getElementById('miHelp').addEventListener('pointerup',e=>{
   e.stopPropagation(); closeMenu();
-  alert('Mlynx\n\nTap cell image -> fullscreen\nTap empty cell -> quick-fill (Ctrl+S to save)\nHamburger -> Tables (JSON editor), Save JSON (Ctrl+Alt+S), Settings');
+  alert('SeeAndLearn\n\nTap cell image -> fullscreen\nTap empty cell -> quick-fill (Ctrl+S to save)\nHamburger -> Tables (JSON editor), Save JSON (Ctrl+Alt+S), Settings');
 });
 document.getElementById('miSettings').addEventListener('pointerup',e=>{
   e.stopPropagation();
@@ -634,7 +753,6 @@ document.getElementById('jsonApply').addEventListener('pointerup',()=>{
       if(!Array.isArray(d)) throw new Error('Expected array');
       linksData=d;
     }
-    // If not raw mode, linksData is already updated via input event listeners
     localStorage.setItem('seeandlearn-links',JSON.stringify(linksData));
     document.getElementById('jsonModal').classList.remove('open');
     render();
@@ -690,7 +808,13 @@ async function pushToGitHub() {
       body: JSON.stringify({ message: 'Update links.json via SeeAndLearn', content: contentB64, sha })
     });
 
-    if (putRes.ok) alert('✅ Successfully pushed to GitHub!');
+    if (putRes.ok) {
+      const t = document.createElement('div');
+      t.textContent = '✅ Successfully pushed to GitHub!';
+      t.style.cssText = 'position:fixed; top:24px; left:50%; transform:translateX(-50%); background:#28a745; color:#fff; padding:12px 24px; border-radius:8px; z-index:99999; box-shadow:0 4px 12px rgba(0,0,0,0.5); font:bold 16px sans-serif; transition:opacity 0.3s;';
+      document.body.appendChild(t);
+      setTimeout(() => { t.style.opacity='0'; setTimeout(()=>t.remove(), 300); }, 1500);
+    }
     else throw new Error(await putRes.text());
   } catch (err) {
     alert('❌ GitHub error: ' + err.message);
