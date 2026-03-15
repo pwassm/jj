@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>SeeAndLearn</title>
+<title>Mlynx</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { overflow: hidden; touch-action: manipulation; background: #000; }
@@ -89,7 +89,7 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
   background: rgba(0,0,0,0.95); align-items: center; justify-content: center;
 }
 #fsWrap.open { display: flex; }
-#fsWrap img { max-width: 95vw; max-height: 95vh; object-fit: contain; cursor: pointer; }
+#fsWrap img { max-width: 95vw; max-height: 95vh; object-fit: contain; }
 #fsClose, #fsClose2 {
   position: absolute; width: 52px; height: 52px;
   background: rgba(255,255,255,0.22); border: none; border-radius: 50%;
@@ -222,6 +222,8 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
 </div>
 
 <div id="fsWrap">
+  <button id="fsClose">&#215;</button>
+  <button id="fsClose2">&#215;</button>
   <img id="fsImg">
 </div>
 
@@ -415,10 +417,9 @@ function openFS(it){
   document.getElementById('fsImg').src=it.link;
   document.getElementById('fsWrap').classList.add('open');
 }
-document.getElementById('fsImg').addEventListener('pointerup',e=>{
-  e.stopPropagation();
-  document.getElementById('fsWrap').classList.remove('open');
-});
+['fsClose','fsClose2'].forEach(id=>
+  document.getElementById(id).addEventListener('pointerup',()=>document.getElementById('fsWrap').classList.remove('open'))
+);
 document.getElementById('fsWrap').addEventListener('pointerup',e=>{
   if(e.target===document.getElementById('fsWrap')) document.getElementById('fsWrap').classList.remove('open');
 });
