@@ -67,7 +67,6 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
 .cell-overlay {
   position: absolute; overflow: hidden; cursor: pointer;
   display: flex; align-items: flex-end; justify-content: center;
-  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
 }
 .cell-overlay img { position: absolute; inset: 0; width: 100%; height: 100%; }
 .cell-overlay img.ei { object-fit: contain; background: rgba(0,0,0,0.15); }
@@ -186,8 +185,6 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
 <div id="menuWrap">
   <div id="menuPanel">
     <div id="menuDateStamp"></div>
-    <div class="menu-item" id="miAdmin" style="opacity:0.5;color:#aaa;pointer-events:none;">&#128274; Admin</div>
-    <div class="menu-divider"></div>
     <div class="menu-item" id="miTables">Tables (JSON editor)</div>
     <div class="menu-divider"></div>
     <div class="menu-item" id="miSaveJson">&#x1F4BE; Save JSON &nbsp;<small style="opacity:.5;font-size:11px">Ctrl+Alt+S</small></div>
@@ -224,6 +221,8 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
 </div>
 
 <div id="fsWrap">
+  <button id="fsClose">&#215;</button>
+  <button id="fsClose2">&#215;</button>
   <img id="fsImg">
 </div>
 
@@ -290,6 +289,42 @@ const wrap      = document.getElementById('rotateWrap');
 const menuWrap  = document.getElementById('menuWrap');
 const menuBtn   = document.getElementById('menuBtn');
 const menuPanel = document.getElementById('menuPanel');
+    const fsWrap = document.getElementById('fsWrap');
+    const fsImg = document.getElementById('fsImg');
+    const miAdmin = document.getElementById('miAdmin');
+    function hasAdminToken(){
+      return !!localStorage.getItem('github-token');
+    }
+    function syncAdminUI(){
+      const admin = hasAdminToken();
+      miAdmin.style.color = admin ? '#9f9' : '#888';
+      miAdmin.style.background = admin ? 'rgba(40,120,40,.35)' : '';
+      miAdmin.textContent = 'Admin' + (admin ? '' : '');
+      document.body.classList.toggle('admin-mode', admin);
+    }
+    async function requestLandscape(){
+      try{
+        const el = document.documentElement;
+        if (!document.fullscreenElement && el.requestFullscreen) {
+          await el.requestFullscreen({ navigationUI: 'hide' }).catch(()=>{});
+        }
+      }catch(e){}
+      try{
+        if (screen.orientation && screen.orientation.lock) {
+          await screen.orientation.lock('landscape');
+        }
+      }catch(e){}
+    }
+    async function closeFS(){
+      fsWrap.classList.remove('open');
+      try{
+        if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock();
+      }catch(e){}
+      try{
+        if (document.fullscreenElement && document.exitFullscreen) await document.exitFullscreen().catch(()=>{});
+      }catch(e){}
+    }
+
 
 // helpers
 function parseCell(s){
@@ -387,7 +422,7 @@ function buildOverlays(){
     div.className='cell-empty';
     div.style.cssText='left:'+(c-1)*cellW+'px;top:'+(r-1)*cellH+'px;width:'+cellW+'px;height:'+cellH+'px;';
     div.title='Add -- '+cs;
-    div.addEventListener('pointerup',e=>{ e.preventDefault(); if(isAdmin()) openQF(cs); });
+    div.addEventListener('pointerup',e=>{ e.preventDefault(); if(hasAdminToken()) openQF(cs); });
     wrap.appendChild(div);
   }
 }
@@ -395,35 +430,15 @@ function buildOverlays(){
 function render(){ renderGrid(); }
 
 // fullscreen
-async function openFS(it){
-  var fsImg=document.getElementById('fsImg');
-  var fsWrap=document.getElementById('fsWrap');
-  fsImg.src=it.link;
-  if(ISMOBILE){
-    try{
-      if(document.documentElement.requestFullscreen && !document.fullscreenElement){
-        await document.documentElement.requestFullscreen();
-      }
-    }catch(e){}
-    try{
-      if(screen.orientation && screen.orientation.lock){
-        await screen.orientation.lock('landscape');
-      }
-    }catch(e){}
-  }
-  fsWrap.classList.add('open');
+function openFS(it){
+  document.getElementById('fsImg').src=it.link;
+  document.getElementById('fsWrap').classList.add('open');
 }
-async function closeFS(){
-  var fsWrap=document.getElementById('fsWrap');
-  fsWrap.classList.remove('open');
-  try{ if(screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); }catch(e){}
-  try{ if(document.fullscreenElement && document.exitFullscreen) await document.exitFullscreen(); }catch(e){}
-}
-document.getElementById('fsImg').addEventListener('pointerup',function(e){
-  e.stopPropagation(); closeFS();
-});
-document.getElementById('fsWrap').addEventListener('pointerup',function(e){
-  if(e.target===document.getElementById('fsWrap')) closeFS();
+['fsClose','fsClose2'].forEach(id=>
+  document.getElementById(id).addEventListener('pointerup',()=>document.getElementById('fsWrap').classList.remove('open'))
+);
+document.getElementById('fsWrap').addEventListener('pointerup',e=>{
+  if(e.target===document.getElementById('fsWrap')) document.getElementById('fsWrap').classList.remove('open');
 });
 
 // menu
@@ -451,7 +466,7 @@ document.getElementById('miTables').addEventListener('pointerup',e=>{
 document.getElementById('miSaveJson').addEventListener('pointerup',e=>{ e.stopPropagation(); closeMenu(); saveJson(); });
 document.getElementById('miHelp').addEventListener('pointerup',e=>{
   e.stopPropagation(); closeMenu();
-  alert('Mlynx\n\nTap cell image -> fullscreen\nTap empty cell -> quick-fill (Ctrl+S to save)\nHamburger -> Tables (JSON editor), Save JSON (Ctrl+Alt+S), Settings');
+  alert('SeeAndLearn\n\nTap cell image -> fullscreen\nTap empty cell -> quick-fill (Ctrl+S to save)\nHamburger -> Tables (JSON editor), Save JSON (Ctrl+Alt+S), Settings');
 });
 document.getElementById('miSettings').addEventListener('pointerup',e=>{
   e.stopPropagation();
@@ -465,7 +480,7 @@ function syncFit(){
   document.getElementById('fitLabel').textContent=fitMode==='ei'?'Img: Entire Image':'Img: Fill Cell';
 }
 document.getElementById('togFit').addEventListener('change',function(){
-  fitMode=this.checked?'ei':'fc'; localStorage.setItem('seeandlearn-fit',fitMode); syncFit(); render();
+  fitMode=this.checked?'ei':'fc'; localStorage.setItem('mlynx-fit',fitMode); syncFit(); render();
 });
 document.getElementById('togCellLbl').addEventListener('change',function(){ showCellLbl=this.checked; render(); });
 document.getElementById('togCname').addEventListener('change',function(){ showCname=this.checked; render(); });
@@ -484,7 +499,7 @@ document.addEventListener('keydown',e=>{
 
 // Save JSON
 function saveJson(){
-  localStorage.setItem('seeandlearn-links',JSON.stringify(linksData));
+  localStorage.setItem('mlynx-links',JSON.stringify(linksData));
   const blob=new Blob([JSON.stringify(linksData,null,2)],{type:'application/json'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob); a.download='links.json';
@@ -531,7 +546,7 @@ function qfSave(){
   let e=linksData.find(it=>it.cell===qfCell);
   if(e) Object.assign(e,{show:'1',asset,fit,link,cname,sname,attribution:attrib,comment});
   else  linksData.push({show:'1',asset,cell:qfCell,fit,link,cname,sname,attribution:attrib,comment});
-  localStorage.setItem('seeandlearn-links',JSON.stringify(linksData));
+  localStorage.setItem('mlynx-links',JSON.stringify(linksData));
   document.getElementById('qfModal').classList.remove('open');
   render();
 }
@@ -567,7 +582,7 @@ document.getElementById('jsonApply').addEventListener('pointerup',()=>{
     const d=JSON.parse(document.getElementById('jsonText').value);
     if(!Array.isArray(d)) throw new Error('Expected array');
     linksData=d;
-    localStorage.setItem('seeandlearn-links',JSON.stringify(linksData));
+    localStorage.setItem('mlynx-links',JSON.stringify(linksData));
     document.getElementById('jsonModal').classList.remove('open');
     render();
   }catch(e){ document.getElementById('jsonStatus').textContent='Error: '+e.message; }
@@ -671,7 +686,7 @@ if (tokenInputEl) {
 }
 
 async function init(){
-  setupLayout(); syncFit(); syncAdminUI();
+  setupLayout(); syncFit();
   try{
     const r=await fetch('links.json?v='+Date.now());
     linksData=await r.json();
