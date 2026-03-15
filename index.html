@@ -272,6 +272,7 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
     <div id="jsonBtns">
       <button id="jsonCancel">Cancel</button>
       <button class="save" id="jsonApply">Apply</button>
+      <button class="save" id="jsonPush" style="border-color:#4af; color:#8ef;">Push to GitHub</button>
       <button id="jsonDl">Download links.json</button>
     </div>
     <div id="jsonStatus"></div>
@@ -466,7 +467,6 @@ window.renderTableEditor = function() {
 
   let html = '<div style="display:table; width:100%; border-collapse:collapse; color:#fff; font-family:sans-serif; font-size:13px;">';
 
-  // Header row
   html += '<div style="display:table-row; background:#222; font-weight:bold; position:sticky; top:0; z-index:10;">';
   html += '<div style="display:table-cell; padding:8px; border:1px solid #444; width:30px; text-align:center;">#</div>';
 
@@ -477,7 +477,7 @@ window.renderTableEditor = function() {
                   ondragover="event.preventDefault()"
                   ondrop="colDrop(event, ${i})">
                <div style="display:flex; justify-content:space-between; align-items:center; resize:horizontal; overflow:hidden; min-width:100px; padding:6px;">
-                 <span style="cursor:pointer; flex:1;" onclick="sortData('${k}')">${k} ${sortCol===k?(sortAsc?'\u25B2':'\u25BC'):''}</span>
+                 <span style="cursor:pointer; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" onclick="sortData('${k}')" title="Sort by ${k}">${k} ${sortCol===k?(sortAsc?'\u25B2':'\u25BC'):''}</span>
                  <span style="display:flex; gap:4px; margin-left:8px;">
                    <button onclick="renameCol('${k}')" style="background:none;border:none;color:#8ef;cursor:pointer;font-size:13px;" title="Rename Column">&#9998;</button>
                    <button onclick="deleteCol('${k}')" style="background:none;border:none;color:#f66;cursor:pointer;font-size:13px;" title="Delete Column">&#10006;</button>
@@ -488,7 +488,6 @@ window.renderTableEditor = function() {
   html += '<div style="display:table-cell; padding:8px; border:1px solid #444; width:60px;"><button onclick="addCol()" style="cursor:pointer;background:#2a2a3e;color:#fff;border:1px solid #555;padding:4px 8px;border-radius:4px;">+ Col</button></div>';
   html += '</div>';
 
-  // Body rows
   linksData.forEach((row, rIdx) => {
     html += `<div style="display:table-row; background:${rIdx%2===0?'#111':'#1a1a1a'};">`;
     html += `<div style="display:table-cell; padding:4px; border:1px solid #444; text-align:center;">
@@ -500,7 +499,7 @@ window.renderTableEditor = function() {
                  <input type="text" value="${val}" onchange="updateCell(${rIdx}, '${k}', this.value)" style="width:100%; height:100%; min-height:30px; background:transparent; color:#fff; border:none; padding:4px 8px; box-sizing:border-box;">
                </div>`;
     });
-    html += `<div style="display:table-cell; padding:4px; border:1px solid #444; text-align:center;">
+    html += `<div style="display:table-cell; padding:4px; border:1px solid #444; text-align:center; min-width:40px;">
                <button onclick="moveRow(${rIdx}, -1)" style="cursor:pointer;background:none;border:none;color:#aaa;font-size:16px;">&#9650;</button>
                <button onclick="moveRow(${rIdx}, 1)" style="cursor:pointer;background:none;border:none;color:#aaa;font-size:16px;">&#9660;</button>
              </div>`;
@@ -512,7 +511,6 @@ window.renderTableEditor = function() {
 };
 
 window.updateCell = function(r, k, v) { linksData[r][k] = v; };
-
 window.colDragStart = function(e, i) { draggedCol = i; };
 window.colDrop = function(e, i) {
   if(draggedCol === -1 || draggedCol === i) return;
@@ -521,7 +519,6 @@ window.colDrop = function(e, i) {
   rebuildLinksDataKeys();
   renderTableEditor();
 };
-
 window.rebuildLinksDataKeys = function() {
   linksData = linksData.map(obj => {
     const newObj = {};
@@ -530,7 +527,6 @@ window.rebuildLinksDataKeys = function() {
     return newObj;
   });
 }
-
 window.sortData = function(k) {
   if(sortCol === k) sortAsc = !sortAsc;
   else { sortCol = k; sortAsc = true; }
@@ -544,7 +540,6 @@ window.sortData = function(k) {
   });
   renderTableEditor();
 };
-
 window.renameCol = function(oldK) {
   const newK = prompt('Rename column:', oldK);
   if(!newK || newK === oldK || tableKeys.includes(newK)) return;
@@ -558,14 +553,12 @@ window.renameCol = function(oldK) {
   rebuildLinksDataKeys();
   renderTableEditor();
 };
-
 window.deleteCol = function(k) {
   if(!confirm('Delete column "' + k + '" from ALL rows?')) return;
   tableKeys = tableKeys.filter(x => x !== k);
   linksData.forEach(row => delete row[k]);
   renderTableEditor();
 };
-
 window.addCol = function() {
   const newK = prompt('New column name:');
   if(!newK || tableKeys.includes(newK)) return;
@@ -574,21 +567,18 @@ window.addCol = function() {
   rebuildLinksDataKeys();
   renderTableEditor();
 };
-
 window.addRow = function() {
   const newRow = {};
   tableKeys.forEach(k => newRow[k] = "");
   linksData.push(newRow);
   renderTableEditor();
 };
-
 window.deleteRow = function(idx) {
   if(confirm('Delete row?')) {
     linksData.splice(idx, 1);
     renderTableEditor();
   }
 };
-
 window.moveRow = function(idx, dir) {
   if(idx+dir < 0 || idx+dir >= linksData.length) return;
   const temp = linksData[idx];
@@ -598,7 +588,6 @@ window.moveRow = function(idx, dir) {
 };
 
 document.getElementById('addTableItem').addEventListener('click', window.addRow);
-
 document.getElementById('toggleRawJson').addEventListener('click', function() {
   rawJsonMode = !rawJsonMode;
   this.textContent = rawJsonMode ? 'Show Visual Editor' : 'Show Raw JSON';
@@ -746,8 +735,8 @@ document.getElementById('qfPasteBtn').addEventListener('pointerup',async e=>{
 });
 
 // JSON editor
-document.getElementById('jsonApply').addEventListener('pointerup',()=>{
-  try{
+function applyJsonChanges() {
+  try {
     if(rawJsonMode) {
       const d=JSON.parse(document.getElementById('jsonText').value);
       if(!Array.isArray(d)) throw new Error('Expected array');
@@ -756,7 +745,19 @@ document.getElementById('jsonApply').addEventListener('pointerup',()=>{
     localStorage.setItem('seeandlearn-links',JSON.stringify(linksData));
     document.getElementById('jsonModal').classList.remove('open');
     render();
-  }catch(e){ document.getElementById('jsonStatus').textContent='Error: '+e.message; }
+    return true;
+  } catch(e) { 
+    document.getElementById('jsonStatus').textContent='Error: '+e.message; 
+    return false;
+  }
+}
+
+document.getElementById('jsonApply').addEventListener('pointerup', applyJsonChanges);
+
+document.getElementById('jsonPush').addEventListener('pointerup', () => {
+  if (applyJsonChanges()) {
+    pushToGitHub();
+  }
 });
 document.getElementById('jsonDl').addEventListener('pointerup',saveJson);
 document.getElementById('jsonCancel').addEventListener('pointerup',()=>document.getElementById('jsonModal').classList.remove('open'));
@@ -811,7 +812,7 @@ async function pushToGitHub() {
     if (putRes.ok) {
       const t = document.createElement('div');
       t.textContent = '✅ Successfully pushed to GitHub!';
-      t.style.cssText = 'position:fixed; top:24px; left:50%; transform:translateX(-50%); background:#28a745; color:#fff; padding:12px 24px; border-radius:8px; z-index:99999; box-shadow:0 4px 12px rgba(0,0,0,0.5); font:bold 16px sans-serif; transition:opacity 0.3s;';
+      t.style.cssText = 'position:fixed; top:60%; left:50%; transform:translate(-50%, -50%); background:#28a745; color:#fff; padding:12px 24px; border-radius:8px; z-index:99999; box-shadow:0 4px 12px rgba(0,0,0,0.5); font:bold 16px sans-serif; transition:opacity 0.3s; pointer-events:none;';
       document.body.appendChild(t);
       setTimeout(() => { t.style.opacity='0'; setTimeout(()=>t.remove(), 300); }, 1500);
     }
