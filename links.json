@@ -1,67 +1,67 @@
 [
   {
+    "sname": "Stereolepis gigas",
     "show": "1",
     "asset": "i",
     "cell": "1a",
     "fit": "",
     "link": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b8/Giant_Sea_Bass%2C_CAS.jpg/1920px-Giant_Sea_Bass%2C_CAS.jpg",
     "cname": "Giant Sea Bass",
-    "sname": "Stereolepis gigas",
     "attribution": "Caitlin Childs - https://www.flickr.com/photos/nerdcoregirl/3135135560/",
     "comment": "California Academy of Sciences"
   },
   {
+    "sname": "Megalodicopia hians",
     "show": "1",
     "asset": "i",
     "cell": "2b",
     "fit": "ei",
     "link": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/Predatory_tunicate_-_MBA.png/960px-Predatory_tunicate_-_MBA.png",
     "cname": "Predatory Tunicate",
-    "sname": "Megalodicopia hians",
     "attribution": "By Eric Polk - Own work, CC BY-SA 4.0, https://commons.wikimedia.org/w/index.php?curid=134515763",
     "comment": "The predatory tunicate (Megalodicopia hians), also known as the ghostfish,[2] is a species of tunicate which lives anchored along deep-sea canyon walls and the seafloor. It is unique among tunicates in that, rather than being a filter feeder, it has adapted to life as an ambush predator. Its mouth-like siphon is quick to close whenever a small animal such as a crustacean or a fish drifts inside. Once the predatory tunicate catches a meal, it keeps its trap shut until the animal inside is digested. They are known to live in the Monterey Canyon at depths of 200–1,000 metres (660–3,280 ft). They mostly feed on zooplankton and other tiny animals. Their bodies are roughly 5 inches (13 cm) across.[3] "
   },
   {
+    "sname": "Sebastes flavidus",
     "show": "1",
     "asset": "i",
     "cell": "3c",
     "fit": "fc",
     "link": "https://sealifeandmore.org/wp-content/uploads/2025/07/codblackface_20250720.gif",
     "cname": "Yellowfin Rockfish",
-    "sname": "Sebastes flavidus",
     "attribution": "My picture!",
     "comment": "Hemifacial melanosis"
   },
   {
+    "sname": "Urticina grebelnyi",
     "show": "1",
     "asset": "i",
     "cell": "2c",
     "fit": "",
     "link": "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhGDsij10WBm6WXOjXOxdKUNdqCJ-6_xLHE5XvQTYwT6kq79ziZu-6YoBiwkK_JzZOFxGXzf49ZccVka9XEYvqtEkOv-LSITkotYm-wvR4QnTUPZSqBn_9c5eGyRcOu79B6cbFGQLYZdDA/s640/03-Urticina+crassicornis+-+painted+anemone.jpg",
     "cname": "Painted Anemone",
-    "sname": "Urticina grebelnyi",
     "attribution": "",
     "comment": ""
   },
   {
+    "sname": "Condylactis gigantea",
     "show": "1",
     "asset": "i",
     "cell": "4c",
     "fit": "",
     "link": "https://media.gettyimages.com/id/1391217720/photo/giant-anemone.webp?s=2048x2048&w=gi&k=20&c=jNfAom9W5lJi6VI_EfrmDbw55u3P0ajRLMQMvDE7ZZs=",
     "cname": "Giant Anemone",
-    "sname": "Condylactis gigantea",
     "attribution": "",
     "comment": ""
   },
   {
+    "sname": "",
     "show": "1",
     "asset": "i",
     "cell": "3a",
     "fit": "",
     "link": "https://media.gettyimages.com/id/2160004705/photo/yellowtail-rockfish.jpg?s=2048x2048&w=gi&k=20&c=AsQz3l7PucZGsbRppRpA5ab3aX7oviBGpZ0MFA7nrJ0=",
     "cname": "",
-    "sname": "",
     "attribution": "",
     "comment": ""
   }
