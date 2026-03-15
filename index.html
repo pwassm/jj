@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>Mlynx</title>
+<title>SeeAndLearn</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { overflow: hidden; touch-action: manipulation; background: #000; }
@@ -67,6 +67,7 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
 .cell-overlay {
   position: absolute; overflow: hidden; cursor: pointer;
   display: flex; align-items: flex-end; justify-content: center;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
 }
 .cell-overlay img { position: absolute; inset: 0; width: 100%; height: 100%; }
 .cell-overlay img.ei { object-fit: contain; background: rgba(0,0,0,0.15); }
@@ -185,6 +186,8 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
 <div id="menuWrap">
   <div id="menuPanel">
     <div id="menuDateStamp"></div>
+    <div class="menu-item" id="miAdmin" style="opacity:0.5;color:#aaa;pointer-events:none;">&#128274; Admin</div>
+    <div class="menu-divider"></div>
     <div class="menu-item" id="miTables">Tables (JSON editor)</div>
     <div class="menu-divider"></div>
     <div class="menu-item" id="miSaveJson">&#x1F4BE; Save JSON &nbsp;<small style="opacity:.5;font-size:11px">Ctrl+Alt+S</small></div>
@@ -221,8 +224,6 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
 </div>
 
 <div id="fsWrap">
-  <button id="fsClose">&#215;</button>
-  <button id="fsClose2">&#215;</button>
   <img id="fsImg">
 </div>
 
@@ -279,7 +280,7 @@ const COLS=5, ROWS=5, LETTERS="abcde";
 const ISMOBILE = ('ontouchstart' in window) || navigator.maxTouchPoints>0;
 
 let GW=0, GH=0, cellW=0, cellH=0, isPortrait=false, bgColor='#c8ddf0';
-let fitMode = localStorage.getItem("seeandlearn-fit")||"fc";
+let fitMode = localStorage.getItem("mlynx-fit")||"fc";
 let showCellLbl=false, showCname=true;
 let linksData=[];
 
@@ -386,7 +387,7 @@ function buildOverlays(){
     div.className='cell-empty';
     div.style.cssText='left:'+(c-1)*cellW+'px;top:'+(r-1)*cellH+'px;width:'+cellW+'px;height:'+cellH+'px;';
     div.title='Add -- '+cs;
-    div.addEventListener('pointerup',e=>{ e.preventDefault(); openQF(cs); });
+    div.addEventListener('pointerup',e=>{ e.preventDefault(); if(isAdmin()) openQF(cs); });
     wrap.appendChild(div);
   }
 }
@@ -394,15 +395,35 @@ function buildOverlays(){
 function render(){ renderGrid(); }
 
 // fullscreen
-function openFS(it){
-  document.getElementById('fsImg').src=it.link;
-  document.getElementById('fsWrap').classList.add('open');
+async function openFS(it){
+  var fsImg=document.getElementById('fsImg');
+  var fsWrap=document.getElementById('fsWrap');
+  fsImg.src=it.link;
+  if(ISMOBILE){
+    try{
+      if(document.documentElement.requestFullscreen && !document.fullscreenElement){
+        await document.documentElement.requestFullscreen();
+      }
+    }catch(e){}
+    try{
+      if(screen.orientation && screen.orientation.lock){
+        await screen.orientation.lock('landscape');
+      }
+    }catch(e){}
+  }
+  fsWrap.classList.add('open');
 }
-['fsClose','fsClose2'].forEach(id=>
-  document.getElementById(id).addEventListener('pointerup',()=>document.getElementById('fsWrap').classList.remove('open'))
-);
-document.getElementById('fsWrap').addEventListener('pointerup',e=>{
-  if(e.target===document.getElementById('fsWrap')) document.getElementById('fsWrap').classList.remove('open');
+async function closeFS(){
+  var fsWrap=document.getElementById('fsWrap');
+  fsWrap.classList.remove('open');
+  try{ if(screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); }catch(e){}
+  try{ if(document.fullscreenElement && document.exitFullscreen) await document.exitFullscreen(); }catch(e){}
+}
+document.getElementById('fsImg').addEventListener('pointerup',function(e){
+  e.stopPropagation(); closeFS();
+});
+document.getElementById('fsWrap').addEventListener('pointerup',function(e){
+  if(e.target===document.getElementById('fsWrap')) closeFS();
 });
 
 // menu
