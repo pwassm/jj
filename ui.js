@@ -85,7 +85,7 @@ function doColResize(e) {
   }
   const clientX = e.clientX || (e.touches ? e.touches[0].clientX : startX);
   let newW = startW + (clientX - startX);
-  if(newW < 60) newW = 60;
+  if(newW < 24) newW = 24;
   colWidths[currentResizingCol] = newW;
   const th = document.getElementById('th-'+currentResizingCol);
   if(th) {
@@ -166,16 +166,18 @@ window.renderTableEditor = function() {
 
   tableKeys.forEach((k, i) => {
     let w = colWidths[k] || 150;
-    html += `<div id="th-${k}" style="display:table-cell; border:1px solid #444; background:#222; width:${w}px; min-width:${w}px; max-width:${w}px; position:relative;" 
+    html += `<div id="th-${k}" style="display:table-cell; border:1px solid #444; background:#222; width:${w}px; min-width:${w}px; max-width:${w}px; position:sticky; top:0; z-index:10; box-shadow:inset 0 -1px 0 #555;"
                draggable="true" ondragstart="colDragStart(event, ${i})" ondragover="event.preventDefault(); this.style.background='#444'" ondragleave="this.style.background='#222'" ondrop="this.style.background='#222'; colDrop(event, ${i})">
-               <div style="display:flex; flex-direction:column; justify-content:flex-start; align-items:flex-start; width:100%; height:100%; padding:4px 12px 4px 6px; box-sizing:border-box;">
+               <div style="position:relative; width:100%; min-height:52px; padding:4px 12px 10px 4px; box-sizing:border-box; overflow:hidden;">
 
-                 <div style="display:flex; flex-direction:column; align-items:flex-start; gap:4px; margin-bottom:4px; z-index:11;">
-                   <button onclick="deleteCol('${k}')" style="background:none;border:none;color:#f66;cursor:pointer;font-size:14px;padding:0;line-height:1;text-align:left;" title="Delete Column">&#10006;</button>
-                   <button onclick="renameCol('${k}')" style="background:none;border:none;color:#8ef;cursor:pointer;font-size:14px;padding:0;line-height:1;text-align:left;" title="Rename Column">&#9998;</button>
+                 <div style="display:flex; flex-direction:column; align-items:flex-start; gap:2px; width:14px; margin-bottom:8px;">
+                   <button onclick="deleteCol('${k}')" style="background:none;border:none;color:#f66;cursor:pointer;font-size:14px;padding:0;line-height:1;width:14px;height:14px;text-align:left;" title="Delete Column">&#10006;</button>
+                   <button onclick="renameCol('${k}')" style="background:none;border:none;color:#8ef;cursor:pointer;font-size:14px;padding:0;line-height:1;width:14px;height:14px;text-align:left;" title="Rename Column">&#9998;</button>
                  </div>
 
-                 <span style="cursor:pointer; display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; width:100%; user-select:none; font-size:14px; text-align:left;" onclick="sortData('${k}')" title="Sort by ${k}">${k} ${sortCol===k?(sortAsc?'\u25B2':'\u25BC'):''}</span>
+                 <div style="margin-top:6px; padding-top:4px; border-top:1px solid #3a3a3a; width:100%;">
+                   <span style="cursor:pointer; display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; width:100%; user-select:none; font-size:14px; text-align:left;" onclick="sortData('${k}')" title="Sort by ${k}">${k} ${sortCol===k?(sortAsc?'\u25B2':'\u25BC'):''}</span>
+                 </div>
 
                  <div onpointerdown="initColResize(event, '${k}')" ondragstart="event.preventDefault(); event.stopPropagation();" style="position:absolute; right:0; top:0; width:10px; height:100%; cursor:col-resize; background:transparent; z-index:12; border-left:1px solid #555;" title="Drag to resize"></div>
                </div>
@@ -240,38 +242,69 @@ window.renameCol = function(oldK) {
   linksData.forEach(row => { if(row.hasOwnProperty(oldK)) { row[newK] = row[oldK]; delete row[oldK]; } });
   rebuildLinksDataKeys(); renderTableEditor();
 };
+window.triggerDownload = function(filename, data) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
+
 window.deleteCol = function(k) {
   if(!confirm('Delete column "' + k + '" from ALL rows?')) return;
+  const ts = new Date().toISOString().replace(/[:.]/g, '-');
+  triggerDownload(`links_${ts}.json`, linksData);
   localStorage.setItem('seeandlearn-backup', JSON.stringify(linksData));
-  tableKeys = tableKeys.filter(x => x !== k); linksData.forEach(row => delete row[k]); renderTableEditor();
+  tableKeys = tableKeys.filter(x => x !== k);
+  linksData.forEach(row => delete row[k]);
+  renderTableEditor();
 };
+
 window.addCol = function() {
   const newK = prompt('New column name:');
   if(!newK || tableKeys.includes(newK)) return;
-  tableKeys.push(newK); linksData.forEach(row => row[newK] = ""); rebuildLinksDataKeys(); renderTableEditor();
+  tableKeys.push(newK);
+  linksData.forEach(row => row[newK] = "");
+  rebuildLinksDataKeys();
+  renderTableEditor();
 };
+
 window.addRow = function() {
-  const newRow = {}; tableKeys.forEach(k => newRow[k] = ""); linksData.push(newRow); renderTableEditor();
+  const newRow = {};
+  tableKeys.forEach(k => newRow[k] = "");
+  linksData.push(newRow);
+  renderTableEditor();
 };
+
 window.deleteRow = function(idx) {
-  if(confirm('Delete row?')) { 
+  if(confirm('Delete row?')) {
+    triggerDownload('recycle.json', [linksData[idx]]);
     recycleData.push(linksData[idx]);
     localStorage.setItem('seeandlearn-recycle', JSON.stringify(recycleData));
-    linksData.splice(idx, 1); 
-    selectedRows.delete(idx); 
-    renderTableEditor(); 
+    linksData.splice(idx, 1);
+    selectedRows.delete(idx);
+    renderTableEditor();
   }
 };
+
 document.getElementById('deleteSelectedRows').addEventListener('click', () => {
   if(selectedRows.size === 0) return;
   if(confirm(`Delete ${selectedRows.size} selected rows?`)) {
     const indices = Array.from(selectedRows).sort((a,b)=>b-a);
+    const deleted = [];
     indices.forEach(i => {
+      deleted.push(linksData[i]);
       recycleData.push(linksData[i]);
       linksData.splice(i, 1);
     });
+    triggerDownload('recycle.json', deleted);
     localStorage.setItem('seeandlearn-recycle', JSON.stringify(recycleData));
-    selectedRows.clear(); renderTableEditor();
+    selectedRows.clear();
+    renderTableEditor();
   }
 });
 window.moveRow = function(idx, dir) {

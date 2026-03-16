@@ -76,10 +76,10 @@ function applyJsonChanges() {
     render(); return true;
   } catch(e) { document.getElementById('jsonStatus').textContent='Error: '+e.message; return false; }
 }
-document.getElementById('jsonApply').addEventListener('pointerup', applyJsonChanges);
-document.getElementById('jsonPush').addEventListener('pointerup', (e) => { e.preventDefault(); e.stopPropagation(); if (applyJsonChanges()) { window.pushToGitHub(); } });
-document.getElementById('jsonDl').addEventListener('pointerup',saveJson);
-document.getElementById('jsonCancel').addEventListener('pointerup',()=>document.getElementById('jsonModal').classList.remove('open'));
+document.getElementById('jsonApply').addEventListener('click', applyJsonChanges);
+document.getElementById('jsonPush').addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); if (applyJsonChanges()) { window.pushToGitHub(); } });
+document.getElementById('jsonDl').addEventListener('click',saveJson);
+document.getElementById('jsonCancel').addEventListener('click',()=>document.getElementById('jsonModal').classList.remove('open'));
 document.getElementById('jsonModal').addEventListener('pointerup',e=>e.stopPropagation());
 document.getElementById('jsonText').addEventListener('keydown',e=>{
   if(e.ctrlKey&&e.key.toLowerCase()==='s'){ e.preventDefault(); document.getElementById('jsonApply').dispatchEvent(new Event('pointerup')); }
