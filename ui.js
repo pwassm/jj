@@ -168,14 +168,15 @@ window.renderTableEditor = function() {
     let w = colWidths[k] || 150;
     html += `<div id="th-${k}" style="display:table-cell; border:1px solid #444; background:#222; width:${w}px; min-width:${w}px; max-width:${w}px; position:relative;" 
                draggable="true" ondragstart="colDragStart(event, ${i})" ondragover="event.preventDefault(); this.style.background='#444'" ondragleave="this.style.background='#222'" ondrop="this.style.background='#222'; colDrop(event, ${i})">
-               <div style="width:100%; height:100%; box-sizing:border-box;">
-                 <div style="position:absolute; top:4px; left:6px; display:flex; gap:6px; z-index:11;">
+               <div style="display:flex; flex-direction:column; justify-content:flex-start; align-items:flex-start; width:100%; height:100%; padding:4px 12px 4px 6px; box-sizing:border-box;">
+
+                 <div style="display:flex; gap:6px; margin-bottom:4px; z-index:11;">
                    <button onclick="deleteCol('${k}')" style="background:none;border:none;color:#f66;cursor:pointer;font-size:14px;padding:0;line-height:1;" title="Delete Column">&#10006;</button>
                    <button onclick="renameCol('${k}')" style="background:none;border:none;color:#8ef;cursor:pointer;font-size:14px;padding:0;line-height:1;" title="Rename Column">&#9998;</button>
                  </div>
-                 <div style="padding:6px; padding-top:22px; width:100%; box-sizing:border-box;">
-                   <span style="cursor:pointer; display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; width:100%; user-select:none;" onclick="sortData('${k}')" title="Sort by ${k}">${k} ${sortCol===k?(sortAsc?'\u25B2':'\u25BC'):''}</span>
-                 </div>
+
+                 <span style="cursor:pointer; display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; width:100%; user-select:none; font-size:14px; text-align:left;" onclick="sortData('${k}')" title="Sort by ${k}">${k} ${sortCol===k?(sortAsc?'\u25B2':'\u25BC'):''}</span>
+
                  <div onpointerdown="initColResize(event, '${k}')" ondragstart="event.preventDefault(); event.stopPropagation();" style="position:absolute; right:0; top:0; width:10px; height:100%; cursor:col-resize; background:transparent; z-index:12; border-left:1px solid #555;" title="Drag to resize"></div>
                </div>
              </div>`;
