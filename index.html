@@ -211,14 +211,11 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
         <label class="tog"><input type="checkbox" id="togGithub"><span class="tog-slider"></span></label>
       </div>
       <div class="github-token-setup" id="githubTokenSetup">
-        <label for="tokenInput">GitHub PAT (Token)</label>
-        <input type="password" id="tokenInput" class="token-input" placeholder="github_pat_..." style="margin-bottom:6px;">
-        <label for="ownerInput">GitHub Owner (Username)</label>
-        <input type="text" id="ownerInput" class="token-input" placeholder="e.g. torvalds" style="margin-bottom:6px;">
-        <label for="repoInput">Repository Name</label>
-        <input type="text" id="repoInput" class="token-input" placeholder="e.g. my-repo" style="margin-bottom:6px;">
+        <label for="tokenInput">GitHub Fine-Grained PAT (Contents:Write)</label>
+        <input type="password" id="tokenInput" class="token-input" placeholder="github_pat_...">
         <div class="token-status" id="tokenStatus"></div>
-      </div>/div>
+      </div>
+    </div>
     <div class="menu-divider"></div>
     <div class="menu-item" id="miHelp">Help</div>
   </div>
@@ -592,14 +589,14 @@ window.renderTableEditor = function() {
 
   tableKeys.forEach((k, i) => {
     let w = colWidths[k] || 150;
-    html += `<div id="th-${k}" style="display:table-cell; border:1px solid #444; background:#222; width:${w}px; min-width:${w}px; max-width:${w}px; vertical-align:top;">
-               <div style="display:flex; justify-content:space-between; align-items:center; width:100%; height:100%; padding:4px 6px; box-sizing:border-box;">
-                 <div style="display:flex; flex-direction:column; gap:4px; margin-right:6px; align-items:center; flex-shrink:0;">
-                   <button onclick="deleteCol('${k}')" style="background:none;border:none;color:#f66;cursor:pointer;font-size:11px;padding:0;line-height:1;" title="Delete Column">&#10006;</button>
-                   <button onclick="renameCol('${k}')" style="background:none;border:none;color:#8ef;cursor:pointer;font-size:11px;padding:0;line-height:1;" title="Rename Column">&#9998;</button>
-                 </div>
-                 <span draggable="true" ondragstart="colDragStart(event, ${i})" ondragover="event.preventDefault()" ondrop="colDrop(event, ${i})" style="cursor:pointer; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px;" onclick="sortData('${k}')" title="Sort by ${k}">${k} ${sortCol===k?(sortAsc?'\u25B2':'\u25BC'):''}</span>
-                 <div onpointerdown="initColResize(event, '${k}')" onmousedown="event.stopPropagation()" ondragstart="event.preventDefault(); event.stopPropagation();" style="width:10px; height:20px; cursor:col-resize; margin-left:4px; border-left:2px solid #555; border-right:2px solid #555; background:transparent; flex:0 0 auto;" title="Drag to resize"></div>
+    html += `<div id="th-${k}" style="display:table-cell; border:1px solid #444; background:#222; width:${w}px; min-width:${w}px; max-width:${w}px;">
+               <div style="display:flex; justify-content:space-between; align-items:center; width:100%; height:100%; padding:6px; box-sizing:border-box;">
+                 <span draggable="true" ondragstart="colDragStart(event, ${i})" ondragover="event.preventDefault()" ondrop="colDrop(event, ${i})" style="cursor:pointer; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" onclick="sortData('${k}')" title="Sort by ${k}">${k} ${sortCol===k?(sortAsc?'\u25B2':'\u25BC'):''}</span>
+                 <span style="display:flex; gap:4px; margin-left:6px; align-items:center;">
+                   <button onclick="renameCol('${k}')" style="background:none;border:none;color:#8ef;cursor:pointer;font-size:13px;padding:0;" title="Rename Column">&#9998;</button>
+                   <button onclick="deleteCol('${k}')" style="background:none;border:none;color:#f66;cursor:pointer;font-size:13px;padding:0;" title="Delete Column">&#10006;</button>
+                   <div onpointerdown="initColResize(event, '${k}')" ondragstart="event.preventDefault(); event.stopPropagation();" style="width:10px; height:20px; cursor:col-resize; margin-left:4px; border-left:2px solid #555; border-right:2px solid #555; background:transparent; flex:0 0 auto;" title="Drag to resize"></div>
+                 </span>
                </div>
              </div>`;
   });
@@ -861,96 +858,50 @@ document.getElementById('jsonText').addEventListener('keydown',e=>{
 
 // bootstrap
 // --- GITHUB INTEGRATION ---
-async function pushFileToGitHub(path, dataObj) {
-  const token = localStorage.getItem('github-token');
-  const owner = localStorage.getItem('github-owner');
-  const repo = localStorage.getItem('github-repo');
-  const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
-  const headers = { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json' };
-
-  let sha;
-  try {
-    const getRes = await fetch(apiUrl, { headers });
-    if (getRes.ok) {
-      const getJson = await getRes.json();
-      sha = getJson.sha;
-    }
-  } catch(e) {}
-
-  const jsonText = JSON.stringify(dataObj, null, 2);
-  const contentB64 = btoa(unescape(encodeURIComponent(jsonText)));
-  const body = { message: `Update ${path} via SeeAndLearn`, content: contentB64 };
-  if(sha) body.sha = sha;
-
-  const putRes = await fetch(apiUrl, { method: 'PUT', headers, body: JSON.stringify(body) });
-  if(!putRes.ok) {
-    const errText = await putRes.text();
-    throw new Error(`Failed to push ${path}: ` + errText);
-  }
-}
-
 async function pushToGitHub() {
   const token = localStorage.getItem('github-token');
-  let owner = localStorage.getItem('github-owner');
-  let repo = localStorage.getItem('github-repo');
-
-  if (!owner || !repo) {
-    if (window.location.hostname.includes('github.io')) {
-      owner = owner || window.location.hostname.split('.')[0];
-      repo = repo || window.location.pathname.split('/')[1] || '';
-      if(owner) localStorage.setItem('github-owner', owner);
-      if(repo) localStorage.setItem('github-repo', repo);
-      const oi = document.getElementById('ownerInput');
-      if(oi) oi.value = owner;
-      const ri = document.getElementById('repoInput');
-      if(ri) ri.value = repo;
-    }
-  }
-
-  if (!token || !owner || !repo) {
-    alert("Please set your Token, Owner, and Repo in Settings (Admin).");
+  if (!token) {
+    alert("1. Open Settings -> Turn on GitHub Sync\n2. Paste your token and press Enter");
     document.getElementById('settingsPanel').classList.add('open');
     const tg = document.getElementById('togGithub');
     if (tg) tg.checked = true;
     const setup = document.getElementById('githubTokenSetup');
     if (setup) setup.classList.add('open');
-    if (!token) {
-      const inp = document.getElementById('tokenInput');
-      if (inp) inp.focus();
-    } else if (!owner) {
-      const inp = document.getElementById('ownerInput');
-      if (inp) inp.focus();
-    } else {
-      const inp = document.getElementById('repoInput');
-      if (inp) inp.focus();
-    }
+    const inp = document.getElementById('tokenInput');
+    if (inp) inp.focus();
     return;
   }
+  let owner = localStorage.getItem('github-owner') || '';
+  let repo = localStorage.getItem('github-repo') || '';
+  owner = prompt('GitHub Owner (username):', owner) || '';
+  repo = prompt('Repository Name:', repo) || '';
+  if (!owner || !repo) return;
 
-  const t = document.createElement('div');
-  t.textContent = '⏳ Pushing to GitHub...';
-  t.style.cssText = 'position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:#0055aa; color:#fff; padding:16px 32px; border-radius:12px; z-index:999999; box-shadow:0 8px 24px rgba(0,0,0,0.6); font:bold 18px sans-serif; transition:opacity 0.3s; pointer-events:none;';
-  document.body.appendChild(t);
+  localStorage.setItem('github-owner', owner);
+  localStorage.setItem('github-repo', repo);
 
   try {
-    await pushFileToGitHub('links.json', linksData);
-    const recycleStr = localStorage.getItem('seeandlearn-recycle');
-    if(recycleStr) {
-       const recData = JSON.parse(recycleStr);
-       if(recData.length > 0) await pushFileToGitHub('recycle.json', recData);
-    }
-    const backupStr = localStorage.getItem('seeandlearn-backup');
-    if(backupStr) {
-       await pushFileToGitHub('backup.json', JSON.parse(backupStr));
-       localStorage.removeItem('seeandlearn-backup');
-    }
-    t.textContent = '✅ Successfully pushed to GitHub!';
-    t.style.background = '#28a745';
-    setTimeout(() => { t.style.opacity='0'; setTimeout(()=>t.remove(), 300); }, 2000);
+    const path = 'links.json';
+    const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+    const headers = { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json' };
+
+    const getRes = await fetch(apiUrl, { headers });
+    if (!getRes.ok) throw new Error('Could not find repository or file. Check permissions.');
+    const { sha } = await getRes.json();
+
+    const jsonText = JSON.stringify(linksData, null, 2);
+    const contentB64 = btoa(unescape(encodeURIComponent(jsonText)));
+
+    const putRes = await fetch(apiUrl, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({ message: 'Update links.json via SeeAndLearn', content: contentB64, sha })
+    });
+
+    if (putRes.ok) alert('✅ Successfully pushed to GitHub!');
+    else throw new Error(await putRes.text());
   } catch (err) {
-    t.textContent = '❌ GitHub error: ' + err.message;
-    t.style.background = '#dc3545';
-    setTimeout(() => { t.style.opacity='0'; setTimeout(()=>t.remove(), 300); }, 3500);
+    alert('❌ GitHub error: ' + err.message);
   }
 }
 
