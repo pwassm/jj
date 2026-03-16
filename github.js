@@ -1,5 +1,22 @@
 // --- GITHUB INTEGRATION ---
-async function pushToGitHub() {
+
+function showGhBalloon(msg, duration=2000) {
+  let b = document.getElementById('gh-balloon');
+  if(!b) {
+    b = document.createElement('div');
+    b.id = 'gh-balloon';
+    b.style.cssText = 'position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:rgba(0,0,0,0.85); color:#fff; padding:15px 25px; border-radius:8px; border:1px solid #4af; z-index:10000; font-family:sans-serif; font-size:16px; text-align:center; pointer-events:none; box-shadow: 0 4px 12px rgba(0,0,0,0.5);';
+    document.body.appendChild(b);
+  }
+  b.textContent = msg;
+  b.style.display = 'block';
+  if(b.timeoutId) clearTimeout(b.timeoutId);
+  if(duration > 0) {
+    b.timeoutId = setTimeout(() => { b.style.display = 'none'; }, duration);
+  }
+}
+
+window.pushToGitHub = async function() {
   const token = localStorage.getItem('github-token');
   if (!token) {
     alert("1. Open Settings -> Turn on GitHub Sync\n2. Paste your token and press Enter");
@@ -12,14 +29,17 @@ async function pushToGitHub() {
     if (inp) inp.focus();
     return;
   }
-  let owner = localStorage.getItem('github-owner') || '';
-  let repo = localStorage.getItem('github-repo') || '';
-  owner = prompt('GitHub Owner (username):', owner) || '';
-  repo = prompt('Repository Name:', repo) || '';
-  if (!owner || !repo) return;
+  let owner = localStorage.getItem('github-owner');
+  let repo = localStorage.getItem('github-repo');
+  if (!owner || !repo) {
+    owner = prompt('GitHub Owner (username):', owner || '') || '';
+    repo = prompt('Repository Name:', repo || '') || '';
+    if (!owner || !repo) return;
+    localStorage.setItem('github-owner', owner);
+    localStorage.setItem('github-repo', repo);
+  }
 
-  localStorage.setItem('github-owner', owner);
-  localStorage.setItem('github-repo', repo);
+  showGhBalloon("Pushing to GitHub...", 0);
 
   try {
     const path = 'links.json';
@@ -27,7 +47,7 @@ async function pushToGitHub() {
     const headers = { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json' };
 
     const getRes = await fetch(apiUrl, { headers });
-    if (!getRes.ok) throw new Error('Could not find repository or file. Check permissions.');
+    if (!getRes.ok) throw new Error('Repository or file not found.');
     const { sha } = await getRes.json();
 
     const jsonText = JSON.stringify(linksData, null, 2);
@@ -39,54 +59,37 @@ async function pushToGitHub() {
       body: JSON.stringify({ message: 'Update links.json via SeeAndLearn', content: contentB64, sha })
     });
 
-    if (putRes.ok) alert('✅ Successfully pushed to GitHub!');
-    else throw new Error(await putRes.text());
+    if (putRes.ok) {
+      showGhBalloon("Successfully pushed to GitHub!", 2000);
+    } else {
+      const errData = await putRes.json();
+      throw new Error(errData.message || 'Push failed');
+    }
   } catch (err) {
-    alert('❌ GitHub error: ' + err.message);
+    showGhBalloon("Error: " + err.message, 3000);
   }
 }
 
 document.getElementById('miPushGithub').addEventListener('pointerup', function(e) {
   e.stopPropagation();
   closeMenu();
-  pushToGitHub();
+  window.pushToGitHub();
 });
 
-const togGithubEl = document.getElementById('togGithub');
-if (togGithubEl) {
-  togGithubEl.addEventListener('change', function() {
-    const setup = document.getElementById('githubTokenSetup');
-    const status = document.getElementById('tokenStatus');
-    if (this.checked) {
-      if (setup) setup.classList.add('open');
-      const saved = localStorage.getItem('github-token');
-      if (status) status.textContent = saved ? '✅ Token loaded from browser' : 'Paste token → press Enter';
-      syncAdminUI();
-      if (!saved) {
-        const inp = document.getElementById('tokenInput');
-        if (inp) inp.focus();
-      }
-    } else {
-      if (setup) setup.classList.remove('open');
-    }
-  });
-}
+document.getElementById('togGithub').addEventListener('change', function(e) {
+  const s = document.getElementById('githubTokenSetup');
+  if (e.target.checked) s.classList.add('open');
+  else s.classList.remove('open');
+});
 
-const tokenInputEl = document.getElementById('tokenInput');
-if (tokenInputEl) {
-  tokenInputEl.addEventListener('change', function() {
-    const t = this.value.trim();
-    if (t) {
-      localStorage.setItem('github-token', t);
+document.getElementById('tokenInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') {
+    const val = this.value.trim();
+    if (val) {
+      localStorage.setItem('github-token', val);
+      alert('Token saved!');
       syncAdminUI();
-      const status = document.getElementById('tokenStatus');
-      if (status) status.textContent = '✅ Saved securely in browser';
-      this.value = '';
-      this.blur();
+      render();
     }
-  });
-  tokenInputEl.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') this.blur();
-  });
-}
-
+  }
+});

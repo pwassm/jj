@@ -77,7 +77,7 @@ function applyJsonChanges() {
   } catch(e) { document.getElementById('jsonStatus').textContent='Error: '+e.message; return false; }
 }
 document.getElementById('jsonApply').addEventListener('pointerup', applyJsonChanges);
-document.getElementById('jsonPush').addEventListener('pointerup', () => { if (applyJsonChanges()) { pushToGitHub(); } });
+document.getElementById('jsonPush').addEventListener('pointerup', (e) => { e.preventDefault(); e.stopPropagation(); if (applyJsonChanges()) { window.pushToGitHub(); } });
 document.getElementById('jsonDl').addEventListener('pointerup',saveJson);
 document.getElementById('jsonCancel').addEventListener('pointerup',()=>document.getElementById('jsonModal').classList.remove('open'));
 document.getElementById('jsonModal').addEventListener('pointerup',e=>e.stopPropagation());
