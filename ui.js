@@ -158,33 +158,31 @@ window.renderTableEditor = function() {
   updateSelectedRowsButton();
 
   let html = '<div style="display:table; border-collapse:collapse; color:#fff; font-family:sans-serif; font-size:13px; table-layout:fixed;">';
-  html += '<div style="display:table-row; background:#222; font-weight:bold; position:sticky; top:0; z-index:10;">';
-  html += `<div style="display:table-cell; padding:8px; border:1px solid #444; width:60px; min-width:60px; max-width:60px; text-align:center;">
+  html += '<div style="display:table-row; font-weight:bold; position:sticky; top:0; z-index:10; background:#222; box-shadow: 0 4px 6px rgba(0,0,0,0.6);">';
+  html += `<div style="display:table-cell; padding:8px; border:1px solid #444; border-bottom:3px solid #8ef; width:60px; min-width:60px; max-width:60px; text-align:center;">
              <input type="checkbox" onchange="toggleSelectAll(this.checked)" ${selectedRows.size>0 && selectedRows.size===linksData.length?'checked':''}>
              <span style="margin-left:4px;">Del</span>
            </div>`;
 
   tableKeys.forEach((k, i) => {
     let w = colWidths[k] || 150;
-    html += `<div id="th-${k}" style="display:table-cell; border:1px solid #444; background:#222; width:${w}px; min-width:${w}px; max-width:${w}px; position:sticky; top:0; z-index:10; border-bottom: 3px solid #8ef; box-shadow: 0 4px 8px rgba(0,0,0,0.5);"
+    html += `<div id="th-${k}" style="display:table-cell; border:1px solid #444; border-bottom:3px solid #8ef; background:#222; width:${w}px; min-width:${w}px; max-width:${w}px; position:relative;" 
                draggable="true" ondragstart="colDragStart(event, ${i})" ondragover="event.preventDefault(); this.style.background='#444'" ondragleave="this.style.background='#222'" ondrop="this.style.background='#222'; colDrop(event, ${i})">
-               <div style="position:relative; width:100%; height:100%; padding:4px 12px 6px 4px; box-sizing:border-box; overflow:hidden; display:flex; flex-direction:column; justify-content:space-between;">
+               <div style="position:relative; width:100%; min-height:48px; padding:6px 12px 6px 6px; box-sizing:border-box;">
 
-                 <div style="display:flex; flex-direction:column; align-items:flex-start; gap:4px; width:14px; margin-bottom:8px;">
-                   <button onclick="deleteCol('${k}')" style="background:none;border:none;color:#f66;cursor:pointer;font-size:14px;padding:0;line-height:1;width:14px;height:14px;text-align:left;" title="Delete Column">&#10006;</button>
-                   <button onclick="renameCol('${k}')" style="background:none;border:none;color:#8ef;cursor:pointer;font-size:14px;padding:0;line-height:1;width:14px;height:14px;text-align:left;" title="Rename Column">&#9998;</button>
+                 <div style="display:flex; flex-direction:column; align-items:flex-start; gap:4px; margin-bottom:6px;">
+                   <button onclick="deleteCol('${k}')" style="background:none;border:none;color:#f66;cursor:pointer;font-size:14px;padding:0;line-height:1;text-align:left;" title="Delete Column">&#10006;</button>
+                   <button onclick="renameCol('${k}')" style="background:none;border:none;color:#8ef;cursor:pointer;font-size:14px;padding:0;line-height:1;text-align:left;" title="Rename Column">&#9998;</button>
                  </div>
 
-                 <div style="width:100%;">
-                   <span style="cursor:pointer; display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; width:100%; user-select:none; font-size:14px; text-align:left; color:#ccc;" onclick="sortData('${k}')" title="Sort by ${k}">${k} ${sortCol===k?(sortAsc?'\u25B2':'\u25BC'):''}</span>
-                 </div>
+                 <span style="cursor:pointer; display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; width:100%; user-select:none; font-size:14px; text-align:left; color:#ccc;" onclick="sortData('${k}')" title="Sort by ${k}">${k} ${sortCol===k?(sortAsc?'\u25B2':'\u25BC'):''}</span>
 
                  <div onpointerdown="initColResize(event, '${k}')" ondragstart="event.preventDefault(); event.stopPropagation();" style="position:absolute; right:0; top:0; width:10px; height:100%; cursor:col-resize; background:transparent; z-index:12; border-left:1px solid #555;" title="Drag to resize"></div>
                </div>
              </div>`;
   });
 
-  html += '<div style="display:table-cell; padding:8px; border:1px solid #444; width:60px; min-width:60px;"><button onclick="addCol()" style="cursor:pointer;background:#2a2a3e;color:#fff;border:1px solid #555;padding:4px 8px;border-radius:4px;">+ Col</button></div></div>';
+  html += '<div style="display:table-cell; padding:8px; border:1px solid #444; border-bottom:3px solid #8ef; width:60px; min-width:60px; background:#222;"><button onclick="addCol()" style="cursor:pointer;background:#2a2a3e;color:#fff;border:1px solid #555;padding:4px 8px;border-radius:4px;">+ Col</button></div></div>';
 
   linksData.forEach((row, rIdx) => {
     const isSel = selectedRows.has(rIdx);
@@ -247,6 +245,8 @@ window.triggerDownload = async function(filename, data) {
   try {
     if (window.showSaveFilePicker) {
       const handle = await window.showSaveFilePicker({
+        id: 'seeandlearn-backup-folder',
+        startIn: 'documents',
         suggestedName: filename,
         types: [{ description: 'JSON File', accept: {'application/json': ['.json']} }]
       });
@@ -256,12 +256,10 @@ window.triggerDownload = async function(filename, data) {
       return;
     }
   } catch(e) {
-    // user cancelled or error, fallback to normal download just in case? Or do nothing if aborted.
     if(e.name !== 'AbortError') console.error(e);
     return;
   }
 
-  // Fallback for browsers that don't support showSaveFilePicker
   const blob = new Blob([jsonText], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
