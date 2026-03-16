@@ -2,6 +2,7 @@
   {
     "cname": "Giant Sea Bass",
     "sname": "Stereolepis gigas",
+    "Portrait": "0",
     "show": "1",
     "asset": "i",
     "cell": "1a",
@@ -14,6 +15,7 @@
   {
     "cname": "Predatory Tunicate",
     "sname": "Megalodicopia hians",
+    "Portrait": "1",
     "show": "1",
     "asset": "i",
     "cell": "2b",
@@ -26,6 +28,7 @@
   {
     "cname": "Yellowfin Rockfish",
     "sname": "Sebastes flavidus",
+    "Portrait": "0",
     "show": "1",
     "asset": "i",
     "cell": "3c",
@@ -38,6 +41,7 @@
   {
     "cname": "Painted Anemone",
     "sname": "Urticina grebelnyi",
+    "Portrait": "0",
     "show": "1",
     "asset": "i",
     "cell": "2c",
@@ -50,6 +54,7 @@
   {
     "cname": "Giant Anemone",
     "sname": "Condylactis gigantea",
+    "Portrait": "0",
     "show": "1",
     "asset": "i",
     "cell": "4c",
@@ -62,6 +67,7 @@
   {
     "cname": "",
     "sname": "",
+    "Portrait": "0",
     "show": "1",
     "asset": "i",
     "cell": "3a",
@@ -74,6 +80,7 @@
   {
     "cname": "",
     "sname": "",
+    "Portrait": "0",
     "show": "1",
     "asset": "i",
     "cell": "1c",
