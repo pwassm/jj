@@ -62,8 +62,11 @@ function renderGrid(){
 
 // overlays inside rotateWrap — rotate with canvas automatically
 function buildOverlays(){
+  if (window.cleanupAllVideos) window.cleanupAllVideos();
   wrap.querySelectorAll('.cell-overlay,.cell-empty').forEach(el=>el.remove());
   const occ=occupied();
+
+  const videoMountTasks = [];
 
   linksData.forEach(it=>{
     if(it.show!=='1') return;
@@ -72,20 +75,39 @@ function buildOverlays(){
     const div=document.createElement('div');
     div.className='cell-overlay';
     div.style.cssText='left:'+x+'px;top:'+y+'px;width:'+cellW+'px;height:'+cellH+'px;';
-    if(it.asset==='i' && it.link){
+
+    const assetVal = String(it.asset || '').trim();
+
+    if(assetVal==='i' && it.link){
       const img=document.createElement('img');
       img.src=it.link; img.alt=it.cname||'';
       img.className=(it.fit||fitMode)==='ei'?'ei':'fc';
       div.appendChild(img);
+    } else if (window.isNumericAsset && window.isNumericAsset(assetVal) && window.isYouTubeLink && window.isYouTubeLink(it.link)) {
+      const vidHost = document.createElement('div');
+      vidHost.id = 'vid-' + it.cell;
+      vidHost.style.cssText = 'position:absolute; inset:0; overflow:hidden; background:#000; display:flex; justify-content:center; align-items:center;';
+      div.appendChild(vidHost);
+      videoMountTasks.push({ host: vidHost, link: it.link, sec: assetVal });
     }
+
     if(it.cname && showCname){
       const lbl=document.createElement('div');
       lbl.className='cell-label'; lbl.textContent=it.cname;
       div.appendChild(lbl);
     }
+
+    // For full-screen overlay, ignore pointer up if they click on video to pause it, but pointer events are none on the video itself.
     div.addEventListener('pointerup',e=>{ e.stopPropagation(); openFS(it); });
     wrap.appendChild(div);
   });
+
+  // Mount players after DOM insertion
+  if (videoMountTasks.length > 0 && window.mountYouTubeClip) {
+    videoMountTasks.forEach(task => {
+      window.mountYouTubeClip(task.host, task.link, task.sec);
+    });
+  }
 
   for(let r=1;r<=ROWS;r++) for(let c=1;c<=COLS;c++){
     const cs=mkCell(r,c); if(occ.has(cs)) continue;
