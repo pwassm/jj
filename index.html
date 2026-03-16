@@ -283,9 +283,8 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
       <textarea id="jsonText" style="display:none; flex:1; background:#0a0a1a; border:1px solid #444; color:#cfc; padding:12px; font-size:13px; font-family:monospace; line-height:1.4; border-radius:6px; resize:none; overflow:auto;"></textarea>
     </div>
     <div id="jsonBtns">
-      <button id="jsonCancel">Cancel</button>
+      <button id="jsonCancel">Exit table (Esc)</button>
       <button class="save" id="jsonApply">Apply</button>
-      <button class="save" id="jsonPush" style="border-color:#4af; color:#8ef;">Push to GitHub</button>
       <button id="jsonDl">Download links.json</button>
     </div>
     <div id="jsonStatus"></div>
@@ -298,22 +297,12 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
 const COLS=5, ROWS=5, LETTERS="abcde";
 const ISMOBILE = ('ontouchstart' in window) || navigator.maxTouchPoints>0;
 
-function isAdmin() {
-  return !!localStorage.getItem('github-token');
-}
-
+function isAdmin() { return !!localStorage.getItem('github-token'); }
 function syncAdminUI() {
   const el = document.getElementById('miAdmin');
   if (!el) return;
-  if (isAdmin()) {
-    el.innerHTML = '&#9989; Admin';
-    el.style.opacity = '1';
-    el.style.color = '#9f9';
-  } else {
-    el.innerHTML = '&#128274; Admin';
-    el.style.opacity = '0.45';
-    el.style.color = '#aaa';
-  }
+  if (isAdmin()) { el.innerHTML = '&#9989; Admin'; el.style.opacity = '1'; el.style.color = '#9f9'; }
+  else { el.innerHTML = '&#128274; Admin'; el.style.opacity = '0.45'; el.style.color = '#aaa'; }
 }
 
 let GW=0, GH=0, cellW=0, cellH=0, isPortrait=false, bgColor='#c8ddf0';
@@ -479,15 +468,43 @@ let selectedRows = new Set();
 let colWidths = JSON.parse(localStorage.getItem('seeandlearn-colWidths') || '{}');
 let recycleData = JSON.parse(localStorage.getItem('seeandlearn-recycle') || '[]');
 
-let colResizeObserver = new ResizeObserver(entries => {
-  for(let e of entries) {
-    const k = e.target.getAttribute('data-col');
-    if(k && e.contentRect.width > 0) {
-      colWidths[k] = e.contentRect.width;
-      localStorage.setItem('seeandlearn-colWidths', JSON.stringify(colWidths));
-    }
+let isColResizing = false;
+let startX = 0, startW = 0, currentResizingCol = '';
+
+window.initColResize = function(e, k) {
+  e.preventDefault();
+  e.stopPropagation();
+  isColResizing = true;
+  currentResizingCol = k;
+  startX = e.clientX || (e.touches && e.touches[0].clientX);
+  const th = document.getElementById('th-'+k);
+  startW = th.offsetWidth;
+  document.addEventListener('pointermove', doColResize);
+  document.addEventListener('pointerup', stopColResize);
+};
+
+function doColResize(e) {
+  if(!isColResizing) return;
+  const clientX = e.clientX || (e.touches ? e.touches[0].clientX : startX);
+  let newW = startW + (clientX - startX);
+  if(newW < 60) newW = 60;
+  colWidths[currentResizingCol] = newW;
+  const th = document.getElementById('th-'+currentResizingCol);
+  if(th) {
+    th.style.width = newW + 'px';
+    th.style.minWidth = newW + 'px';
+    th.style.maxWidth = newW + 'px';
   }
-});
+}
+
+function stopColResize(e) {
+  if(!isColResizing) return;
+  isColResizing = false;
+  localStorage.setItem('seeandlearn-colWidths', JSON.stringify(colWidths));
+  document.removeEventListener('pointermove', doColResize);
+  document.removeEventListener('pointerup', stopColResize);
+  renderTableEditor();
+}
 
 function calcPortrait() {
   if(!tableKeys.includes('Portrait')) return;
@@ -514,10 +531,12 @@ function initTableKeys() {
   tableKeys = Array.from(keys);
   if(tableKeys.length===0) tableKeys = ['show','asset','cell','fit','link','cname','sname','attribution','comment'];
 }
+
 function updateSelectedRowsButton() {
   const btn = document.getElementById('deleteSelectedRows');
   if(btn) btn.style.display = selectedRows.size > 0 ? 'block' : 'none';
 }
+
 window.renderTableEditor = function() {
   const container = document.getElementById('tableEditor');
   if(!container) return;
@@ -528,23 +547,26 @@ window.renderTableEditor = function() {
 
   let html = '<div style="display:table; border-collapse:collapse; color:#fff; font-family:sans-serif; font-size:13px; table-layout:fixed;">';
   html += '<div style="display:table-row; background:#222; font-weight:bold; position:sticky; top:0; z-index:10;">';
-  html += `<div style="display:table-cell; padding:8px; border:1px solid #444; width:60px; text-align:center;">
+  html += `<div style="display:table-cell; padding:8px; border:1px solid #444; width:60px; min-width:60px; max-width:60px; text-align:center;">
              <input type="checkbox" onchange="toggleSelectAll(this.checked)" ${selectedRows.size>0 && selectedRows.size===linksData.length?'checked':''}>
              <span style="margin-left:4px;">Del</span>
            </div>`;
+
   tableKeys.forEach((k, i) => {
     let w = colWidths[k] || 150;
-    html += `<div style="display:table-cell; border:1px solid #444; background:#222;" draggable="true" ondragstart="colDragStart(event, ${i})" ondragover="event.preventDefault()" ondrop="colDrop(event, ${i})">
-               <div data-col="${k}" class="col-header-resize" style="display:flex; justify-content:space-between; align-items:center; resize:horizontal; overflow:hidden; width:${w}px; min-width:80px; padding:6px; box-sizing:border-box;">
+    html += `<div id="th-${k}" style="display:table-cell; border:1px solid #444; background:#222; width:${w}px; min-width:${w}px; max-width:${w}px;" draggable="true" ondragstart="colDragStart(event, ${i})" ondragover="event.preventDefault()" ondrop="colDrop(event, ${i})">
+               <div style="display:flex; justify-content:space-between; align-items:center; width:100%; height:100%; padding:6px; box-sizing:border-box;">
                  <span style="cursor:pointer; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" onclick="sortData('${k}')" title="Sort by ${k}">${k} ${sortCol===k?(sortAsc?'\u25B2':'\u25BC'):''}</span>
-                 <span style="display:flex; gap:4px; margin-left:8px;">
-                   <button onclick="renameCol('${k}')" style="background:none;border:none;color:#8ef;cursor:pointer;font-size:13px;" title="Rename Column">&#9998;</button>
-                   <button onclick="deleteCol('${k}')" style="background:none;border:none;color:#f66;cursor:pointer;font-size:13px;" title="Delete Column">&#10006;</button>
+                 <span style="display:flex; gap:4px; margin-left:6px; align-items:center;">
+                   <button onclick="renameCol('${k}')" style="background:none;border:none;color:#8ef;cursor:pointer;font-size:13px;padding:0;" title="Rename Column">&#9998;</button>
+                   <button onclick="deleteCol('${k}')" style="background:none;border:none;color:#f66;cursor:pointer;font-size:13px;padding:0;" title="Delete Column">&#10006;</button>
+                   <div onpointerdown="initColResize(event, '${k}')" style="width:10px; height:20px; cursor:col-resize; margin-left:4px; border-left:2px solid #555; border-right:2px solid #555; background:transparent;" title="Drag to resize"></div>
                  </span>
                </div>
              </div>`;
   });
-  html += '<div style="display:table-cell; padding:8px; border:1px solid #444; width:60px;"><button onclick="addCol()" style="cursor:pointer;background:#2a2a3e;color:#fff;border:1px solid #555;padding:4px 8px;border-radius:4px;">+ Col</button></div></div>';
+
+  html += '<div style="display:table-cell; padding:8px; border:1px solid #444; width:60px; min-width:60px;"><button onclick="addCol()" style="cursor:pointer;background:#2a2a3e;color:#fff;border:1px solid #555;padding:4px 8px;border-radius:4px;">+ Col</button></div></div>';
 
   linksData.forEach((row, rIdx) => {
     const isSel = selectedRows.has(rIdx);
@@ -559,20 +581,16 @@ window.renderTableEditor = function() {
                  <input id="cell-${rIdx}-${k}" type="text" value="${val}" onchange="updateCell(${rIdx}, '${k}', this.value)" style="width:100%; height:100%; min-height:30px; background:transparent; color:#fff; border:none; padding:4px 8px; box-sizing:border-box;">
                </div>`;
     });
-    html += `<div style="display:table-cell; padding:4px; border:1px solid #444; text-align:center; min-width:40px;">
+    html += `<div style="display:table-cell; padding:4px; border:1px solid #444; text-align:center;">
                <button onclick="moveRow(${rIdx}, -1)" style="cursor:pointer;background:none;border:none;color:#aaa;font-size:16px;">&#9650;</button>
                <button onclick="moveRow(${rIdx}, 1)" style="cursor:pointer;background:none;border:none;color:#aaa;font-size:16px;">&#9660;</button>
              </div></div>`;
   });
   html += '</div>';
   container.innerHTML = html;
-
-  setTimeout(() => {
-    document.querySelectorAll('.col-header-resize').forEach(el => colResizeObserver.observe(el));
-  }, 50);
-
   calcPortrait();
 };
+
 window.toggleRowSelect = function(idx, state) { if(state) selectedRows.add(idx); else selectedRows.delete(idx); renderTableEditor(); };
 window.toggleSelectAll = function(state) { if(state) { linksData.forEach((_, i) => selectedRows.add(i)); } else { selectedRows.clear(); } renderTableEditor(); };
 window.updateCell = function(r, k, v) { linksData[r][k] = v; };
@@ -801,34 +819,6 @@ document.getElementById('jsonText').addEventListener('keydown',e=>{
 
 // bootstrap
 // --- GITHUB INTEGRATION ---
-async function pushFileToGitHub(path, dataObj) {
-  const token = localStorage.getItem('github-token');
-  const owner = localStorage.getItem('github-owner');
-  const repo = localStorage.getItem('github-repo');
-  const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
-  const headers = { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json' };
-
-  let sha;
-  try {
-    const getRes = await fetch(apiUrl, { headers });
-    if (getRes.ok) {
-      const getJson = await getRes.json();
-      sha = getJson.sha;
-    }
-  } catch(e) {}
-
-  const jsonText = JSON.stringify(dataObj, null, 2);
-  const contentB64 = btoa(unescape(encodeURIComponent(jsonText)));
-  const body = { message: `Update ${path} via SeeAndLearn`, content: contentB64 };
-  if(sha) body.sha = sha;
-
-  const putRes = await fetch(apiUrl, { method: 'PUT', headers, body: JSON.stringify(body) });
-  if(!putRes.ok) {
-    const errText = await putRes.text();
-    throw new Error(`Failed to push ${path}: ` + errText);
-  }
-}
-
 async function pushToGitHub() {
   const token = localStorage.getItem('github-token');
   if (!token) {
@@ -852,6 +842,11 @@ async function pushToGitHub() {
     localStorage.setItem('github-repo', repo);
   }
 
+  const t = document.createElement('div');
+  t.textContent = '⏳ Pushing to GitHub...';
+  t.style.cssText = 'position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:#0055aa; color:#fff; padding:16px 32px; border-radius:12px; z-index:999999; box-shadow:0 8px 24px rgba(0,0,0,0.6); font:bold 18px sans-serif; transition:opacity 0.3s; pointer-events:none;';
+  document.body.appendChild(t);
+
   try {
     await pushFileToGitHub('links.json', linksData);
 
@@ -867,13 +862,13 @@ async function pushToGitHub() {
        localStorage.removeItem('seeandlearn-backup');
     }
 
-    const t = document.createElement('div');
     t.textContent = '✅ Successfully pushed to GitHub!';
-    t.style.cssText = 'position:fixed; top:60%; left:50%; transform:translate(-50%, -50%); background:#28a745; color:#fff; padding:12px 24px; border-radius:8px; z-index:99999; box-shadow:0 4px 12px rgba(0,0,0,0.5); font:bold 16px sans-serif; transition:opacity 0.3s; pointer-events:none;';
-    document.body.appendChild(t);
-    setTimeout(() => { t.style.opacity='0'; setTimeout(()=>t.remove(), 300); }, 1500);
+    t.style.background = '#28a745';
+    setTimeout(() => { t.style.opacity='0'; setTimeout(()=>t.remove(), 300); }, 2000);
   } catch (err) {
-    alert('❌ GitHub error: ' + err.message);
+    t.textContent = '❌ ' + err.message;
+    t.style.background = '#dc3545';
+    setTimeout(() => { t.style.opacity='0'; setTimeout(()=>t.remove(), 300); }, 3500);
   }
 }
 
@@ -935,6 +930,38 @@ async function init(){
 init();
 window.addEventListener('resize',()=>{ setupLayout(); render(); });
 window.addEventListener('orientationchange',()=>setTimeout(()=>{ setupLayout(); render(); },350));
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    const jsonMod = document.getElementById('jsonModal');
+    if (jsonMod && jsonMod.classList.contains('open')) {
+      jsonMod.classList.remove('open');
+      render();
+    }
+    const fastMod = document.getElementById('fastLinkModal');
+    if (fastMod && fastMod.style.display === 'flex') {
+      fastMod.style.display = 'none';
+      render();
+    }
+  }
+});
+</script>
+
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    const jsonMod = document.getElementById('jsonModal');
+    if (jsonMod && jsonMod.classList.contains('open')) {
+      jsonMod.classList.remove('open');
+      render();
+    }
+    const fastMod = document.getElementById('fastLinkModal');
+    if (fastMod && fastMod.style.display === 'flex') {
+      fastMod.style.display = 'none';
+      render();
+    }
+  }
+});
 
 document.getElementById('miFastLinks').addEventListener('pointerup', e => {
   e.stopPropagation(); closeMenu();
@@ -998,6 +1025,22 @@ document.getElementById('fastLinkInput').addEventListener('input', function() {
   document.getElementById('fastLinkStatus').style.color = '#9f9';
   setTimeout(() => { document.getElementById('fastLinkStatus').style.color = '#888'; }, 1000);
   this.value = '';
+});
+
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    const jsonMod = document.getElementById('jsonModal');
+    if (jsonMod && jsonMod.classList.contains('open')) {
+      jsonMod.classList.remove('open');
+      render();
+    }
+    const fastMod = document.getElementById('fastLinkModal');
+    if (fastMod && fastMod.style.display === 'flex') {
+      fastMod.style.display = 'none';
+      render();
+    }
+  }
 });
 </script>
 </body>
