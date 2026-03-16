@@ -100,7 +100,8 @@
     "sname": "",
     "attribution": "",
     "comment": "",
-    "DateAdded": "26.03.15.21.29.02"
+    "DateAdded": "26.03.15.21.29.02",
+    "Portrait": "0"
   },
   {
     "show": "1",
@@ -112,7 +113,8 @@
     "sname": "",
     "attribution": "",
     "comment": "",
-    "DateAdded": "26.03.15.21.32.26"
+    "DateAdded": "26.03.15.21.32.26",
+    "Portrait": "0"
   },
   {
     "show": "1",
@@ -124,7 +126,8 @@
     "sname": "",
     "attribution": "",
     "comment": "",
-    "DateAdded": "26.03.15.21.33.06"
+    "DateAdded": "26.03.15.21.33.06",
+    "Portrait": "0"
   },
   {
     "show": "1",
@@ -136,6 +139,7 @@
     "sname": "",
     "attribution": "",
     "comment": "",
-    "DateAdded": "26.03.15.21.33.46"
+    "DateAdded": "26.03.15.21.33.46",
+    "Portrait": "1"
   }
 ]
