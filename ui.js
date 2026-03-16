@@ -168,7 +168,7 @@ window.renderTableEditor = function() {
     let w = colWidths[k] || 150;
     html += `<div id="th-${k}" style="display:table-cell; border:1px solid #444; background:#222; width:${w}px; min-width:${w}px; max-width:${w}px; position:relative;" 
                draggable="true" ondragstart="colDragStart(event, ${i})" ondragover="event.preventDefault(); this.style.background='#444'" ondragleave="this.style.background='#222'" ondrop="this.style.background='#222'; colDrop(event, ${i})">
-               <div style="display:flex; flex-direction:column; justify-content:flex-start; align-items:flex-start; width:100%; height:100%; padding:4px 12px 4px 6px; box-sizing:border-box;">
+               <div style="display:flex; flex-direction:column; justify-content:flex-start; align-items:flex-start; width:100%; height:100%; padding:4px 6px; box-sizing:border-box; overflow:hidden;">
 
                  <div style="display:flex; gap:6px; margin-bottom:4px; z-index:11;">
                    <button onclick="deleteCol('${k}')" style="background:none;border:none;color:#f66;cursor:pointer;font-size:14px;padding:0;line-height:1;" title="Delete Column">&#10006;</button>
