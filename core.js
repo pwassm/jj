@@ -166,50 +166,83 @@ menuPanel.addEventListener('pointerup',e=>e.stopPropagation());
 document.addEventListener('pointerup',()=>{ if(menuPanel.classList.contains('open')) closeMenu(); });
 
 // --- GITHUB INTEGRATION ---
+async function pushFileToGitHub(path, dataObj) {
+  const token = localStorage.getItem('github-token');
+  const owner = localStorage.getItem('github-owner');
+  const repo = localStorage.getItem('github-repo');
+  const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+  const headers = { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json' };
+
+  let sha;
+  try {
+    const getRes = await fetch(apiUrl, { headers });
+    if (getRes.ok) {
+      const getJson = await getRes.json();
+      sha = getJson.sha;
+    }
+  } catch(e) {}
+
+  const jsonText = JSON.stringify(dataObj, null, 2);
+  const contentB64 = btoa(unescape(encodeURIComponent(jsonText)));
+  const body = { message: `Update ${path} via SeeAndLearn`, content: contentB64 };
+  if(sha) body.sha = sha;
+
+  const putRes = await fetch(apiUrl, { method: 'PUT', headers, body: JSON.stringify(body) });
+  if(!putRes.ok) {
+    const errText = await putRes.text();
+    throw new Error(`Failed to push ${path}: ` + errText);
+  }
+}
+
 async function pushToGitHub() {
   const token = localStorage.getItem('github-token');
-  if (!token) {
-    alert("1. Open Settings -> Turn on GitHub Sync\n2. Paste your token and press Enter");
+  let owner = localStorage.getItem('github-owner');
+  let repo = localStorage.getItem('github-repo');
+
+  if (!token || !owner || !repo) {
+    alert("Please set your Token, Owner, and Repo in Settings (Admin).");
     document.getElementById('settingsPanel').classList.add('open');
     const tg = document.getElementById('togGithub');
     if (tg) tg.checked = true;
     const setup = document.getElementById('githubTokenSetup');
     if (setup) setup.classList.add('open');
-    const inp = document.getElementById('tokenInput');
-    if (inp) inp.focus();
+    if (!token) {
+      const inp = document.getElementById('tokenInput');
+      if (inp) inp.focus();
+    } else if (!owner) {
+      const inp = document.getElementById('ownerInput');
+      if (inp) inp.focus();
+    } else {
+      const inp = document.getElementById('repoInput');
+      if (inp) inp.focus();
+    }
     return;
   }
-  let owner = localStorage.getItem('github-owner') || '';
-  let repo = localStorage.getItem('github-repo') || '';
-  owner = prompt('GitHub Owner (username):', owner) || '';
-  repo = prompt('Repository Name:', repo) || '';
-  if (!owner || !repo) return;
 
-  localStorage.setItem('github-owner', owner);
-  localStorage.setItem('github-repo', repo);
+  const t = document.createElement('div');
+  t.textContent = '⏳ Pushing to GitHub...';
+  t.style.cssText = 'position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:#0055aa; color:#fff; padding:16px 32px; border-radius:12px; z-index:999999; box-shadow:0 8px 24px rgba(0,0,0,0.6); font:bold 18px sans-serif; transition:opacity 0.3s; pointer-events:none;';
+  document.body.appendChild(t);
 
   try {
-    const path = 'links.json';
-    const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
-    const headers = { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json' };
-
-    const getRes = await fetch(apiUrl, { headers });
-    if (!getRes.ok) throw new Error('Could not find repository or file. Check permissions.');
-    const { sha } = await getRes.json();
-
-    const jsonText = JSON.stringify(linksData, null, 2);
-    const contentB64 = btoa(unescape(encodeURIComponent(jsonText)));
-
-    const putRes = await fetch(apiUrl, {
-      method: 'PUT',
-      headers,
-      body: JSON.stringify({ message: 'Update links.json via SeeAndLearn', content: contentB64, sha })
-    });
-
-    if (putRes.ok) alert('✅ Successfully pushed to GitHub!');
-    else throw new Error(await putRes.text());
+    await pushFileToGitHub('links.json', linksData);
+    const recycleStr = localStorage.getItem('seeandlearn-recycle');
+    if(recycleStr) {
+       const recData = JSON.parse(recycleStr);
+       if(recData.length > 0) await pushFileToGitHub('recycle.json', recData);
+    }
+    const backupStr = localStorage.getItem('seeandlearn-backup');
+    if(backupStr) {
+       await pushFileToGitHub('backup.json', JSON.parse(backupStr));
+       localStorage.removeItem('seeandlearn-backup');
+    }
+    t.textContent = '✅ Successfully pushed to GitHub!';
+    t.style.background = '#28a745';
+    setTimeout(() => { t.style.opacity='0'; setTimeout(()=>t.remove(), 300); }, 2000);
   } catch (err) {
-    alert('❌ GitHub error: ' + err.message);
+    t.textContent = '❌ GitHub error: ' + err.message;
+    t.style.background = '#dc3545';
+    setTimeout(() => { t.style.opacity='0'; setTimeout(()=>t.remove(), 300); }, 3500);
   }
 }
 

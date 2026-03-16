@@ -128,14 +128,18 @@ window.renderTableEditor = function() {
 
   tableKeys.forEach((k, i) => {
     let w = colWidths[k] || 150;
-    html += `<div id="th-${k}" style="display:table-cell; border:1px solid #444; background:#222; width:${w}px; min-width:${w}px; max-width:${w}px;">
-               <div style="display:flex; justify-content:space-between; align-items:center; width:100%; height:100%; padding:6px; box-sizing:border-box;">
-                 <span draggable="true" ondragstart="colDragStart(event, ${i})" ondragover="event.preventDefault()" ondrop="colDrop(event, ${i})" style="cursor:pointer; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" onclick="sortData('${k}')" title="Sort by ${k}">${k} ${sortCol===k?(sortAsc?'\u25B2':'\u25BC'):''}</span>
-                 <span style="display:flex; gap:4px; margin-left:6px; align-items:center;">
-                   <button onclick="renameCol('${k}')" style="background:none;border:none;color:#8ef;cursor:pointer;font-size:13px;padding:0;" title="Rename Column">&#9998;</button>
-                   <button onclick="deleteCol('${k}')" style="background:none;border:none;color:#f66;cursor:pointer;font-size:13px;padding:0;" title="Delete Column">&#10006;</button>
-                   <div onpointerdown="initColResize(event, '${k}')" ondragstart="event.preventDefault(); event.stopPropagation();" style="width:10px; height:20px; cursor:col-resize; margin-left:4px; border-left:2px solid #555; border-right:2px solid #555; background:transparent; flex:0 0 auto;" title="Drag to resize"></div>
-                 </span>
+    html += `<div id="th-${k}" style="display:table-cell; border:1px solid #444; background:#222; width:${w}px; min-width:${w}px; max-width:${w}px; vertical-align:top;">
+               <div style="display:flex; justify-content:space-between; align-items:center; width:100%; height:100%; padding:4px 6px; box-sizing:border-box;">
+
+                 <div style="display:flex; flex-direction:column; gap:4px; margin-right:6px; align-items:center; flex-shrink:0;">
+                   <button onclick="deleteCol('${k}')" style="background:none;border:none;color:#f66;cursor:pointer;font-size:11px;padding:0;line-height:1;" title="Delete Column">&#10006;</button>
+                   <button onclick="renameCol('${k}')" style="background:none;border:none;color:#8ef;cursor:pointer;font-size:11px;padding:0;line-height:1;" title="Rename Column">&#9998;</button>
+                 </div>
+
+                 <span draggable="true" ondragstart="colDragStart(event, ${i})" ondragover="event.preventDefault()" ondrop="colDrop(event, ${i})" style="cursor:pointer; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px;" onclick="sortData('${k}')" title="Sort by ${k}">${k} ${sortCol===k?(sortAsc?'\u25B2':'\u25BC'):''}</span>
+
+                 <div onpointerdown="initColResize(event, '${k}')" onmousedown="event.stopPropagation()" ondragstart="event.preventDefault(); event.stopPropagation();" style="width:10px; height:20px; cursor:col-resize; margin-left:4px; border-left:2px solid #555; border-right:2px solid #555; background:transparent; flex:0 0 auto;" title="Drag to resize"></div>
+
                </div>
              </div>`;
   });

@@ -211,8 +211,12 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
         <label class="tog"><input type="checkbox" id="togGithub"><span class="tog-slider"></span></label>
       </div>
       <div class="github-token-setup" id="githubTokenSetup">
-        <label for="tokenInput">GitHub Fine-Grained PAT (Contents:Write)</label>
-        <input type="password" id="tokenInput" class="token-input" placeholder="github_pat_...">
+        <label for="tokenInput">GitHub PAT (Token)</label>
+        <input type="password" id="tokenInput" class="token-input" placeholder="github_pat_..." style="margin-bottom:6px;">
+        <label for="ownerInput">GitHub Owner (Username)</label>
+        <input type="text" id="ownerInput" class="token-input" placeholder="e.g. torvalds" style="margin-bottom:6px;">
+        <label for="repoInput">Repository Name</label>
+        <input type="text" id="repoInput" class="token-input" placeholder="e.g. my-repo" style="margin-bottom:6px;">
         <div class="token-status" id="tokenStatus"></div>
       </div>
     </div>
