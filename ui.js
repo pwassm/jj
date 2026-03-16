@@ -166,17 +166,17 @@ window.renderTableEditor = function() {
 
   tableKeys.forEach((k, i) => {
     let w = colWidths[k] || 150;
-    html += `<div id="th-${k}" style="display:table-cell; border:1px solid #444; background:#222; width:${w}px; min-width:${w}px; max-width:${w}px; position:sticky; top:0; z-index:10; box-shadow:inset 0 -1px 0 #555;"
+    html += `<div id="th-${k}" style="display:table-cell; border:1px solid #444; background:#222; width:${w}px; min-width:${w}px; max-width:${w}px; position:sticky; top:0; z-index:10; border-bottom: 3px solid #8ef; box-shadow: 0 4px 8px rgba(0,0,0,0.5);"
                draggable="true" ondragstart="colDragStart(event, ${i})" ondragover="event.preventDefault(); this.style.background='#444'" ondragleave="this.style.background='#222'" ondrop="this.style.background='#222'; colDrop(event, ${i})">
-               <div style="position:relative; width:100%; min-height:52px; padding:4px 12px 10px 4px; box-sizing:border-box; overflow:hidden;">
+               <div style="position:relative; width:100%; height:100%; padding:4px 12px 6px 4px; box-sizing:border-box; overflow:hidden; display:flex; flex-direction:column; justify-content:space-between;">
 
-                 <div style="display:flex; flex-direction:column; align-items:flex-start; gap:2px; width:14px; margin-bottom:8px;">
+                 <div style="display:flex; flex-direction:column; align-items:flex-start; gap:4px; width:14px; margin-bottom:8px;">
                    <button onclick="deleteCol('${k}')" style="background:none;border:none;color:#f66;cursor:pointer;font-size:14px;padding:0;line-height:1;width:14px;height:14px;text-align:left;" title="Delete Column">&#10006;</button>
                    <button onclick="renameCol('${k}')" style="background:none;border:none;color:#8ef;cursor:pointer;font-size:14px;padding:0;line-height:1;width:14px;height:14px;text-align:left;" title="Rename Column">&#9998;</button>
                  </div>
 
-                 <div style="margin-top:6px; padding-top:4px; border-top:1px solid #3a3a3a; width:100%;">
-                   <span style="cursor:pointer; display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; width:100%; user-select:none; font-size:14px; text-align:left;" onclick="sortData('${k}')" title="Sort by ${k}">${k} ${sortCol===k?(sortAsc?'\u25B2':'\u25BC'):''}</span>
+                 <div style="width:100%;">
+                   <span style="cursor:pointer; display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; width:100%; user-select:none; font-size:14px; text-align:left; color:#ccc;" onclick="sortData('${k}')" title="Sort by ${k}">${k} ${sortCol===k?(sortAsc?'\u25B2':'\u25BC'):''}</span>
                  </div>
 
                  <div onpointerdown="initColResize(event, '${k}')" ondragstart="event.preventDefault(); event.stopPropagation();" style="position:absolute; right:0; top:0; width:10px; height:100%; cursor:col-resize; background:transparent; z-index:12; border-left:1px solid #555;" title="Drag to resize"></div>
@@ -189,17 +189,17 @@ window.renderTableEditor = function() {
   linksData.forEach((row, rIdx) => {
     const isSel = selectedRows.has(rIdx);
     html += `<div style="display:table-row; background:${isSel ? '#2e1c1c' : (rIdx%2===0?'#111':'#1a1a1a')};">`;
-    html += `<div style="display:table-cell; padding:4px; border:1px solid #444; text-align:center;">
+    html += `<div style="display:table-cell; padding:10px 4px 4px 4px; border:1px solid #444; text-align:center;">
                <input type="checkbox" ${isSel?'checked':''} onchange="toggleRowSelect(${rIdx}, this.checked)">
                <button onclick="deleteRow(${rIdx})" style="color:#f66;background:none;border:none;cursor:pointer;font-size:14px; margin-left:6px;" title="Delete Row">&#10006;</button>
              </div>`;
     tableKeys.forEach(k => {
       const val = (row[k] === undefined || row[k] === null) ? '' : String(row[k]).replace(/"/g, '&quot;');
       html += `<div style="display:table-cell; padding:0; border:1px solid #444; overflow:hidden;">
-                 <input id="cell-${rIdx}-${k}" type="text" value="${val}" onchange="updateCell(${rIdx}, '${k}', this.value)" style="width:100%; height:100%; min-height:30px; background:transparent; color:#fff; border:none; padding:4px 8px; box-sizing:border-box;">
+                 <input id="cell-${rIdx}-${k}" type="text" value="${val}" onchange="updateCell(${rIdx}, '${k}', this.value)" style="width:100%; height:100%; min-height:30px; background:transparent; color:#fff; border:none; padding:10px 8px 4px 8px; box-sizing:border-box;">
                </div>`;
     });
-    html += `<div style="display:table-cell; padding:4px; border:1px solid #444; text-align:center;">
+    html += `<div style="display:table-cell; padding:10px 4px 4px 4px; border:1px solid #444; text-align:center;">
                <button onclick="moveRow(${rIdx}, -1)" style="cursor:pointer;background:none;border:none;color:#aaa;font-size:16px;">&#9650;</button>
                <button onclick="moveRow(${rIdx}, 1)" style="cursor:pointer;background:none;border:none;color:#aaa;font-size:16px;">&#9660;</button>
              </div></div>`;
@@ -242,8 +242,27 @@ window.renameCol = function(oldK) {
   linksData.forEach(row => { if(row.hasOwnProperty(oldK)) { row[newK] = row[oldK]; delete row[oldK]; } });
   rebuildLinksDataKeys(); renderTableEditor();
 };
-window.triggerDownload = function(filename, data) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+window.triggerDownload = async function(filename, data) {
+  const jsonText = JSON.stringify(data, null, 2);
+  try {
+    if (window.showSaveFilePicker) {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: filename,
+        types: [{ description: 'JSON File', accept: {'application/json': ['.json']} }]
+      });
+      const writable = await handle.createWritable();
+      await writable.write(jsonText);
+      await writable.close();
+      return;
+    }
+  } catch(e) {
+    // user cancelled or error, fallback to normal download just in case? Or do nothing if aborted.
+    if(e.name !== 'AbortError') console.error(e);
+    return;
+  }
+
+  // Fallback for browsers that don't support showSaveFilePicker
+  const blob = new Blob([jsonText], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

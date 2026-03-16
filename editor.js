@@ -1,4 +1,4 @@
-function openQF(cs){
+async function openQF(cs){
   qfCell=cs;
   const ex=linksData.find(it=>it.cell===cs);
   let lv=ex?(ex.link||''):'';
@@ -64,7 +64,7 @@ document.getElementById('qfPasteBtn').addEventListener('pointerup',async e=>{
 });
 
 // JSON editor
-function applyJsonChanges() {
+window.applyJsonChanges = function() {
   try {
     if(rawJsonMode) {
       const d=JSON.parse(document.getElementById('jsonText').value);
@@ -76,8 +76,8 @@ function applyJsonChanges() {
     render(); return true;
   } catch(e) { document.getElementById('jsonStatus').textContent='Error: '+e.message; return false; }
 }
-document.getElementById('jsonApply').addEventListener('click', applyJsonChanges);
-document.getElementById('jsonPush').addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); if (applyJsonChanges()) { window.pushToGitHub(); } });
+document.getElementById('jsonApply').addEventListener('click', window.applyJsonChanges);
+document.getElementById('jsonPush').addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); if (window.applyJsonChanges()) { window.pushToGitHub(); } });
 document.getElementById('jsonDl').addEventListener('click',saveJson);
 document.getElementById('jsonCancel').addEventListener('click',()=>document.getElementById('jsonModal').classList.remove('open'));
 document.getElementById('jsonModal').addEventListener('pointerup',e=>e.stopPropagation());
