@@ -285,6 +285,7 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
     <div id="jsonBtns">
       <button id="jsonCancel">Exit table (Esc)</button>
       <button class="save" id="jsonApply">Apply</button>
+      <button class="save" id="jsonPush" style="border-color:#4af; color:#8ef;">Push to GitHub</button>
       <button id="jsonDl">Download links.json</button>
     </div>
     <div id="jsonStatus"></div>
@@ -479,12 +480,19 @@ window.initColResize = function(e, k) {
   startX = e.clientX || (e.touches && e.touches[0].clientX);
   const th = document.getElementById('th-'+k);
   startW = th.offsetWidth;
-  document.addEventListener('pointermove', doColResize);
-  document.addEventListener('pointerup', stopColResize);
+
+  window.addEventListener('pointermove', doColResize);
+  window.addEventListener('pointerup', stopColResize);
+  window.addEventListener('pointercancel', stopColResize);
 };
 
 function doColResize(e) {
   if(!isColResizing) return;
+  // If no buttons are pressed (the user let go outside the window), end resize
+  if(e.buttons === 0 && e.type !== 'pointerup') {
+    stopColResize(e);
+    return;
+  }
   const clientX = e.clientX || (e.touches ? e.touches[0].clientX : startX);
   let newW = startW + (clientX - startX);
   if(newW < 60) newW = 60;
@@ -497,12 +505,13 @@ function doColResize(e) {
   }
 }
 
-function stopColResize(e) {
+window.stopColResize = function(e) {
   if(!isColResizing) return;
   isColResizing = false;
   localStorage.setItem('seeandlearn-colWidths', JSON.stringify(colWidths));
-  document.removeEventListener('pointermove', doColResize);
-  document.removeEventListener('pointerup', stopColResize);
+  window.removeEventListener('pointermove', doColResize);
+  window.removeEventListener('pointerup', stopColResize);
+  window.removeEventListener('pointercancel', stopColResize);
   renderTableEditor();
 }
 
@@ -560,7 +569,7 @@ window.renderTableEditor = function() {
                  <span style="display:flex; gap:4px; margin-left:6px; align-items:center;">
                    <button onclick="renameCol('${k}')" style="background:none;border:none;color:#8ef;cursor:pointer;font-size:13px;padding:0;" title="Rename Column">&#9998;</button>
                    <button onclick="deleteCol('${k}')" style="background:none;border:none;color:#f66;cursor:pointer;font-size:13px;padding:0;" title="Delete Column">&#10006;</button>
-                   <div onpointerdown="initColResize(event, '${k}')" style="width:10px; height:20px; cursor:col-resize; margin-left:4px; border-left:2px solid #555; border-right:2px solid #555; background:transparent;" title="Drag to resize"></div>
+                   <div onpointerdown="initColResize(event, '${k}')" onmousedown="event.stopPropagation()" ondragstart="event.preventDefault(); event.stopPropagation();" style="width:10px; height:20px; cursor:col-resize; margin-left:4px; border-left:2px solid #555; border-right:2px solid #555; background:transparent;" title="Drag to resize"></div>
                  </span>
                </div>
              </div>`;
@@ -819,6 +828,34 @@ document.getElementById('jsonText').addEventListener('keydown',e=>{
 
 // bootstrap
 // --- GITHUB INTEGRATION ---
+async function pushFileToGitHub(path, dataObj) {
+  const token = localStorage.getItem('github-token');
+  const owner = localStorage.getItem('github-owner');
+  const repo = localStorage.getItem('github-repo');
+  const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+  const headers = { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json' };
+
+  let sha;
+  try {
+    const getRes = await fetch(apiUrl, { headers });
+    if (getRes.ok) {
+      const getJson = await getRes.json();
+      sha = getJson.sha;
+    }
+  } catch(e) {}
+
+  const jsonText = JSON.stringify(dataObj, null, 2);
+  const contentB64 = btoa(unescape(encodeURIComponent(jsonText)));
+  const body = { message: `Update ${path} via SeeAndLearn`, content: contentB64 };
+  if(sha) body.sha = sha;
+
+  const putRes = await fetch(apiUrl, { method: 'PUT', headers, body: JSON.stringify(body) });
+  if(!putRes.ok) {
+    const errText = await putRes.text();
+    throw new Error(`Failed to push ${path}: ` + errText);
+  }
+}
+
 async function pushToGitHub() {
   const token = localStorage.getItem('github-token');
   if (!token) {
@@ -849,199 +886,22 @@ async function pushToGitHub() {
 
   try {
     await pushFileToGitHub('links.json', linksData);
-
     const recycleStr = localStorage.getItem('seeandlearn-recycle');
     if(recycleStr) {
        const recData = JSON.parse(recycleStr);
        if(recData.length > 0) await pushFileToGitHub('recycle.json', recData);
     }
-
     const backupStr = localStorage.getItem('seeandlearn-backup');
     if(backupStr) {
        await pushFileToGitHub('backup.json', JSON.parse(backupStr));
        localStorage.removeItem('seeandlearn-backup');
     }
-
     t.textContent = '✅ Successfully pushed to GitHub!';
     t.style.background = '#28a745';
     setTimeout(() => { t.style.opacity='0'; setTimeout(()=>t.remove(), 300); }, 2000);
   } catch (err) {
-    t.textContent = '❌ ' + err.message;
+    t.textContent = '❌ GitHub error: ' + err.message;
     t.style.background = '#dc3545';
     setTimeout(() => { t.style.opacity='0'; setTimeout(()=>t.remove(), 300); }, 3500);
   }
-}
-
-document.getElementById('miPushGithub').addEventListener('pointerup', function(e) {
-  e.stopPropagation();
-  closeMenu();
-  pushToGitHub();
-});
-
-const togGithubEl = document.getElementById('togGithub');
-if (togGithubEl) {
-  togGithubEl.addEventListener('change', function() {
-    const setup = document.getElementById('githubTokenSetup');
-    const status = document.getElementById('tokenStatus');
-    if (this.checked) {
-      if (setup) setup.classList.add('open');
-      const saved = localStorage.getItem('github-token');
-      if (status) status.textContent = saved ? '✅ Token loaded from browser' : 'Paste token → press Enter';
-      syncAdminUI();
-      if (!saved) {
-        const inp = document.getElementById('tokenInput');
-        if (inp) inp.focus();
-      }
-    } else {
-      if (setup) setup.classList.remove('open');
-    }
-  });
-}
-
-const tokenInputEl = document.getElementById('tokenInput');
-if (tokenInputEl) {
-  tokenInputEl.addEventListener('change', function() {
-    const t = this.value.trim();
-    if (t) {
-      localStorage.setItem('github-token', t);
-      syncAdminUI();
-      const status = document.getElementById('tokenStatus');
-      if (status) status.textContent = '✅ Saved securely in browser';
-      this.value = '';
-      this.blur();
-    }
-  });
-  tokenInputEl.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') this.blur();
-  });
-}
-
-async function init(){
-  setupLayout(); syncFit(); syncAdminUI();
-  try{
-    const r=await fetch('links.json?v='+Date.now());
-    linksData=await r.json();
-  }catch(e){
-    try{ const ls=localStorage.getItem('seeandlearn-links'); linksData=ls?JSON.parse(ls):[]; }catch(e2){ linksData=[]; }
-  }
-  render();
-}
-
-init();
-window.addEventListener('resize',()=>{ setupLayout(); render(); });
-window.addEventListener('orientationchange',()=>setTimeout(()=>{ setupLayout(); render(); },350));
-
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') {
-    const jsonMod = document.getElementById('jsonModal');
-    if (jsonMod && jsonMod.classList.contains('open')) {
-      jsonMod.classList.remove('open');
-      render();
-    }
-    const fastMod = document.getElementById('fastLinkModal');
-    if (fastMod && fastMod.style.display === 'flex') {
-      fastMod.style.display = 'none';
-      render();
-    }
-  }
-});
-</script>
-
-
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') {
-    const jsonMod = document.getElementById('jsonModal');
-    if (jsonMod && jsonMod.classList.contains('open')) {
-      jsonMod.classList.remove('open');
-      render();
-    }
-    const fastMod = document.getElementById('fastLinkModal');
-    if (fastMod && fastMod.style.display === 'flex') {
-      fastMod.style.display = 'none';
-      render();
-    }
-  }
-});
-
-document.getElementById('miFastLinks').addEventListener('pointerup', e => {
-  e.stopPropagation(); closeMenu();
-  if(typeof isAdmin === 'function' && !isAdmin()) { alert('Admin privileges required.'); return; }
-  document.getElementById('fastLinkInput').value = '';
-  document.getElementById('fastLinkStatus').textContent = 'Ready.';
-  document.getElementById('fastLinkModal').style.display = 'flex';
-  setTimeout(() => document.getElementById('fastLinkInput').focus(), 100);
-});
-
-async function handleFastPasteBtn() {
-  try {
-    const text = await navigator.clipboard.readText();
-    if (!text) return;
-    const inp = document.getElementById('fastLinkInput');
-    inp.value = text;
-    inp.dispatchEvent(new Event('input'));
-  } catch (err) {
-    document.getElementById('fastLinkStatus').textContent = 'Clipboard access denied or failed.';
-    document.getElementById('fastLinkStatus').style.color = '#f66';
-  }
-}
-document.getElementById('fastLinkPasteTop').addEventListener('click', handleFastPasteBtn);
-document.getElementById('fastLinkPasteBot').addEventListener('click', handleFastPasteBtn);
-
-document.getElementById('fastLinkExit').addEventListener('pointerup', () => {
-  document.getElementById('fastLinkModal').style.display = 'none';
-  render();
-});
-
-document.getElementById('fastLinkInput').addEventListener('input', function() {
-  const val = this.value.trim();
-  if (!val) return;
-  if (!/^https?:\/\//i.test(val)) {
-    document.getElementById('fastLinkStatus').textContent = 'Waiting for valid URL...';
-    return;
-  }
-  const occ = occupied();
-  let nextCell = "";
-  outer: for(let r=1; r<=ROWS; r++) {
-    for(let c=1; c<=COLS; c++) {
-      const cs = mkCell(r, c);
-      if(!occ.has(cs)) { nextCell = cs; break outer; }
-    }
-  }
-  const d = new Date();
-  const yy = String(d.getFullYear()).slice(-2);
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  const hh = String(d.getHours()).padStart(2, '0');
-  const min = String(d.getMinutes()).padStart(2, '0');
-  const ss = String(d.getSeconds()).padStart(2, '0');
-  const dateAdded = `${yy}.${mm}.${dd}.${hh}.${min}.${ss}`;
-
-  linksData.push({
-    show: "1", asset: "i", cell: nextCell, fit: "fc", link: val,
-    cname: "", sname: "", attribution: "", comment: "", DateAdded: dateAdded
-  });
-  localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
-  document.getElementById('fastLinkStatus').textContent = `Saved to ${nextCell || 'blank cell'}: ${val.substring(0,25)}...`;
-  document.getElementById('fastLinkStatus').style.color = '#9f9';
-  setTimeout(() => { document.getElementById('fastLinkStatus').style.color = '#888'; }, 1000);
-  this.value = '';
-});
-
-
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') {
-    const jsonMod = document.getElementById('jsonModal');
-    if (jsonMod && jsonMod.classList.contains('open')) {
-      jsonMod.classList.remove('open');
-      render();
-    }
-    const fastMod = document.getElementById('fastLinkModal');
-    if (fastMod && fastMod.style.display === 'flex') {
-      fastMod.style.display = 'none';
-      render();
-    }
-  }
-});
-</script>
-</body>
-</html>
+}>
