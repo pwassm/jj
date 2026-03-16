@@ -1,3 +1,4 @@
+// Version 9: Header layout fixed
 function openFS(it){
   const img = document.getElementById('fsImg');
   img.src = it.link;
