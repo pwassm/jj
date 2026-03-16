@@ -159,19 +159,19 @@ window.renderTableEditor = function() {
   updateSelectedRowsButton();
 
   let html = '<div style="display:table; border-collapse:collapse; color:#fff; font-family:sans-serif; font-size:13px; table-layout:fixed;">';
-  html += '<div style="display:table-row; font-weight:bold; position:sticky; top:0; z-index:10; background:#222; box-shadow: 0 4px 6px rgba(0,0,0,0.6);">';
-  html += `<div style="display:table-cell; padding:8px; border:1px solid #444; border-bottom:3px solid #8ef; width:60px; min-width:60px; max-width:60px; text-align:center;">
+  html += '<div style="display:table-row; font-weight:bold; position:sticky; top:0; z-index:10; background:#222; border-top: 2px solid #8ef; border-bottom: 2px solid #8ef; box-shadow: 0 4px 8px rgba(0,0,0,0.6);">';
+  html += `<div style="display:table-cell; padding:8px; border:1px solid #444; width:60px; min-width:60px; max-width:60px; text-align:center; box-sizing:border-box;">
              <input type="checkbox" onchange="toggleSelectAll(this.checked)" ${selectedRows.size>0 && selectedRows.size===linksData.length?'checked':''}>
              <span style="margin-left:4px;">Del</span>
            </div>`;
 
   tableKeys.forEach((k, i) => {
     let w = colWidths[k] || 150;
-    html += `<div id="th-${k}" style="display:table-cell; border:1px solid #444; border-bottom:3px solid #8ef; background:#222; width:${w}px; min-width:${w}px; max-width:${w}px; position:relative;" 
+    html += `<div id="th-${k}" style="display:table-cell; border:1px solid #444; background:#222; width:${w}px; min-width:${w}px; max-width:${w}px; position:relative; box-sizing:border-box;" 
                draggable="true" ondragstart="colDragStart(event, ${i})" ondragover="event.preventDefault(); this.style.background='#444'" ondragleave="this.style.background='#222'" ondrop="this.style.background='#222'; colDrop(event, ${i})">
                <div style="position:relative; width:100%; min-height:48px; padding:6px 12px 6px 6px; box-sizing:border-box;">
 
-                 <div style="display:flex; flex-direction:column; align-items:flex-start; gap:4px; margin-bottom:6px;">
+                 <div style="display:flex; flex-direction:column; align-items:flex-start; gap:4px; margin-bottom:8px;">
                    <button onclick="deleteCol('${k}')" style="background:none;border:none;color:#f66;cursor:pointer;font-size:14px;padding:0;line-height:1;text-align:left;" title="Delete Column">&#10006;</button>
                    <button onclick="renameCol('${k}')" style="background:none;border:none;color:#8ef;cursor:pointer;font-size:14px;padding:0;line-height:1;text-align:left;" title="Rename Column">&#9998;</button>
                  </div>
@@ -183,7 +183,7 @@ window.renderTableEditor = function() {
              </div>`;
   });
 
-  html += '<div style="display:table-cell; padding:8px; border:1px solid #444; border-bottom:3px solid #8ef; width:60px; min-width:60px; background:#222;"><button onclick="addCol()" style="cursor:pointer;background:#2a2a3e;color:#fff;border:1px solid #555;padding:4px 8px;border-radius:4px;">+ Col</button></div></div>';
+  html += '<div style="display:table-cell; padding:8px; border:1px solid #444; width:60px; min-width:60px; background:#222; box-sizing:border-box;"><button onclick="addCol()" style="cursor:pointer;background:#2a2a3e;color:#fff;border:1px solid #555;padding:4px 8px;border-radius:4px;">+ Col</button></div></div>';
 
   linksData.forEach((row, rIdx) => {
     const isSel = selectedRows.has(rIdx);
