@@ -105,9 +105,34 @@ document.addEventListener('keydown', e => {
   }
 });
 
+
 window.addEventListener('keydown', e => {
   if (e.key === 'Control') document.body.classList.add('ctrl-pressed');
+
+  if (e.ctrlKey && e.key.toLowerCase() === 'h') {
+    e.preventDefault();
+    const menuBtn = document.getElementById('menuBtn');
+    if (menuBtn) {
+      // Simulate click
+      const ev = new PointerEvent('pointerup', { bubbles: true, cancelable: true });
+      menuBtn.dispatchEvent(ev);
+    }
+  }
+
+  if (!e.ctrlKey && !e.altKey && !e.metaKey && e.key.toLowerCase() === 't') {
+    const menuPanel = document.getElementById('menuPanel');
+    if (menuPanel && menuPanel.classList.contains('open')) {
+       // If hamburger is open, trigger Tables
+       e.preventDefault();
+       const miTables = document.getElementById('miTables');
+       if (miTables) {
+         const ev = new PointerEvent('pointerup', { bubbles: true, cancelable: true });
+         miTables.dispatchEvent(ev);
+       }
+    }
+  }
 });
+
 window.addEventListener('keyup', e => {
   if (e.key === 'Control') document.body.classList.remove('ctrl-pressed');
 });

@@ -462,6 +462,7 @@ window.fillEmptyVideoInfo = async function() {
 
 
 
+
 window.lastActiveRowIdx = -1;
 
 document.addEventListener('focusin', function(e) {
@@ -471,64 +472,72 @@ document.addEventListener('focusin', function(e) {
 });
 
 window.getFirstEmptyCell = function() {
-  const occ = new Set();
-  linksData.forEach(r => { if(r.cell) occ.add(r.cell.toUpperCase()); });
-  const letters = "ABCDE";
-  for(let r=1; r<=5; r++) {
-    for(let c=0; c<5; c++) {
-      let cs = r + letters[c];
-      if(!occ.has(cs)) return cs;
+  try {
+    const occ = new Set();
+    linksData.forEach(r => { if(r && r.cell) occ.add(String(r.cell).toUpperCase()); });
+    const letters = "ABCDE";
+    for(let r=1; r<=5; r++) {
+      for(let c=0; c<5; c++) {
+        let cs = r + letters[c];
+        if(!occ.has(cs)) return cs;
+      }
     }
-  }
+  } catch(e) { console.error(e); }
   return "";
 };
 
 window.duplicateActiveRow = function() {
-  let rIdx = window.lastActiveRowIdx;
-  if (selectedRows && selectedRows.size > 0) {
-    rIdx = Array.from(selectedRows)[0];
-  }
-  if (rIdx < 0 && linksData.length > 0) rIdx = linksData.length - 1; 
+  try {
+    let rIdx = window.lastActiveRowIdx;
+    if (typeof selectedRows !== 'undefined' && selectedRows.size > 0) {
+      rIdx = Array.from(selectedRows)[0];
+    }
+    if (rIdx < 0 && linksData.length > 0) rIdx = linksData.length - 1; 
 
-  if (rIdx >= 0 && rIdx < linksData.length) {
-     const newRow = JSON.parse(JSON.stringify(linksData[rIdx]));
-     newRow.cell = window.getFirstEmptyCell();
-     linksData.splice(rIdx + 1, 0, newRow);
-     localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
-     if(window.renderTableEditor) window.renderTableEditor();
+    if (rIdx >= 0 && rIdx < linksData.length) {
+       const newRow = JSON.parse(JSON.stringify(linksData[rIdx]));
+       newRow.cell = window.getFirstEmptyCell();
+       linksData.splice(rIdx + 1, 0, newRow);
 
-     window.lastActiveRowIdx = rIdx + 1;
+       try { localStorage.setItem('seeandlearn-links', JSON.stringify(linksData)); } catch(e){}
 
-     // flash visual feedback on the button
-     const btn = document.getElementById('btn-duplicate-row');
-     if(btn) {
-       const oldBg = btn.style.background;
-       btn.style.background = '#fff';
-       setTimeout(()=>btn.style.background = oldBg, 150);
-     }
+       if(window.renderTableEditor) window.renderTableEditor();
 
-     setTimeout(() => {
-       const isVidNode = newRow.asset && window.parseVideoAsset && window.parseVideoAsset(newRow.asset) !== null;
-       if (isVidNode && window.openVideoEditor) {
-         window.openVideoEditor(linksData[rIdx + 1]);
+       window.lastActiveRowIdx = rIdx + 1;
+
+       const btn = document.getElementById('btn-duplicate-row');
+       if(btn) {
+         const oldBg = btn.style.background;
+         btn.style.background = '#fff';
+         btn.style.color = '#000';
+         setTimeout(() => {
+           btn.style.background = oldBg;
+           btn.style.color = '#eaf';
+         }, 200);
        }
-     }, 200);
+
+       setTimeout(() => {
+         const isVidNode = newRow.asset && window.parseVideoAsset && window.parseVideoAsset(newRow.asset) !== null;
+         if (isVidNode && window.openVideoEditor) {
+           window.openVideoEditor(linksData[rIdx + 1]);
+         }
+       }, 200);
+    }
+  } catch(err) {
+    alert("Duplicate Error: " + err.message);
   }
 };
 
-document.addEventListener('keydown', function(e) {
+window.addEventListener('keydown', function(e) {
   if (e.ctrlKey && e.key.toLowerCase() === 'd') {
     const tableWrap = document.getElementById('tableEditorWrap');
     if (tableWrap && tableWrap.offsetParent !== null) {
       e.preventDefault();
+      e.stopPropagation();
       window.duplicateActiveRow();
     }
   }
-});
+}, true); // Use capture phase to beat browser default Ctrl+D
 
-document.addEventListener('click', function(e) {
-  if (e.target && e.target.id === 'btn-duplicate-row') {
-    window.duplicateActiveRow();
-  }
-});
+
 
