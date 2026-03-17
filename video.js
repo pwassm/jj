@@ -203,28 +203,43 @@ window.openVideoEditor = function(it) {
   overlay.style.cssText = 'position:fixed; z-index:99999; left:15%; top:15%; width:70%; height:70%; background:#222; border:2px solid #8ef; display:flex; flex-direction:column; box-shadow: 0 10px 30px rgba(0,0,0,0.8); font-family:sans-serif; color:#fff; border-radius:8px; overflow:hidden;';
 
   overlay.innerHTML = `
+    <style>
+      .ved-num-input::-webkit-inner-spin-button, .ved-num-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+      .ved-num-input { -moz-appearance: textfield; text-align: center; font-size: 16px; font-weight: bold; }
+      .ved-btn { width: 44px; height: 44px; font-size: 24px; font-weight: bold; background: #444; border: 1px solid #666; color: #fff; cursor: pointer; border-radius: 4px; display: flex; align-items: center; justify-content: center; user-select: none; }
+      .ved-btn:hover { background: #5a5a5a; }
+      .ved-btn:active { background: #8ef; color:#000; }
+    </style>
     <div style="display:flex; justify-content:space-between; padding:10px 15px; background:#111; border-bottom:1px solid #444;">
       <h3 style="margin:0; font-size:16px;">Video Editor - Cell ${it.cell}</h3>
       <button id="ved-close" style="background:none; border:none; color:#f66; font-size:18px; cursor:pointer;" title="Close without saving">&#10006;</button>
     </div>
     <div style="display:flex; flex:1; overflow:hidden;">
       <div id="editor-vid-host" style="flex:1; background:#000; position:relative; pointer-events:none;"></div>
-      <div style="width:250px; padding:20px; background:#1a1a1a; display:flex; flex-direction:column; gap:20px; border-left:1px solid #444;">
+      <div style="width:280px; padding:20px; background:#1a1a1a; display:flex; flex-direction:column; gap:24px; border-left:1px solid #444; overflow-y:auto;">
          <div>
-           <label style="display:block; margin-bottom:5px; font-size:13px; color:#ccc;">Start Time (sec)</label>
-           <input type="number" id="ved-start" value="${currentStart}" min="0" style="width:100%; padding:8px; box-sizing:border-box; background:#333; color:#fff; border:1px solid #555; border-radius:4px;">
+           <label style="display:block; margin-bottom:8px; font-size:13px; color:#ccc;">Start Time (sec) [L / R]</label>
+           <div style="display:flex; gap:8px;">
+             <div class="ved-btn" id="ved-start-dec">-</div>
+             <input type="number" id="ved-start" class="ved-num-input" value="${currentStart}" min="0" step="0.1" style="flex:1; width:100%; padding:8px; box-sizing:border-box; background:#333; color:#fff; border:1px solid #555; border-radius:4px;">
+             <div class="ved-btn" id="ved-start-inc">+</div>
+           </div>
          </div>
          <div>
-           <label style="display:block; margin-bottom:5px; font-size:13px; color:#ccc;">Duration (sec)</label>
-           <input type="number" id="ved-dur" value="${currentDur}" min="0.1" step="0.1" style="width:100%; padding:8px; box-sizing:border-box; background:#333; color:#fff; border:1px solid #555; border-radius:4px;">
+           <label style="display:block; margin-bottom:8px; font-size:13px; color:#ccc;">Duration (sec) [Down / Up]</label>
+           <div style="display:flex; gap:8px;">
+             <div class="ved-btn" id="ved-dur-dec">-</div>
+             <input type="number" id="ved-dur" class="ved-num-input" value="${currentDur}" min="0.1" step="0.1" style="flex:1; width:100%; padding:8px; box-sizing:border-box; background:#333; color:#fff; border:1px solid #555; border-radius:4px;">
+             <div class="ved-btn" id="ved-dur-inc">+</div>
+           </div>
          </div>
          <div>
-           <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:14px; user-select:none;">
-             <input type="checkbox" id="ved-mute" ${currentMute ? 'checked' : ''} style="width:16px; height:16px;">
-             Muted
+           <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:14px; user-select:none; padding:8px 0;">
+             <input type="checkbox" id="ved-mute" ${currentMute ? 'checked' : ''} style="width:18px; height:18px;">
+             Muted Preview
            </label>
          </div>
-         <button id="ved-save" style="margin-top:auto; padding:12px; background:#8ef; color:#000; border:none; border-radius:4px; font-weight:bold; cursor:pointer; font-size:14px;">Save changes (^S)</button>
+         <button id="ved-save" style="margin-top:auto; padding:14px; background:#8ef; color:#000; border:none; border-radius:6px; font-weight:bold; cursor:pointer; font-size:15px; text-transform:uppercase; box-shadow:0 2px 5px rgba(0,0,0,0.5);">Save (^S)</button>
       </div>
     </div>
   `;
@@ -235,9 +250,16 @@ window.openVideoEditor = function(it) {
   const iDur = document.getElementById('ved-dur');
   const iMute = document.getElementById('ved-mute');
 
+  const formatDec = (val) => parseFloat(Number(val).toFixed(1));
+
+  const applyUI = () => {
+    iStart.value = currentStart;
+    iDur.value = currentDur;
+  };
+
   const updatePreview = () => {
-     currentStart = Number(iStart.value) || 0;
-     currentDur = Number(iDur.value) || 1;
+     currentStart = formatDec(iStart.value) || 0;
+     currentDur = formatDec(iDur.value) || 1;
      currentMute = iMute.checked;
      if (window.isYouTubeLink(it.link)) {
        window.mountYouTubeClip(host, it.link, currentStart, currentDur, currentMute);
@@ -246,13 +268,26 @@ window.openVideoEditor = function(it) {
      }
   };
 
-  updatePreview();
-
   let debounce;
   const onChange = () => {
     clearTimeout(debounce);
-    debounce = setTimeout(updatePreview, 600);
+    debounce = setTimeout(updatePreview, 500);
   };
+
+  const changeVal = (type, delta) => {
+    if (type === 'start') {
+      currentStart = formatDec(Math.max(0, currentStart + delta));
+    } else {
+      currentDur = formatDec(Math.max(0.1, currentDur + delta));
+    }
+    applyUI();
+    onChange();
+  };
+
+  document.getElementById('ved-start-dec').addEventListener('pointerdown', (e) => { e.preventDefault(); changeVal('start', -0.1); });
+  document.getElementById('ved-start-inc').addEventListener('pointerdown', (e) => { e.preventDefault(); changeVal('start', 0.1); });
+  document.getElementById('ved-dur-dec').addEventListener('pointerdown', (e) => { e.preventDefault(); changeVal('dur', -0.1); });
+  document.getElementById('ved-dur-inc').addEventListener('pointerdown', (e) => { e.preventDefault(); changeVal('dur', 0.1); });
 
   iStart.addEventListener('input', onChange);
   iDur.addEventListener('input', onChange);
@@ -283,13 +318,38 @@ window.openVideoEditor = function(it) {
   document.getElementById('ved-save').addEventListener('click', saveEditor);
 
   const handleKey = (e) => {
-    if (e.ctrlKey && e.key.toLowerCase() === 's') {
+    const k = e.key;
+    const kl = k.toLowerCase();
+
+    if (e.ctrlKey && kl === 's') {
       e.preventDefault();
       saveEditor();
+      return;
     }
-    if (e.key === 'Escape') {
+    if (k === 'Escape') {
       closeEditor();
+      return;
+    }
+
+    const isInput = document.activeElement && document.activeElement.tagName === 'INPUT';
+
+    // Process shortcuts
+    if (kl === 'l' || kl === 'r' || k === 'ArrowLeft' || k === 'ArrowRight' || k === 'ArrowUp' || k === 'ArrowDown') {
+
+      // If user is actively typing in the number box, let them use Left/Right arrows to move cursor
+      if (isInput && (k === 'ArrowLeft' || k === 'ArrowRight')) {
+        return; 
+      }
+
+      e.preventDefault(); // Stop page scrolling / default up-down number spin
+
+      if (kl === 'l' || k === 'ArrowLeft') changeVal('start', -0.1);
+      if (kl === 'r' || k === 'ArrowRight') changeVal('start', 0.1);
+      if (k === 'ArrowDown') changeVal('dur', -0.1);
+      if (k === 'ArrowUp') changeVal('dur', 0.1);
     }
   };
+
   document.addEventListener('keydown', handleKey);
+  updatePreview();
 };
