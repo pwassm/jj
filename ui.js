@@ -67,7 +67,6 @@ let sortCol = null;
 let sortAsc = true;
 let draggedCol = -1;
 let selectedRows = new Set();
-let lastActiveRowIdx = -1;
 let colWidths = JSON.parse(localStorage.getItem('seeandlearn-colWidths') || '{}');
 let recycleData = JSON.parse(localStorage.getItem('seeandlearn-recycle') || '[]');
 
@@ -465,18 +464,11 @@ window.fillEmptyVideoInfo = async function() {
 
 
 
+window.lastActiveRowIdx = -1;
+
 document.addEventListener('focusin', function(e) {
   if (e.target && e.target.id && e.target.id.startsWith('cell-')) {
     window.lastActiveRowIdx = parseInt(e.target.id.split('-')[1]);
-  }
-});
-
-let lastActiveRowIdx = -1;
-
-document.addEventListener('focusin', e => {
-  if (e.target && e.target.id && e.target.id.startsWith('cell-')) {
-    const idx = parseInt(e.target.id.split('-')[1]);
-    if (!Number.isNaN(idx)) lastActiveRowIdx = idx;
   }
 });
 
@@ -496,43 +488,46 @@ window.getFirstEmptyCell = function() {
 };
 
 window.duplicateActiveRow = function() {
-  let rIdx = lastActiveRowIdx;
-  if (selectedRows && selectedRows.size > 0) {
-    rIdx = Array.from(selectedRows)[0];
-  }
-  if ((rIdx == null || rIdx < 0) && linksData.length > 0) {
-    rIdx = linksData.length - 1;
-  }
-  if (rIdx == null || rIdx < 0 || rIdx >= linksData.length) {
-    alert('No row selected to duplicate. Click into a row first.');
-    return;
-  }
-
-  const newRow = JSON.parse(JSON.stringify(linksData[rIdx]));
-  newRow.cell = window.getFirstEmptyCell();
-  linksData.splice(rIdx + 1, 0, newRow);
   try {
-    localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
-  } catch(e) {}
-  if (window.renderTableEditor) window.renderTableEditor();
+    let rIdx = window.lastActiveRowIdx;
+    if (typeof selectedRows !== 'undefined' && selectedRows.size > 0) {
+      rIdx = Array.from(selectedRows)[0];
+    }
+    if (rIdx < 0 && linksData.length > 0) rIdx = linksData.length - 1; 
 
-  lastActiveRowIdx = rIdx + 1;
+    if (rIdx >= 0 && rIdx < linksData.length) {
+       const newRow = JSON.parse(JSON.stringify(linksData[rIdx]));
+       newRow.cell = window.getFirstEmptyCell();
+       linksData.splice(rIdx + 1, 0, newRow);
 
-  const btn = document.getElementById('btn-duplicate-row-action');
-  if (btn) {
-    const oldBg = btn.style.background;
-    const oldColor = btn.style.color;
-    btn.style.background = '#fff';
-    btn.style.color = '#000';
-    setTimeout(() => {
-      btn.style.background = oldBg;
-      btn.style.color = oldColor;
-    }, 180);
-  }
+       try { localStorage.setItem('seeandlearn-links', JSON.stringify(linksData)); } catch(e){}
 
-  const isVid = newRow.asset && window.parseVideoAsset && window.parseVideoAsset(newRow.asset);
-  if (isVid && window.openVideoEditor) {
-    setTimeout(() => window.openVideoEditor(linksData[rIdx + 1]), 200);
+       if(window.renderTableEditor) window.renderTableEditor();
+
+       window.lastActiveRowIdx = rIdx + 1;
+
+       const btn = document.getElementById('btn-duplicate-row-action');
+       if(btn) {
+         const oldBg = btn.style.background;
+         btn.style.background = '#fff';
+         btn.style.color = '#000';
+         setTimeout(() => {
+           btn.style.background = oldBg;
+           btn.style.color = '#eaf';
+         }, 200);
+       }
+
+       setTimeout(() => {
+         const isVidNode = newRow.asset && window.parseVideoAsset && window.parseVideoAsset(newRow.asset) !== null;
+         if (isVidNode && window.openVideoEditor) {
+           window.openVideoEditor(linksData[rIdx + 1]);
+         }
+       }, 200);
+    } else {
+       alert("No row selected to duplicate! Click on a row first.");
+    }
+  } catch(err) {
+    alert("Duplicate Error: " + err.message);
   }
 };
 

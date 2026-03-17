@@ -118,7 +118,7 @@ function buildOverlays(){
       const dy = e.clientY - startY;
 
       // Swipe Right -> Full Screen (made more tolerant for mobile)
-      if (dx > 20 && Math.abs(dy) < Math.abs(dx) * 2) {
+      if (dx > 25 && Math.abs(dy) < Math.abs(dx) * 1.5) {
          e.stopPropagation();
          window.openFS(it);
          return;
