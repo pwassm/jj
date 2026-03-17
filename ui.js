@@ -463,6 +463,7 @@ window.fillEmptyVideoInfo = async function() {
 
 
 
+
 window.lastActiveRowIdx = -1;
 
 document.addEventListener('focusin', function(e) {
@@ -505,7 +506,7 @@ window.duplicateActiveRow = function() {
 
        window.lastActiveRowIdx = rIdx + 1;
 
-       const btn = document.getElementById('btn-duplicate-row');
+       const btn = document.getElementById('btn-duplicate-row-action');
        if(btn) {
          const oldBg = btn.style.background;
          btn.style.background = '#fff';
@@ -522,6 +523,8 @@ window.duplicateActiveRow = function() {
            window.openVideoEditor(linksData[rIdx + 1]);
          }
        }, 200);
+    } else {
+       alert("No row selected to duplicate! Click on a row first.");
     }
   } catch(err) {
     alert("Duplicate Error: " + err.message);
@@ -530,14 +533,22 @@ window.duplicateActiveRow = function() {
 
 window.addEventListener('keydown', function(e) {
   if (e.ctrlKey && e.key.toLowerCase() === 'd') {
-    const tableWrap = document.getElementById('tableEditorWrap');
-    if (tableWrap && tableWrap.offsetParent !== null) {
+    const jsonMod = document.getElementById('jsonModal');
+    if (jsonMod && jsonMod.classList.contains('open')) {
       e.preventDefault();
       e.stopPropagation();
       window.duplicateActiveRow();
     }
   }
 }, true); // Use capture phase to beat browser default Ctrl+D
+
+// Wait until DOM is ready to bind the button, or bind it directly to the document
+document.addEventListener('click', function(e) {
+  if (e.target && e.target.id === 'btn-duplicate-row-action') {
+    window.duplicateActiveRow();
+  }
+});
+
 
 
 
