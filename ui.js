@@ -401,12 +401,6 @@ document.getElementById('togFit').addEventListener('change',function(){
 document.getElementById('togCellLbl').addEventListener('change',function(){ showCellLbl=this.checked; render(); });
 document.getElementById('togCname').addEventListener('change',function(){ showCname=this.checked; render(); });
 
-(()=>{
-  const d=new Date();
-  document.getElementById('menuDateStamp').textContent=
-    d.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric',year:'numeric'})+
-    ' '+d.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});
-})();
 
 // Ctrl+Alt+S global
 document.addEventListener('keydown',e=>{
@@ -504,6 +498,14 @@ window.duplicateActiveRow = function() {
      if(window.renderTableEditor) window.renderTableEditor();
 
      window.lastActiveRowIdx = rIdx + 1;
+
+     // flash visual feedback on the button
+     const btn = document.getElementById('btn-duplicate-row');
+     if(btn) {
+       const oldBg = btn.style.background;
+       btn.style.background = '#fff';
+       setTimeout(()=>btn.style.background = oldBg, 150);
+     }
 
      setTimeout(() => {
        const isVidNode = newRow.asset && window.parseVideoAsset && window.parseVideoAsset(newRow.asset) !== null;

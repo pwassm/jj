@@ -37,9 +37,9 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
 #menuPanel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.3); border-radius: 3px; }
 #menuPanel.open { display: flex; }
 #menuDateStamp {
-  padding: 6px 12px 2px 12px; font: 10px Arial,sans-serif;
-  color: rgba(255,255,255,0.35); text-align: right;
-  flex-shrink: 0; user-select: none; letter-spacing: 0.3px;
+  padding: 13px 18px; color: #8ef; font: 15px Arial,sans-serif;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  text-align: left; user-select: none; font-weight: bold;
 }
 .menu-item {
   padding: 13px 18px; color: #fff; font: 15px Arial,sans-serif;
@@ -185,7 +185,7 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
 
 <div id="menuWrap">
   <div id="menuPanel">
-    <div id="menuDateStamp"></div>
+    <div id="menuDateStamp">Build: Mar 17, 2026 03:21 PM</div>
     <div class="menu-item" id="miAdmin" style="opacity:0.45; color:#aaa; pointer-events:none; cursor:default; border-bottom:1px solid rgba(255,255,255,0.08);">&#128274; Admin</div>
     <div class="menu-item" id="miFastLinks">Links (Fast Paste)</div>
     <div class="menu-item" id="miTables">Tables (JSON editor)</div>
@@ -275,7 +275,7 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
       <div style="display:flex; justify-content:space-between; align-items:center;">
         <div style="display:flex; gap:10px;">
           <button id="addTableItem" style="padding:8px 16px; border-radius:6px; border:1px solid #4af; background:rgba(0,80,180,0.3); color:#8ef; cursor:pointer;">+ Add Row</button>
-          <button id="btn-duplicate-row" style="padding:8px 16px; border-radius:6px; border:1px solid #a8f; background:rgba(160,80,200,0.3); color:#eaf; cursor:pointer;">Duplicate (^D)</button>
+          <button id="btn-duplicate-row" onclick="window.duplicateActiveRow()" style="padding:8px 16px; border-radius:6px; border:1px solid #a8f; background:rgba(160,80,200,0.3); color:#eaf; cursor:pointer;">Duplicate (^D)</button>
           <button id="btn-get-vid-info" onclick="if(window.fillEmptyVideoInfo)window.fillEmptyVideoInfo()" style="padding:8px 16px; border-radius:6px; border:1px solid #ff8; background:rgba(180,180,0,0.2); color:#ff8; cursor:pointer;">Get Video Info</button>
           <button id="deleteSelectedRows" style="padding:8px 16px; border-radius:6px; border:1px solid #f66; background:rgba(180,0,0,0.3); color:#f88; cursor:pointer; display:none;">Delete Selected</button>
         </div>
@@ -294,13 +294,13 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
   </div>
 </div>
 
-<script src="globals.js?v=25"></script>
-<script src="grid.js?v=25"></script>
-<script src="ui.js?v=25"></script>
-<script src="editor.js?v=25"></script>
-<script src="github.js?v=25"></script>
-<script src="video.js?v=25"></script>
-<script src="main.js?v=25"></script>
+<script src="globals.js?v=26"></script>
+<script src="grid.js?v=26"></script>
+<script src="ui.js?v=26"></script>
+<script src="editor.js?v=26"></script>
+<script src="github.js?v=26"></script>
+<script src="video.js?v=26"></script>
+<script src="main.js?v=26"></script>
 
 </body>
 </html>
