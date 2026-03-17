@@ -161,49 +161,6 @@ window.fillEmptyVideoInfo = async function() {
 
 
 
-  const letters = "ABCDE";
-  for(let r=1; r<=5; r++) {
-    for(let c=0; c<5; c++) {
-      let cs = r + letters[c];
-      if(!occ.has(cs)) return cs;
-    }
-  }
-  return "";
-};
-
-window.duplicateActiveRow = function() {
-  let rIdx = -1;
-  const ae = document.activeElement;
-  if (ae && ae.id && ae.id.startsWith('cell-')) {
-    rIdx = parseInt(ae.id.split('-')[1]);
-  } else if (window.selectedRows && window.selectedRows.size > 0) {
-    rIdx = Array.from(window.selectedRows)[0];
-  }
-  if (rIdx >= 0 && rIdx < window.linksData.length) {
-     const newRow = JSON.parse(JSON.stringify(window.linksData[rIdx]));
-     newRow.cell = window.getFirstEmptyCell();
-     window.linksData.splice(rIdx + 1, 0, newRow);
-     localStorage.setItem('seeandlearn-links', JSON.stringify(window.linksData));
-     if(window.renderTableEditor) window.renderTableEditor();
-  }
-};
-
-document.addEventListener('keydown', function(e) {
-  if (e.ctrlKey && e.key.toLowerCase() === 'd') {
-    const tableWrap = document.getElementById('tableEditorWrap');
-    if (tableWrap && tableWrap.offsetParent !== null) {
-      e.preventDefault();
-      window.duplicateActiveRow();
-    }
-  }
-});
-
-// Need to bind the button too after render or dynamically. We can do it here by intercepting clicks on the document
-document.addEventListener('click', function(e) {
-  if (e.target && e.target.id === 'btn-duplicate-row') {
-    window.duplicateActiveRow();
-  }
-});
 
 
 window.lastActiveRowIdx = -1;
@@ -261,5 +218,11 @@ document.addEventListener('keydown', function(e) {
       e.preventDefault();
       window.duplicateActiveRow();
     }
+  }
+});
+
+document.addEventListener('click', function(e) {
+  if (e.target && e.target.id === 'btn-duplicate-row') {
+    window.duplicateActiveRow();
   }
 });
