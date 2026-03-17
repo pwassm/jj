@@ -44,6 +44,24 @@ window.openFS = function(it) {
 
   document.body.appendChild(fs);
 }
+// menu
+function closeMenu(){
+  menuPanel.classList.remove('open');
+  menuBtn.classList.remove('open');
+  document.getElementById('settingsPanel').classList.remove('open');
+  document.getElementById('miSettings').textContent='Settings \u25b8';
+}
+menuBtn.addEventListener('pointerup',e=>{
+  e.stopPropagation();
+  const o=menuPanel.classList.toggle('open');
+  menuBtn.classList.toggle('open',o);
+  if(!o) document.getElementById('settingsPanel').classList.remove('open');
+});
+menuPanel.addEventListener('pointerup',e=>e.stopPropagation());
+document.addEventListener('pointerup',()=>{ if(menuPanel.classList.contains('open')) closeMenu(); });
+
+let rawJsonMode = false;
+
 window.moveRow = function(idx, dir) {
   if(idx+dir < 0 || idx+dir >= linksData.length) return;
   const temp = linksData[idx]; linksData[idx] = linksData[idx+dir]; linksData[idx+dir] = temp;

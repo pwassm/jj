@@ -98,15 +98,57 @@ function buildOverlays(){
     }
 
     const isVidNode = window.parseVideoAsset && window.parseVideoAsset(assetVal) !== null;
-    div.addEventListener('pointerup',e=>{ 
-      if (e.ctrlKey && isVidNode) {
-        e.stopPropagation();
-        if (window.openVideoEditor) window.openVideoEditor(it);
-      } else if (assetVal === 'i') {
-        e.stopPropagation(); 
-        window.openFS(it); 
+
+    let startX = 0, startY = 0, isDragging = false;
+
+    div.addEventListener('pointerdown', e => {
+      // Allow primary touch and left click only
+      if (e.button !== undefined && e.button !== 0 && e.pointerType !== 'touch') return;
+      startX = e.clientX; startY = e.clientY;
+      isDragging = true;
+    });
+
+    div.addEventListener('pointermove', e => {
+      if (!isDragging) return;
+    });
+
+    div.addEventListener('pointerup', e => {
+      if (!isDragging) return;
+      isDragging = false;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+
+      // If swept right by more than 40 pixels and mostly horizontally -> Full Screen
+      if (dx > 40 && Math.abs(dy) < Math.abs(dx)) {
+         e.stopPropagation();
+         window.openFS(it);
+         return;
+      }
+
+      // If it was just a regular click/tap (minimal movement)
+      if (Math.abs(dx) < 10 && Math.abs(dy) < 10) {
+        if (isVidNode) {
+          if (e.ctrlKey) {
+            e.stopPropagation();
+            if (window.openVideoEditor) window.openVideoEditor(it);
+          }
+        } else if (assetVal === 'i') {
+          e.stopPropagation();
+          window.openFS(it);
+        }
       }
     });
+
+    // Also cancel dragging if we leave or cancel
+    div.addEventListener('pointercancel', () => { isDragging = false; });
+    div.addEventListener('pointerleave', () => { isDragging = false; });
+
+    div.addEventListener('contextmenu', e => {
+      if (isVidNode) {
+         e.preventDefault();
+      }
+    });
+
     wrap.appendChild(div);
   });
 
