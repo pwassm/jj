@@ -239,7 +239,8 @@ window.openVideoEditor = function(it) {
              Muted Preview
            </label>
          </div>
-         <button id="ved-save" style="margin-top:auto; padding:14px; background:#8ef; color:#000; border:none; border-radius:6px; font-weight:bold; cursor:pointer; font-size:15px; text-transform:uppercase; box-shadow:0 2px 5px rgba(0,0,0,0.5);">Save (^S)</button>
+         <button id="ved-preview-end" style="margin-top:auto; margin-bottom:10px; padding:10px; background:#444; color:#fff; border:1px solid #666; border-radius:6px; font-weight:bold; cursor:pointer; font-size:14px;">Preview End (f)</button>
+         <button id="ved-save" style="padding:14px; background:#8ef; color:#000; border:none; border-radius:6px; font-weight:bold; cursor:pointer; font-size:15px; text-transform:uppercase; box-shadow:0 2px 5px rgba(0,0,0,0.5);">Save (s)</button>
       </div>
     </div>
   `;
@@ -295,6 +296,24 @@ window.openVideoEditor = function(it) {
   iDur.addEventListener('change', updatePreview);
   iMute.addEventListener('change', updatePreview);
 
+
+  const previewEnd = () => {
+    let startPreview = Math.max(0, currentStart + currentDur - 5);
+    if (startPreview < currentStart) startPreview = currentStart;
+    const p = window.seeLearnVideoPlayers['editor-vid-host'];
+    if (p) {
+      if (typeof p.seekTo === 'function') {
+         p.seekTo(startPreview, true);
+         if (typeof p.playVideo === 'function') p.playVideo();
+      } else if (typeof p.setCurrentTime === 'function') {
+         p.setCurrentTime(startPreview);
+         if (typeof p.play === 'function') p.play();
+      }
+    }
+  };
+
+  document.getElementById('ved-preview-end').addEventListener('click', previewEnd);
+
   const closeEditor = () => {
     window.stopCellVideoLoop('editor-vid-host');
     overlay.remove();
@@ -321,9 +340,16 @@ window.openVideoEditor = function(it) {
     const k = e.key;
     const kl = k.toLowerCase();
 
-    if (e.ctrlKey && kl === 's') {
+    
+
+    if (kl === 's' && (!isInput || e.ctrlKey)) {
       e.preventDefault();
       saveEditor();
+      return;
+    }
+    if (kl === 'f' && !isInput) {
+      e.preventDefault();
+      previewEnd();
       return;
     }
     if (k === 'Escape') {

@@ -114,3 +114,8 @@ window.addEventListener('keyup', e => {
 window.addEventListener('blur', () => {
   document.body.classList.remove('ctrl-pressed');
 });
+
+
+window.rKeyDown = false;
+window.addEventListener('keydown', e => { if (e.key.toLowerCase() === 'r') window.rKeyDown = true; });
+window.addEventListener('keyup', e => { if (e.key.toLowerCase() === 'r') window.rKeyDown = false; });

@@ -104,7 +104,7 @@ function buildOverlays(){
         if (window.openVideoEditor) window.openVideoEditor(it);
       } else if (assetVal === 'i') {
         e.stopPropagation(); 
-        openFS(it); 
+        window.openFS(it); 
       }
     });
     wrap.appendChild(div);
