@@ -74,7 +74,7 @@ function buildOverlays(){
     const x=(pos.col-1)*cellW, y=(pos.row-1)*cellH;
     const div=document.createElement('div');
     div.className='cell-overlay';
-    div.style.cssText='left:'+x+'px;top:'+y+'px;width:'+cellW+'px;height:'+cellH+'px;';
+    div.style.cssText='left:'+x+'px;top:'+y+'px;width:'+cellW+'px;height:'+cellH+'px; touch-action: none;';
 
     const assetVal = String(it.asset || '').trim();
 
@@ -117,8 +117,8 @@ function buildOverlays(){
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
 
-      // Swipe Right -> Full Screen
-      if (dx > 35 && Math.abs(dy) < Math.abs(dx)) {
+      // Swipe Right -> Full Screen (made more tolerant for mobile)
+      if (dx > 25 && Math.abs(dy) < Math.abs(dx) * 1.5) {
          e.stopPropagation();
          window.openFS(it);
          return;
