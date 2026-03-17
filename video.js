@@ -81,7 +81,7 @@ window.mountYouTubeClip = async function(hostEl, url, startSec, fitModeStr) {
   // Transform scale can be used to crop out black bars if we really wanted to, but let's stick to 100% width/height first.
   div.style.width = '100%';
   div.style.height = '100%';
-  div.style.pointerEvents = 'none';
+  // div.style.pointerEvents = 'none'; // Disabled so user can click Skip Ad
 
   hostEl.appendChild(div);
 
@@ -89,6 +89,7 @@ window.mountYouTubeClip = async function(hostEl, url, startSec, fitModeStr) {
 
   const player = new YT.Player(innerId, {
     videoId: vid,
+    host: 'https://www.youtube-nocookie.com',
     playerVars: {
       autoplay: 1,
       controls: 0,
