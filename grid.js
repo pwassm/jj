@@ -102,7 +102,6 @@ function buildOverlays(){
     let startX = 0, startY = 0, isDragging = false;
 
     div.addEventListener('pointerdown', e => {
-      // Allow primary touch and left click only
       if (e.button !== undefined && e.button !== 0 && e.pointerType !== 'touch') return;
       startX = e.clientX; startY = e.clientY;
       isDragging = true;
@@ -118,19 +117,23 @@ function buildOverlays(){
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
 
-      // If swept right by more than 40 pixels and mostly horizontally -> Full Screen
-      if (dx > 40 && Math.abs(dy) < Math.abs(dx)) {
+      // Swipe Right -> Full Screen
+      if (dx > 35 && Math.abs(dy) < Math.abs(dx)) {
          e.stopPropagation();
          window.openFS(it);
          return;
       }
 
-      // If it was just a regular click/tap (minimal movement)
+      // Tap / Click
       if (Math.abs(dx) < 10 && Math.abs(dy) < 10) {
         if (isVidNode) {
           if (e.ctrlKey) {
             e.stopPropagation();
-            if (window.openVideoEditor) window.openVideoEditor(it);
+            if (window.rKeyDown || e.shiftKey) {
+               window.openFS(it);
+            } else {
+               if (window.openVideoEditor) window.openVideoEditor(it);
+            }
           }
         } else if (assetVal === 'i') {
           e.stopPropagation();
@@ -139,12 +142,15 @@ function buildOverlays(){
       }
     });
 
-    // Also cancel dragging if we leave or cancel
     div.addEventListener('pointercancel', () => { isDragging = false; });
     div.addEventListener('pointerleave', () => { isDragging = false; });
 
     div.addEventListener('contextmenu', e => {
-      if (isVidNode) {
+      if (isVidNode && e.ctrlKey) {
+         e.preventDefault();
+         e.stopPropagation();
+         window.openFS(it);
+      } else if (isVidNode) {
          e.preventDefault();
       }
     });

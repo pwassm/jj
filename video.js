@@ -96,7 +96,7 @@ window.mountYouTubeClip = async function(hostEl, url, startSec, dur, isMuted, cu
   div.id = innerId;
   div.style.width = '100%';
   div.style.height = '100%';
-  // div.style.pointerEvents = 'none'; // disabled so user can click skip ad
+  div.style.pointerEvents = 'none';
   hostEl.appendChild(div);
 
   const endSec = Number(startSec) + Number(dur);
