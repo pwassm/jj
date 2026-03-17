@@ -83,12 +83,12 @@ function buildOverlays(){
       img.src=it.link; img.alt=it.cname||'';
       img.className=(it.fit||fitMode)==='ei'?'ei':'fc';
       div.appendChild(img);
-    } else if (window.isNumericAsset && window.isNumericAsset(assetVal) && window.isYouTubeLink && window.isYouTubeLink(it.link)) {
+    } else if (window.parseVideoAsset && window.parseVideoAsset(assetVal) !== null) {
       const vidHost = document.createElement('div');
       vidHost.id = 'vid-' + it.cell;
       vidHost.style.cssText = 'position:absolute; inset:0; overflow:hidden; background:#000; display:flex; justify-content:center; align-items:center;';
       div.appendChild(vidHost);
-      videoMountTasks.push({ host: vidHost, link: it.link, sec: assetVal });
+      videoMountTasks.push({ host: vidHost, link: it.link, asset: assetVal, mute: it.Mute !== '0' });
     }
 
     if(it.cname && showCname){
@@ -103,9 +103,15 @@ function buildOverlays(){
   });
 
   // Mount players after DOM insertion
-  if (videoMountTasks.length > 0 && window.mountYouTubeClip) {
+  if (videoMountTasks.length > 0) {
     videoMountTasks.forEach(task => {
-      window.mountYouTubeClip(task.host, task.link, task.sec);
+      const parsed = window.parseVideoAsset(task.asset);
+      if(!parsed) return;
+      if (window.isYouTubeLink(task.link) && window.mountYouTubeClip) {
+        window.mountYouTubeClip(task.host, task.link, parsed.start, parsed.dur, task.mute);
+      } else if (window.isVimeoLink(task.link) && window.mountVimeoClip) {
+        window.mountVimeoClip(task.host, task.link, parsed.start, parsed.dur, task.mute);
+      }
     });
   }
 

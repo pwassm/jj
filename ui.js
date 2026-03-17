@@ -142,7 +142,7 @@ function initTableKeys() {
   const keys = new Set();
   linksData.forEach(r => Object.keys(r).forEach(k => keys.add(k)));
   tableKeys = Array.from(keys);
-  if(tableKeys.length===0) tableKeys = ['show','asset','cell','fit','link','cname','sname','attribution','comment'];
+  if(tableKeys.length===0) tableKeys = ['show','asset','cell','fit','link','cname','sname','attribution','comment','Mute','Portrait'];
 }
 
 function updateSelectedRowsButton() {

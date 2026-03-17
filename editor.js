@@ -32,7 +32,7 @@ function qfSave(){
   const fit    =ISMOBILE?'':document.getElementById('qfFit').value;
   let e=linksData.find(it=>it.cell===qfCell);
   if(e) Object.assign(e,{show:'1',asset,fit,link,cname,sname,attribution:attrib,comment});
-  else  linksData.push({show:'1',asset,cell:qfCell,fit,link,cname,sname,attribution:attrib,comment});
+  else  linksData.push({show:'1',asset,cell:qfCell,fit,link,cname,sname,attribution:attrib,comment,Mute:"1"});
   localStorage.setItem('mlynx-links',JSON.stringify(linksData));
   document.getElementById('qfModal').classList.remove('open');
   render();

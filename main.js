@@ -78,7 +78,7 @@ document.getElementById('fastLinkInput').addEventListener('input', function() {
 
   linksData.push({
     show: "1", asset: "i", cell: nextCell, fit: "fc", link: val,
-    cname: "", sname: "", attribution: "", comment: "", DateAdded: dateAdded
+    cname: "", sname: "", attribution: "", comment: "", DateAdded: dateAdded, Mute: "1"
   });
   localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
 
