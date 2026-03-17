@@ -190,3 +190,106 @@ window.cleanupAllVideos = function() {
   window.seeLearnVideoTimers = {};
   window.seeLearnVideoPlayers = {};
 };
+
+
+window.openVideoEditor = function(it) {
+  const parsed = window.parseVideoAsset(it.asset) || {start: 0, dur: 1};
+  let currentStart = parsed.start;
+  let currentDur = parsed.dur;
+  let currentMute = it.Mute !== "0";
+
+  const overlay = document.createElement('div');
+  overlay.id = 'video-editor-overlay';
+  overlay.style.cssText = 'position:fixed; z-index:99999; left:15%; top:15%; width:70%; height:70%; background:#222; border:2px solid #8ef; display:flex; flex-direction:column; box-shadow: 0 10px 30px rgba(0,0,0,0.8); font-family:sans-serif; color:#fff; border-radius:8px; overflow:hidden;';
+
+  overlay.innerHTML = `
+    <div style="display:flex; justify-content:space-between; padding:10px 15px; background:#111; border-bottom:1px solid #444;">
+      <h3 style="margin:0; font-size:16px;">Video Editor - Cell ${it.cell}</h3>
+      <button id="ved-close" style="background:none; border:none; color:#f66; font-size:18px; cursor:pointer;" title="Close without saving">&#10006;</button>
+    </div>
+    <div style="display:flex; flex:1; overflow:hidden;">
+      <div id="editor-vid-host" style="flex:1; background:#000; position:relative; pointer-events:none;"></div>
+      <div style="width:250px; padding:20px; background:#1a1a1a; display:flex; flex-direction:column; gap:20px; border-left:1px solid #444;">
+         <div>
+           <label style="display:block; margin-bottom:5px; font-size:13px; color:#ccc;">Start Time (sec)</label>
+           <input type="number" id="ved-start" value="${currentStart}" min="0" style="width:100%; padding:8px; box-sizing:border-box; background:#333; color:#fff; border:1px solid #555; border-radius:4px;">
+         </div>
+         <div>
+           <label style="display:block; margin-bottom:5px; font-size:13px; color:#ccc;">Duration (sec)</label>
+           <input type="number" id="ved-dur" value="${currentDur}" min="0.1" step="0.1" style="width:100%; padding:8px; box-sizing:border-box; background:#333; color:#fff; border:1px solid #555; border-radius:4px;">
+         </div>
+         <div>
+           <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:14px; user-select:none;">
+             <input type="checkbox" id="ved-mute" ${currentMute ? 'checked' : ''} style="width:16px; height:16px;">
+             Muted
+           </label>
+         </div>
+         <button id="ved-save" style="margin-top:auto; padding:12px; background:#8ef; color:#000; border:none; border-radius:4px; font-weight:bold; cursor:pointer; font-size:14px;">Save changes (^S)</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const host = document.getElementById('editor-vid-host');
+  const iStart = document.getElementById('ved-start');
+  const iDur = document.getElementById('ved-dur');
+  const iMute = document.getElementById('ved-mute');
+
+  const updatePreview = () => {
+     currentStart = Number(iStart.value) || 0;
+     currentDur = Number(iDur.value) || 1;
+     currentMute = iMute.checked;
+     if (window.isYouTubeLink(it.link)) {
+       window.mountYouTubeClip(host, it.link, currentStart, currentDur, currentMute);
+     } else if (window.isVimeoLink(it.link)) {
+       window.mountVimeoClip(host, it.link, currentStart, currentDur, currentMute);
+     }
+  };
+
+  updatePreview();
+
+  let debounce;
+  const onChange = () => {
+    clearTimeout(debounce);
+    debounce = setTimeout(updatePreview, 600);
+  };
+
+  iStart.addEventListener('input', onChange);
+  iDur.addEventListener('input', onChange);
+  iStart.addEventListener('change', updatePreview);
+  iDur.addEventListener('change', updatePreview);
+  iMute.addEventListener('change', updatePreview);
+
+  const closeEditor = () => {
+    window.stopCellVideoLoop('editor-vid-host');
+    overlay.remove();
+    document.removeEventListener('keydown', handleKey);
+  };
+
+  const saveEditor = () => {
+    it.asset = currentStart + (currentDur !== 1 ? ' ' + currentDur : '');
+    it.Mute = currentMute ? "1" : "0";
+    localStorage.setItem('seeandlearn-links', JSON.stringify(window.linksData));
+    closeEditor();
+    if (window.renderTableEditor && document.getElementById('tableEditor')) {
+      window.renderTableEditor();
+    }
+    if (window.renderGrid) {
+      window.renderGrid();
+    }
+  };
+
+  document.getElementById('ved-close').addEventListener('click', closeEditor);
+  document.getElementById('ved-save').addEventListener('click', saveEditor);
+
+  const handleKey = (e) => {
+    if (e.ctrlKey && e.key.toLowerCase() === 's') {
+      e.preventDefault();
+      saveEditor();
+    }
+    if (e.key === 'Escape') {
+      closeEditor();
+    }
+  };
+  document.addEventListener('keydown', handleKey);
+};

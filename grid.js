@@ -97,8 +97,16 @@ function buildOverlays(){
       div.appendChild(lbl);
     }
 
-    // For full-screen overlay, ignore pointer up if they click on video to pause it, but pointer events are none on the video itself.
-    if (assetVal === 'i') { div.addEventListener('pointerup',e=>{ e.stopPropagation(); openFS(it); }); }
+    const isVidNode = window.parseVideoAsset && window.parseVideoAsset(assetVal) !== null;
+    div.addEventListener('pointerup',e=>{ 
+      if (e.ctrlKey && isVidNode) {
+        e.stopPropagation();
+        if (window.openVideoEditor) window.openVideoEditor(it);
+      } else if (assetVal === 'i') {
+        e.stopPropagation(); 
+        openFS(it); 
+      }
+    });
     wrap.appendChild(div);
   });
 

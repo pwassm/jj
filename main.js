@@ -104,3 +104,13 @@ document.addEventListener('keydown', e => {
     }
   }
 });
+
+window.addEventListener('keydown', e => {
+  if (e.key === 'Control') document.body.classList.add('ctrl-pressed');
+});
+window.addEventListener('keyup', e => {
+  if (e.key === 'Control') document.body.classList.remove('ctrl-pressed');
+});
+window.addEventListener('blur', () => {
+  document.body.classList.remove('ctrl-pressed');
+});

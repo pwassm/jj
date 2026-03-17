@@ -142,7 +142,7 @@ function initTableKeys() {
   const keys = new Set();
   linksData.forEach(r => Object.keys(r).forEach(k => keys.add(k)));
   tableKeys = Array.from(keys);
-  if(tableKeys.length===0) tableKeys = ['show','asset','cell','fit','link','cname','sname','attribution','comment','Mute','Portrait'];
+  if(tableKeys.length===0) tableKeys = ['show','asset','cell','fit','link','cname','sname','v.title','v.author','attribution','comment','Mute','Portrait'];
 }
 
 function updateSelectedRowsButton() {
@@ -404,3 +404,40 @@ let qfCell='';
 document.getElementById('qfDesktop').style.display=ISMOBILE?'none':'block';
 
 async 
+
+window.fillEmptyVideoInfo = async function() {
+  const btn = document.getElementById('btn-get-vid-info');
+  if (btn) btn.textContent = "Fetching...";
+  let updated = false;
+
+  // ensure keys exist
+  if (!tableKeys.includes('v.title')) tableKeys.push('v.title');
+  if (!tableKeys.includes('v.author')) tableKeys.push('v.author');
+  if (!tableKeys.includes('Portrait')) tableKeys.push('Portrait');
+
+  const promises = linksData.map(async (row, i) => {
+    const isVid = row.asset && window.parseVideoAsset && window.parseVideoAsset(row.asset) !== null;
+    if (isVid && row.link && row.link.match(/^https?:/i)) {
+      if (!row['v.title'] || !row['v.author'] || !row.Portrait) {
+        try {
+          const res = await fetch('https://noembed.com/embed?url=' + encodeURIComponent(row.link));
+          const data = await res.json();
+          if (data.title && !row['v.title']) { row['v.title'] = data.title; updated = true; }
+          if (data.author_name && !row['v.author']) { row['v.author'] = data.author_name; updated = true; }
+          if (data.width && data.height && (!row.Portrait || row.Portrait === "")) {
+            row.Portrait = data.width < data.height ? "1" : "0";
+            updated = true;
+          }
+        } catch(e) {}
+      }
+    }
+  });
+
+  await Promise.all(promises);
+
+  if (updated) {
+    localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+    if (window.renderTableEditor) window.renderTableEditor();
+  }
+  if (btn) btn.textContent = "Get Video Info";
+};
