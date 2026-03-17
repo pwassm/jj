@@ -478,7 +478,7 @@ document.addEventListener('focusin', function(e) {
 
 window.getFirstEmptyCell = function() {
   const occ = new Set();
-  window.linksData.forEach(r => { if(r.cell) occ.add(r.cell.toUpperCase()); });
+  linksData.forEach(r => { if(r.cell) occ.add(r.cell.toUpperCase()); });
   const letters = "ABCDE";
   for(let r=1; r<=5; r++) {
     for(let c=0; c<5; c++) {
@@ -491,16 +491,16 @@ window.getFirstEmptyCell = function() {
 
 window.duplicateActiveRow = function() {
   let rIdx = window.lastActiveRowIdx;
-  if (window.selectedRows && window.selectedRows.size > 0) {
-    rIdx = Array.from(window.selectedRows)[0];
+  if (selectedRows && selectedRows.size > 0) {
+    rIdx = Array.from(selectedRows)[0];
   }
-  if (rIdx < 0 && window.linksData.length > 0) rIdx = window.linksData.length - 1; 
+  if (rIdx < 0 && linksData.length > 0) rIdx = linksData.length - 1; 
 
-  if (rIdx >= 0 && rIdx < window.linksData.length) {
-     const newRow = JSON.parse(JSON.stringify(window.linksData[rIdx]));
+  if (rIdx >= 0 && rIdx < linksData.length) {
+     const newRow = JSON.parse(JSON.stringify(linksData[rIdx]));
      newRow.cell = window.getFirstEmptyCell();
-     window.linksData.splice(rIdx + 1, 0, newRow);
-     localStorage.setItem('seeandlearn-links', JSON.stringify(window.linksData));
+     linksData.splice(rIdx + 1, 0, newRow);
+     localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
      if(window.renderTableEditor) window.renderTableEditor();
 
      window.lastActiveRowIdx = rIdx + 1;
@@ -508,7 +508,7 @@ window.duplicateActiveRow = function() {
      setTimeout(() => {
        const isVidNode = newRow.asset && window.parseVideoAsset && window.parseVideoAsset(newRow.asset) !== null;
        if (isVidNode && window.openVideoEditor) {
-         window.openVideoEditor(window.linksData[rIdx + 1]);
+         window.openVideoEditor(linksData[rIdx + 1]);
        }
      }, 200);
   }
