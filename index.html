@@ -7,6 +7,9 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>SeeAndLearn</title>
+<!-- Tabulator v6 via CDN — internet connection required, no install needed -->
+<link href="https://unpkg.com/tabulator-tables@6.3.0/dist/css/tabulator_midnight.min.css" rel="stylesheet">
+<script src="https://unpkg.com/tabulator-tables@6.3.0/dist/js/tabulator.min.js"></script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { overflow: hidden; touch-action: manipulation; background: #000; }
@@ -175,48 +178,52 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
 .token-status { font-size: 12px; color: #8ef; min-height: 14px; }
   body.ctrl-pressed .cellMediaHost, body.ctrl-pressed iframe { pointer-events: none !important; }
 
-/* Tabulator Menu Overrides */
-.tabulator-menu { background: #1a1a2a !important; color: #fff !important; border: 1px solid #555 !important; }
-.tabulator-menu-item { background: #1a1a2a !important; color: #fff !important; }
-.tabulator-menu-item:hover { background: #334 !important; }
-
-.tb-btn { padding:6px 12px; border-radius:4px; border:1px solid #555; background:#1a1a2a; color:#ccc; cursor:pointer; font-size:12px; }
-.tb-btn:hover { background:#334; color:#fff; }
-
-/* Fix Dropdown z-index */
-.tabulator-edit-list { z-index: 100000 !important; max-height: 200px !important; overflow-y: auto !important; }
-</style>
-<link href="https://unpkg.com/tabulator-tables@6.2.1/dist/css/tabulator.min.css" rel="stylesheet">
-<script type="text/javascript" src="https://unpkg.com/tabulator-tables@6.2.1/dist/js/tabulator.min.js"></script>
-
-<style>
-/* Tabulator Dark Theme Overrides */
-.tabulator { background-color: #0a0a1a !important; border: 1px solid #444 !important; color: #fff !important; }
-.tabulator-header { background-color: #1a1a2a !important; color: #fff !important; border-bottom: 1px solid #444 !important; }
-.tabulator-row { background-color: #0a0a1a !important; border-bottom: 1px solid #333 !important; color: #fff !important; }
-.tabulator-row:nth-child(even) { background-color: #111122 !important; color: #fff !important; }
-.tabulator-row.tabulator-selected { background-color: #2e1c1c !important; color: #fff !important; }
-.tabulator-row:hover { background-color: #223 !important; }
-.tabulator-cell { border-right: 1px solid #333 !important; padding: 4px !important; color: #fff !important; }
-.tabulator-col { background-color: #1a1a2a !important; border-right: 1px solid #444 !important; }
-.tabulator-col-title { color: #fff !important; font-size: 14px; font-weight: bold; }
-.tabulator-edit-list { background: #1a1a2a !important; color: #fff !important; border: 1px solid #555 !important; }
-.tabulator-edit-list-item { padding: 4px !important; color: #fff !important; }
-.tabulator-edit-list-item:hover { background: #334 !important; }
-.tabulator-edit-list-item.active { background: #446 !important; }
-/* Force inputs inside the table to be dark mode and white text */
-input[type="text"], input[type="search"], textarea, .tabulator-editor { color: #fff !important; background: #222 !important; border: 1px solid #555 !important; }
-
-/* Tabulator Menu Overrides */
-.tabulator-menu { background: #1a1a2a !important; color: #fff !important; border: 1px solid #555 !important; }
-.tabulator-menu-item { background: #1a1a2a !important; color: #fff !important; }
-.tabulator-menu-item:hover { background: #334 !important; }
-
-.tb-btn { padding:6px 12px; border-radius:4px; border:1px solid #555; background:#1a1a2a; color:#ccc; cursor:pointer; font-size:12px; }
-.tb-btn:hover { background:#334; color:#fff; }
-
-/* Fix Dropdown z-index */
-.tabulator-edit-list { z-index: 100000 !important; max-height: 200px !important; overflow-y: auto !important; }
+/* ── Tabulator dark-mode overrides ── */
+#tableEditor { background: #0a0a1a !important; }
+.tabulator {
+  background: #0a0a1a !important;
+  border: none !important;
+  font-family: Arial, sans-serif;
+  font-size: 13px;
+  color: #ddd;
+}
+.tabulator .tabulator-header {
+  background: #181830 !important;
+  border-bottom: 2px solid #8ef !important;
+}
+.tabulator .tabulator-header .tabulator-col {
+  background: #181830 !important;
+  border-right: 1px solid #444 !important;
+  color: #ccc;
+}
+.tabulator .tabulator-header .tabulator-col:hover { background: #22223a !important; }
+.tabulator .tabulator-header .tabulator-col .tabulator-col-content { padding: 8px 6px; }
+.tabulator .tabulator-tableHolder .tabulator-table { background: transparent !important; }
+.tabulator-row { background: #111 !important; border-bottom: 1px solid #333 !important; }
+.tabulator-row:nth-child(even) { background: #1a1a2a !important; }
+.tabulator-row:hover { background: #1e2a3a !important; }
+.tabulator-row.tabulator-selected { background: #2a1a3a !important; }
+.tabulator-row .tabulator-cell {
+  border-right: 1px solid #333 !important;
+  color: #ddd;
+  padding: 6px 8px;
+}
+.tabulator-row .tabulator-cell.tabulator-editing input,
+.tabulator-row .tabulator-cell.tabulator-editing select {
+  background: #0d0d24 !important;
+  color: #fff !important;
+  border: 1px solid #8ef !important;
+  border-radius: 3px;
+}
+.tabulator-footer { background: #181830 !important; border-top: 1px solid #444 !important; color: #aaa; }
+.tabulator-col-resize-handle { background: #555 !important; }
+.tabulator-menu { background: #1a1a2e !important; border: 1px solid #4af !important; }
+.tabulator-menu .tabulator-menu-item { color: #ccc !important; padding: 8px 14px; }
+.tabulator-menu .tabulator-menu-item:hover { background: #2a3a5a !important; color: #fff !important; }
+.tabulator-edit-list { background: #1a1a2e !important; border: 1px solid #555 !important; }
+.tabulator-edit-list .tabulator-edit-list-item { color: #ddd !important; }
+.tabulator-edit-list .tabulator-edit-list-item:hover { background: #2a2a4a !important; }
+.tabulator-edit-list .tabulator-edit-list-item.active { background: #3a3a6a !important; }
 </style>
 </head>
 <body>
@@ -315,25 +322,17 @@ input[type="text"], input[type="search"], textarea, .tabulator-editor { color: #
   <div id="jsonBox">
     <div id="jsonTitle">&#x1F4CB; Table Editor: links.json</div>
     <div id="tableEditorWrap" style="flex:1; display:flex; flex-direction:column; overflow:hidden; gap:10px;">
-
       <div style="display:flex; justify-content:space-between; align-items:center;">
-        <div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom: 6px;">
-          <button id="addTableItem" class="tb-btn" style="padding:8px 16px;">RowAddNext</button>
-          <button id="btn-row-add-bottom" class="tb-btn">RowAddBottom</button>
-          <button id="btn-row-dup-next" class="tb-btn">RowDupNext</button>
-          <button id="deleteSelectedRows" class="tb-btn" style="padding:8px 16px; color:#f88; background:rgba(180,0,0,0.3);">RowDelete</button>
-
-          <button id="btn-col-add-next" class="tb-btn">ColAddNext</button>
-          <button id="btn-col-dup-next" class="tb-btn">ColDupNext</button>
-          <button id="btn-col-name-edit" class="tb-btn">ColNameEdit</button>
-          <button id="btn-col-delete" class="tb-btn" style="color:#f88; background:rgba(180,0,0,0.3);">ColDelete</button>
-
-          <button id="btn-export-chosen" class="tb-btn" style="color:#8f8;">ExportChosen</button>
-          <button id="btn-import" class="tb-btn" style="color:#8f8;">Import</button>
+        <div style="display:flex; gap:10px;">
+          <button id="addTableItem" style="padding:8px 16px; border-radius:6px; border:1px solid #4af; background:rgba(0,80,180,0.3); color:#8ef; cursor:pointer;">+ Add Row</button>
+          <button id="btn-duplicate-row-action" style="padding:8px 16px; border-radius:6px; border:1px solid #a8f; background:rgba(160,80,200,0.3); color:#eaf; cursor:pointer;">Duplicate Row (^D)</button>
+          <button id="btn-duplicate-col-action" style="padding:8px 16px; border-radius:6px; border:1px solid #fa8; background:rgba(200,120,0,0.3); color:#fda; cursor:pointer;">Duplicate Col</button>
+          <button id="btn-get-vid-info" onclick="if(window.fillEmptyVideoInfo)window.fillEmptyVideoInfo()" style="padding:8px 16px; border-radius:6px; border:1px solid #ff8; background:rgba(180,180,0,0.2); color:#ff8; cursor:pointer;">Get Video Info</button>
+          <button id="deleteSelectedRows" style="padding:8px 16px; border-radius:6px; border:1px solid #f66; background:rgba(180,0,0,0.3); color:#f88; cursor:pointer; display:none;">Delete Selected</button>
         </div>
         <button id="toggleRawJson" style="padding:8px 16px; border-radius:6px; border:1px solid #555; background:#2a2a3e; color:#fff; cursor:pointer;">Show Raw JSON</button>
       </div>
-id="tableEditor" style="flex:1; overflow:auto; background:#0a0a1a; border:1px solid #444; border-radius:6px;"></div>
+      <div id="tableEditor" style="flex:1; overflow:auto; background:#0a0a1a; border:1px solid #444; border-radius:6px;"></div>
       <textarea id="jsonText" style="display:none; flex:1; background:#0a0a1a; border:1px solid #444; color:#cfc; padding:12px; font-size:13px; font-family:monospace; line-height:1.4; border-radius:6px; resize:none; overflow:auto;"></textarea>
     </div>
     <div id="jsonBtns">

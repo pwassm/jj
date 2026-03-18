@@ -70,6 +70,12 @@ window.applyJsonChanges = function() {
       const d=JSON.parse(document.getElementById('jsonText').value);
       if(!Array.isArray(d)) throw new Error('Expected array');
       linksData=d;
+    } else {
+      // Sync Tabulator -> linksData before applying
+      if(window.tabulatorTable) {
+        const rows = window.tabulatorTable.getData();
+        linksData = rows.map(r => { const c = Object.assign({}, r); delete c.__actions; return c; });
+      }
     }
     localStorage.setItem('seeandlearn-links',JSON.stringify(linksData));
     document.getElementById('jsonModal').classList.remove('open');
