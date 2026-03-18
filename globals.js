@@ -25,4 +25,4 @@ const menuPanel = document.getElementById('menuPanel');
 
 // helpers
 
-let autoPauseMode = localStorage.getItem('seeandlearn-autopause') !== 'false';
+window.autoPauseMode = localStorage.getItem('seeandlearn-autopause') !== 'false';

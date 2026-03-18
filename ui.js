@@ -401,10 +401,10 @@ document.getElementById('togFit').addEventListener('change',function(){
 });
 document.getElementById('togCellLbl').addEventListener('change',function(){ showCellLbl=this.checked; render(); });
 
-document.getElementById('togAutoPause').checked = autoPauseMode;
+document.getElementById('togAutoPause').checked = window.autoPauseMode;
 document.getElementById('togAutoPause').addEventListener('change', function() {
-  autoPauseMode = this.checked;
-  localStorage.setItem('seeandlearn-autopause', autoPauseMode ? 'true' : 'false');
+  window.autoPauseMode = this.checked;
+  localStorage.setItem('seeandlearn-autopause', window.autoPauseMode ? 'true' : 'false');
 });
 
 document.getElementById('togCname').addEventListener('change',function(){ showCname=this.checked; render(); });
