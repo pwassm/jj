@@ -134,6 +134,9 @@ function buildOverlays(){
             } else {
                if (window.openVideoEditor) window.openVideoEditor(it);
             }
+          } else {
+            // Normal click: toggle play/pause in cell
+            if (window.toggleCellVideo) window.toggleCellVideo('vid-' + it.cell);
           }
         } else if (assetVal === 'i') {
           e.stopPropagation();
