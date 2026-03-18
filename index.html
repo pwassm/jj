@@ -311,15 +311,5 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
 <script src="video.js?v=29"></script>
 <script src="main.js?v=29"></script>
 
-
-<script>
-if (typeof Tabulator === 'undefined') {
-    console.log('Tabulator failed to load, falling back to old table');
-    document.getElementById('tableEditorWrap').innerHTML = '<div style="padding:20px; color:#f66;">Tabulator CDN failed to load. Please check your internet connection.</div>';
-} else {
-    console.log('Tabulator loaded successfully');
-}
-</script>
 </body>
-
 </html>
