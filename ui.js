@@ -11,7 +11,6 @@ window.openFS = function(it) {
     vidHost.id = 'fs-vid-' + it.cell;
     vidHost.style.cssText = 'width:100%; height:100%; pointer-events:none;';
     fs.appendChild(vidHost);
-    vidHost.dataset.noAutoPause = '1';
 
     const parsed = window.parseVideoAsset(it.asset);
     if (parsed) {
@@ -400,13 +399,6 @@ document.getElementById('togFit').addEventListener('change',function(){
   fitMode=this.checked?'ei':'fc'; localStorage.setItem('mlynx-fit',fitMode); syncFit(); render();
 });
 document.getElementById('togCellLbl').addEventListener('change',function(){ showCellLbl=this.checked; render(); });
-
-document.getElementById('togAutoPause').checked = window.autoPauseMode;
-document.getElementById('togAutoPause').addEventListener('change', function() {
-  window.autoPauseMode = this.checked;
-  localStorage.setItem('seeandlearn-autopause', window.autoPauseMode ? 'true' : 'false');
-});
-
 document.getElementById('togCname').addEventListener('change',function(){ showCname=this.checked; render(); });
 
 
@@ -474,14 +466,9 @@ window.fillEmptyVideoInfo = async function() {
 
 window.lastActiveRowIdx = -1;
 
-window.lastActiveColKey = null;
 document.addEventListener('focusin', function(e) {
   if (e.target && e.target.id && e.target.id.startsWith('cell-')) {
-    const parts = e.target.id.split('-');
-    window.lastActiveRowIdx = parseInt(parts[1]);
-    if (parts.length > 2) {
-      window.lastActiveColKey = parts.slice(2).join('-');
-    }
+    window.lastActiveRowIdx = parseInt(e.target.id.split('-')[1]);
   }
 });
 
@@ -565,38 +552,3 @@ document.addEventListener('click', function(e) {
 
 
 
-
-
-window.duplicateActiveCol = function() {
-  try {
-    const col = window.lastActiveColKey;
-    if (!col) { alert("No column selected! Click inside a cell in the column you want to duplicate."); return; }
-
-    let newCol = col + "_copy";
-    let counter = 1;
-    while(tableKeys.includes(newCol)) {
-        counter++;
-        newCol = col + "_copy" + counter;
-    }
-
-    const colIdx = tableKeys.indexOf(col);
-    if (colIdx >= 0) tableKeys.splice(colIdx + 1, 0, newCol);
-    else tableKeys.push(newCol);
-
-    linksData.forEach(row => {
-        if (row[col] !== undefined) row[newCol] = row[col];
-    });
-
-    if(window.rebuildLinksDataKeys) window.rebuildLinksDataKeys();
-    if(window.renderTableEditor) window.renderTableEditor();
-
-    const btn = document.getElementById('btn-duplicate-col-action');
-    if (btn) {
-        const oldBg = btn.style.background;
-        btn.style.background = '#fff'; btn.style.color = '#000';
-        setTimeout(() => { btn.style.background = oldBg; btn.style.color = '#efa'; }, 200);
-    }
-  } catch(err) {
-    alert("Duplicate Col Error: " + err.message);
-  }
-};

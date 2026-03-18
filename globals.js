@@ -3,7 +3,7 @@
 const COLS=5, ROWS=5, LETTERS="abcde";
 const ISMOBILE = ('ontouchstart' in window) || navigator.maxTouchPoints>0;
 
-function isAdmin() { return !!localStorage.getItem('github-token'); }
+function isAdmin() { return true; }
 function syncAdminUI() {
   const el = document.getElementById('miAdmin');
   if (!el) return;
@@ -24,5 +24,3 @@ const menuBtn   = document.getElementById('menuBtn');
 const menuPanel = document.getElementById('menuPanel');
 
 // helpers
-
-window.autoPauseMode = localStorage.getItem('seeandlearn-autopause') !== 'false';
