@@ -11,7 +11,6 @@ window.openFS = function(it) {
     vidHost.id = 'fs-vid-' + it.cell;
     vidHost.style.cssText = 'width:100%; height:100%; pointer-events:none;';
     fs.appendChild(vidHost);
-    vidHost.dataset.noAutoPause = '1';
 
     const parsed = window.parseVideoAsset(it.asset);
     if (parsed) {
@@ -77,9 +76,7 @@ function calcPortrait() {
         const val = img.width < img.height ? "1" : "0";
         if(row.Portrait !== val) {
           row.Portrait = val;
-          const input = document.getElementById(`cell-${i}-Portrait`);
-          if(input) input.value = val;
-          localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+          try { localStorage.setItem('seeandlearn-links', JSON.stringify(linksData)); } catch(e){}
         }
       };
       img.src = row.link;
@@ -96,17 +93,19 @@ function initTableKeys() {
 
 window.renderTableEditor = function() {
   const container = document.getElementById('tableEditor');
-  if(!container) return;
+  if(!container) {
+    console.error('tableEditor container not found');
+    return;
+  }
 
   if(tableKeys.length === 0) initTableKeys();
 
+  // Destroy existing table if present
   if (window.tabulatorTable) {
-      // If initialized, just update data
-      window.tabulatorTable.replaceData(linksData);
-      return;
+      window.tabulatorTable.destroy();
   }
 
-  // Define columns dynamically from keys
+  // Build columns
   let cols = [
       {formatter:"rowSelection", titleFormatter:"rowSelection", hozAlign:"center", headerSort:false, width:50, cellClick:function(e, cell){ cell.getRow().toggleSelect(); }}
   ];
@@ -118,132 +117,96 @@ window.renderTableEditor = function() {
           editor: "input", 
           headerFilter: "input", 
           width: 150,
-          editable: true
+          resizable: true
       };
 
-      // Magic feature: Turn 'cname' into an autocomplete dropdown!
+      // Dropdown for cname and v.author
       if (k === 'cname' || k === 'v.author') {
-          colDef.editor = "list";
-          colDef.editorParams = { autocomplete: true, clearable: true, allowEmpty: true, valuesLookup: true };
+          colDef.editor = "autocomplete";
+          colDef.editorParams = { 
+              values: true, 
+              autocomplete: true, 
+              allowEmpty: true,
+              clearable: true 
+          };
       }
+
       cols.push(colDef);
   });
 
   window.tabulatorTable = new Tabulator("#tableEditor", {
       data: linksData,
-      reactiveData: true, // Auto-syncs grid edits with linksData array
-      layout: "fitData",
+      reactiveData: true,
+      layout: "fitColumns",
       columns: cols,
-      history: true, // Enables Ctrl+Z to undo
-      rowFormatter: function(row) {
-          // Highlight empty cells or specific rules
-      },
+      history: true, // Undo/Redo
+      rowSelection: "click",
+      height: "100%",
+      placeholder: "No data available",
       cellEdited: function(cell) {
           try { localStorage.setItem('seeandlearn-links', JSON.stringify(linksData)); } catch(e){}
           calcPortrait();
+      },
+      rowDeleted: function(row) {
+          try { localStorage.setItem('seeandlearn-links', JSON.stringify(linksData)); } catch(e){}
       }
   });
+
+  console.log('Tabulator initialized with', tableKeys.length, 'columns');
 };
 
-// Add Row
+// Add Row (inserts at top)
 window.addRow = function() {
   const newRow = {};
   tableKeys.forEach(k => newRow[k] = "");
-  if(window.tabulatorTable) window.tabulatorTable.addRow(newRow, true); // true = add to top
+  window.tabulatorTable.addRow(newRow, true);
 };
 
 // Delete Selected
 document.getElementById('deleteSelectedRows').addEventListener('click', () => {
   if(!window.tabulatorTable) return;
-  let selected = window.tabulatorTable.getSelectedRows();
-  if(selected.length === 0) { alert("Check the boxes next to rows you want to delete."); return; }
-
+  const selected = window.tabulatorTable.getSelectedData();
+  if(selected.length === 0) return;
   if(confirm(`Delete ${selected.length} rows?`)) {
-      selected.forEach(row => {
-          recycleData.push(row.getData());
-          row.delete();
-      });
-      localStorage.setItem('seeandlearn-recycle', JSON.stringify(recycleData));
-      localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+      window.tabulatorTable.deleteRow(selected);
+      try { localStorage.setItem('seeandlearn-links', JSON.stringify(linksData)); } catch(e){}
   }
 });
 
-// Duplicate Row
+// Dup Row (duplicate selected)
 window.duplicateActiveRow = function() {
   if(!window.tabulatorTable) return;
-  let selected = window.tabulatorTable.getSelectedRows();
+  const selected = window.tabulatorTable.getSelectedData();
   if(selected.length === 0) {
-      alert("Please check the box next to the row you want to duplicate.");
+      alert("Check the box next to the row you want to duplicate.");
       return;
   }
-
-  let rowToDup = selected[0];
-  let newRowData = JSON.parse(JSON.stringify(rowToDup.getData()));
-  if(window.getFirstEmptyCell) {
-      try { newRowData.cell = window.getFirstEmptyCell(); } catch(e) {}
-  }
-
-  window.tabulatorTable.addRow(newRowData, false, rowToDup); // insert below
-  try { localStorage.setItem('seeandlearn-links', JSON.stringify(linksData)); } catch(e){}
-
-  const btn = document.getElementById('btn-duplicate-row-action');
-  if (btn) {
-      const oldBg = btn.style.background;
-      btn.style.background = '#fff'; btn.style.color = '#000';
-      setTimeout(() => { btn.style.background = oldBg; btn.style.color = '#eaf'; }, 200);
-  }
+  const rowData = JSON.parse(JSON.stringify(selected[0]));
+  window.tabulatorTable.addRow(rowData, false, selected[0]);
 };
 
-// Duplicate Column
+// Dup Col (prompt for column name)
 window.duplicateActiveCol = function() {
-  if(!window.tabulatorTable) return;
-  let colToCopy = prompt("Enter the exact column name to duplicate (e.g., v.title, cname, comment):");
-  if(!colToCopy) return;
-  if(!tableKeys.includes(colToCopy)) {
-      alert(`Column '${colToCopy}' not found!`);
+  const colName = prompt("Enter column name to duplicate:");
+  if(!colName) return;
+  if(!tableKeys.includes(colName)) {
+      alert("Column '" + colName + "' not found");
       return;
   }
-
-  let newCol = colToCopy + "_copy";
-  let counter = 1;
-  while(tableKeys.includes(newCol)) {
-      counter++;
-      newCol = colToCopy + "_copy" + counter;
-  }
-
+  const newCol = colName + "_copy";
   tableKeys.push(newCol);
-
-  // Clone data
-  linksData.forEach(r => {
-      if(r[colToCopy] !== undefined) r[newCol] = JSON.parse(JSON.stringify(r[colToCopy]));
-  });
-
-  window.tabulatorTable.addColumn({
-      title: newCol, 
-      field: newCol, 
-      editor: "input", 
-      headerFilter: "input"
-  }, false, colToCopy);
-
-  try { localStorage.setItem('seeandlearn-links', JSON.stringify(linksData)); } catch(e){}
+  linksData.forEach(row => row[newCol] = row[colName]);
+  window.tabulatorTable.addColumn({title: newCol, field: newCol, editor: "input"}, false, colName);
 };
 
-document.getElementById('toggleRawJson').addEventListener('click', function() {
-  rawJsonMode = !rawJsonMode; this.textContent = rawJsonMode ? 'Show Visual Editor' : 'Show Raw JSON';
-  if(rawJsonMode) {
-    document.getElementById('jsonText').value = JSON.stringify(linksData, null, 2);
-    document.getElementById('tableEditor').style.display = 'none'; document.getElementById('jsonText').style.display = 'block';
-    document.getElementById('addTableItem').style.display = 'none'; document.getElementById('deleteSelectedRows').style.display = 'none';
-  } else {
-    try { linksData = JSON.parse(document.getElementById('jsonText').value); } catch(e) { alert("Invalid JSON"); rawJsonMode = true; return; }
-    document.getElementById('tableEditor').style.display = 'block'; document.getElementById('jsonText').style.display = 'none';
-    document.getElementById('addTableItem').style.display = 'block'; initTableKeys(); renderTableEditor();
-  }
+// Bind buttons
+document.addEventListener('DOMContentLoaded', function() {
+  const addBtn = document.getElementById('addTableItem');
+  if(addBtn) addBtn.addEventListener('click', window.addRow);
 });
-document.getElementById('miTables').addEventListener('pointerup',e=>{ 
+    document.getElementById('miTables').addEventListener('pointerup',e=>{
   e.stopPropagation(); closeMenu();
-  // Temporarily bypass admin check for testing
-  rawJsonMode = false; selectedRows.clear(); document.getElementById('toggleRawJson').textContent = 'Show Raw JSON';
+  if(typeof isAdmin === 'function' && !isAdmin()) { alert('Admin privileges required.'); return; }
   rawJsonMode = false; selectedRows.clear(); document.getElementById('toggleRawJson').textContent = 'Show Raw JSON';
   document.getElementById('tableEditor').style.display = 'block'; document.getElementById('jsonText').style.display = 'none';
   document.getElementById('addTableItem').style.display = 'block'; initTableKeys(); renderTableEditor();
@@ -269,13 +232,6 @@ document.getElementById('togFit').addEventListener('change',function(){
   fitMode=this.checked?'ei':'fc'; localStorage.setItem('mlynx-fit',fitMode); syncFit(); render();
 });
 document.getElementById('togCellLbl').addEventListener('change',function(){ showCellLbl=this.checked; render(); });
-
-document.getElementById('togAutoPause').checked = window.autoPauseMode;
-document.getElementById('togAutoPause').addEventListener('change', function() {
-  window.autoPauseMode = this.checked;
-  localStorage.setItem('seeandlearn-autopause', window.autoPauseMode ? 'true' : 'false');
-});
-
 document.getElementById('togCname').addEventListener('change',function(){ showCname=this.checked; render(); });
 
 
@@ -343,14 +299,9 @@ window.fillEmptyVideoInfo = async function() {
 
 window.lastActiveRowIdx = -1;
 
-window.lastActiveColKey = null;
 document.addEventListener('focusin', function(e) {
   if (e.target && e.target.id && e.target.id.startsWith('cell-')) {
-    const parts = e.target.id.split('-');
-    window.lastActiveRowIdx = parseInt(parts[1]);
-    if (parts.length > 2) {
-      window.lastActiveColKey = parts.slice(2).join('-');
-    }
+    window.lastActiveRowIdx = parseInt(e.target.id.split('-')[1]);
   }
 });
 
@@ -369,6 +320,49 @@ window.getFirstEmptyCell = function() {
   return "";
 };
 
+window.duplicateActiveRow = function() {
+  try {
+    let rIdx = window.lastActiveRowIdx;
+    if (typeof selectedRows !== 'undefined' && selectedRows.size > 0) {
+      rIdx = Array.from(selectedRows)[0];
+    }
+    if (rIdx < 0 && linksData.length > 0) rIdx = linksData.length - 1; 
+
+    if (rIdx >= 0 && rIdx < linksData.length) {
+       const newRow = JSON.parse(JSON.stringify(linksData[rIdx]));
+       newRow.cell = window.getFirstEmptyCell();
+       linksData.splice(rIdx + 1, 0, newRow);
+
+       try { localStorage.setItem('seeandlearn-links', JSON.stringify(linksData)); } catch(e){}
+
+       if(window.renderTableEditor) window.renderTableEditor();
+
+       window.lastActiveRowIdx = rIdx + 1;
+
+       const btn = document.getElementById('btn-duplicate-row-action');
+       if(btn) {
+         const oldBg = btn.style.background;
+         btn.style.background = '#fff';
+         btn.style.color = '#000';
+         setTimeout(() => {
+           btn.style.background = oldBg;
+           btn.style.color = '#eaf';
+         }, 200);
+       }
+
+       setTimeout(() => {
+         const isVidNode = newRow.asset && window.parseVideoAsset && window.parseVideoAsset(newRow.asset) !== null;
+         if (isVidNode && window.openVideoEditor) {
+           window.openVideoEditor(linksData[rIdx + 1]);
+         }
+       }, 200);
+    } else {
+       alert("No row selected to duplicate! Click on a row first.");
+    }
+  } catch(err) {
+    alert("Duplicate Error: " + err.message);
+  }
+};
 
 window.addEventListener('keydown', function(e) {
   if (e.ctrlKey && e.key.toLowerCase() === 'd') {
@@ -387,8 +381,6 @@ document.addEventListener('click', function(e) {
     window.duplicateActiveRow();
   }
 });
-
-
 
 
 
