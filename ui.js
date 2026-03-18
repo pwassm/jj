@@ -179,70 +179,27 @@ window.renderTableEditor = function() {
   if(!container) return;
   if(typeof tableKeys === 'undefined' || tableKeys.length===0) initTableKeys();
 
-  // Clear the original custom container
   container.innerHTML = '';
-
   if (window.tabulatorTable) {
       window.tabulatorTable.destroy();
       window.tabulatorTable = null;
   }
 
-  // Common Header Menu for Off-The-Shelf operations
-  const headerMenu = [
-      {
-          label: "Rename Column",
-          action: function(e, column) {
-              const oldK = column.getField();
-              const newK = prompt('Rename column:', oldK);
-              if(newK && newK !== oldK && !tableKeys.includes(newK)) {
-                  tableKeys[tableKeys.indexOf(oldK)] = newK;
-                  linksData.forEach(row => { row[newK] = row[oldK]; delete row[oldK]; });
-                  window.renderTableEditor();
-              }
-          }
-      },
-      {
-          label: "Duplicate Column",
-          action: function(e, column) {
-              const oldK = column.getField();
-              let newK = prompt("Enter name for the new column:", oldK + '_copy');
-              if (!newK) return;
+  // Active tracking for "Next" operations
+  window.activeColField = tableKeys[0] || null;
+  window.activeRowNode = null;
 
-              let counter = 1;
-              let finalColName = newK;
-              while(tableKeys.includes(finalColName)) {
-                  counter++;
-                  finalColName = newK + counter;
-              }
-
-              const targetIndex = tableKeys.indexOf(oldK) + 1;
-              tableKeys.splice(targetIndex, 0, finalColName);
-
-              // Map data over
-              linksData.forEach(row => {
-                  row[finalColName] = row[oldK] !== undefined ? row[oldK] : "";
-              });
-
-              window.renderTableEditor();
-          }
-      },
-      {
-          label: "Delete Column",
-          action: function(e, column) {
-              const k = column.getField();
-              if(confirm('Delete column ' + k + ' from ALL rows?')) {
-                  tableKeys = tableKeys.filter(x => x !== k);
-                  linksData.forEach(row => delete row[k]);
-                  window.renderTableEditor();
-              }
-          }
+  // Track the most recently clicked cell to determine "active" column and row
+  const updateActiveState = function(e, cell) {
+      if(cell) {
+          window.activeColField = cell.getField();
+          window.activeRowNode = cell.getRow();
       }
-  ];
+  };
 
-  // Setup columns
   const cols = [];
 
-  // Add Row Delete Column
+  // Delete Row column
   cols.push({
       title: "Del",
       formatter: () => "<span style='color:#f66; font-size:18px; font-weight:bold; cursor:pointer;'>&times;</span>",
@@ -250,6 +207,7 @@ window.renderTableEditor = function() {
       hozAlign: "center",
       headerSort: false,
       cellClick: function(e, cell) {
+          updateActiveState(e, cell);
           if(confirm("Delete row?")) {
               const row = cell.getRow();
               const rowData = row.getData();
@@ -260,7 +218,7 @@ window.renderTableEditor = function() {
       }
   });
 
-  // Add Row Selection Column
+  // Checkbox column for Selection
   cols.push({
       formatter: "rowSelection", 
       titleFormatter: "rowSelection", 
@@ -275,31 +233,40 @@ window.renderTableEditor = function() {
           field: k, 
           editor: "input",
           headerSort: true,
-          headerMenu: headerMenu,
-          width: colWidths[k] || 150 // Forces width limit
+          width: colWidths[k] || 150,
+          headerClick: function(e, column) {
+              window.activeColField = column.getField();
+          },
+          cellClick: updateActiveState
       };
 
-      // Dropdown autocomplete for cname, sname, v.author
+      // Dropdown autocomplete fixed
       if (k === 'cname' || k === 'sname' || k === 'v.author') {
           colDef.editor = "list";
           colDef.editorParams = {
-              valuesLookup: "active", // Tabulator built-in autocomplete from active column data
+              // Dynamically get all unique values in this column across linksData
+              values: function(cell) {
+                  const field = cell.getField();
+                  return [...new Set(linksData.map(r => r[field]).filter(x => x))].sort();
+              },
               autocomplete: true,
               freetext: true,
-              listOnEmpty: true
+              listOnEmpty: true,
+              clearable: true
           };
       }
       cols.push(colDef);
   });
 
-  // Initialize Tabulator
   window.tabulatorTable = new Tabulator(container, {
       data: linksData,
       reactiveData: true, 
-      // Removed layout: "fitData" so width property works and long text clips instead of expanding endlessly
       columns: cols,
       selectableRows: true, 
       history: true,
+      rowClick: function(e, row) {
+          window.activeRowNode = row;
+      },
       columnResized: function(column) {
           const field = column.getField();
           if(field) {
@@ -309,89 +276,230 @@ window.renderTableEditor = function() {
       }
   });
 
-  // Wire up Top Buttons
-  const btnAdd = document.getElementById('addTableItem');
-  if(btnAdd) {
-      btnAdd.onclick = () => {
-          const newRow = {};
-          tableKeys.forEach(k => newRow[k] = '');
+  // --- TOP BUTTON ACTIONS ---
+
+  // RowAddNext
+  const btnRowAddNext = document.getElementById('btn-row-add-next');
+  if(btnRowAddNext) btnRowAddNext.onclick = () => {
+      const newRow = {};
+      tableKeys.forEach(k => newRow[k] = '');
+
+      const activeRow = window.activeRowNode;
+      if (activeRow) {
+          window.tabulatorTable.addRow(newRow, false, activeRow);
+          // Insert into linksData immediately after activeRow's underlying data
+          const rowData = activeRow.getData();
+          const targetIdx = linksData.indexOf(rowData);
+          if(targetIdx > -1) linksData.splice(targetIdx + 1, 0, newRow);
+          else linksData.push(newRow);
+      } else {
+          // Fallback to top if no row active
           window.tabulatorTable.addRow(newRow, true);
-      };
-  }
+          linksData.unshift(newRow);
+      }
+  };
 
-  const btnDupRow = document.getElementById('btn-duplicate-row-action');
-  if(btnDupRow) {
-      btnDupRow.onclick = () => {
-          const selectedRows = window.tabulatorTable.getSelectedRows();
-          if(selectedRows.length > 0) {
+  // RowAddBottom
+  const btnRowAddBottom = document.getElementById('btn-row-add-bottom');
+  if(btnRowAddBottom) btnRowAddBottom.onclick = () => {
+      const newRow = {};
+      tableKeys.forEach(k => newRow[k] = '');
+      window.tabulatorTable.addRow(newRow, false); // bottom
+      linksData.push(newRow);
+  };
+
+  // RowDupNext
+  const btnRowDupNext = document.getElementById('btn-row-dup-next');
+  if(btnRowDupNext) btnRowDupNext.onclick = () => {
+      const selectedRows = window.tabulatorTable.getSelectedRows();
+      let targetRow = window.activeRowNode;
+
+      if(selectedRows.length > 0) {
+          // If rows are explicitly checked, duplicate them
+          selectedRows.reverse().forEach(row => { // reverse to maintain selection order when inserting after
+              const data = Object.assign({}, row.getData());
+              if(window.getFirstEmptyCell) data.cell = window.getFirstEmptyCell(); 
+              window.tabulatorTable.addRow(data, false, row);
+
+              const idx = linksData.indexOf(row.getData());
+              if(idx > -1) linksData.splice(idx + 1, 0, data);
+              else linksData.push(data);
+          });
+      } else if (targetRow) {
+          // If no row checked, duplicate the last clicked row
+          const data = Object.assign({}, targetRow.getData());
+          if(window.getFirstEmptyCell) data.cell = window.getFirstEmptyCell();
+          window.tabulatorTable.addRow(data, false, targetRow);
+
+          const idx = linksData.indexOf(targetRow.getData());
+          if(idx > -1) linksData.splice(idx + 1, 0, data);
+          else linksData.push(data);
+      } else {
+          alert("Click on a row or check boxes to duplicate.");
+      }
+  };
+
+  // RowDelete
+  const btnRowDelete = document.getElementById('btn-row-delete');
+  if(btnRowDelete) btnRowDelete.onclick = () => {
+      const selectedRows = window.tabulatorTable.getSelectedRows();
+      if(selectedRows.length > 0) {
+          if(confirm(`Delete ${selectedRows.length} selected rows?`)) {
               selectedRows.forEach(row => {
-                  const data = Object.assign({}, row.getData());
-                  if(window.getFirstEmptyCell) {
-                      data.cell = window.getFirstEmptyCell(); 
+                  const rowData = row.getData();
+                  const idx = linksData.indexOf(rowData);
+                  if(idx > -1) linksData.splice(idx, 1);
+                  row.delete();
+              });
+          }
+      } else if (window.activeRowNode) {
+           if(confirm(`Delete active row?`)) {
+                  const rowData = window.activeRowNode.getData();
+                  const idx = linksData.indexOf(rowData);
+                  if(idx > -1) linksData.splice(idx, 1);
+                  window.activeRowNode.delete();
+                  window.activeRowNode = null;
+           }
+      } else {
+          alert("Select rows to delete first.");
+      }
+  };
+
+  // Helper for naming columns
+  const getUniqueColName = (base) => {
+      let counter = 1;
+      let name = base;
+      while(tableKeys.includes(name)) {
+          counter++;
+          name = base + counter;
+      }
+      return name;
+  };
+
+  // ColumnAddNext
+  const btnColAddNext = document.getElementById('btn-col-add-next');
+  if(btnColAddNext) btnColAddNext.onclick = () => {
+      if(!window.activeColField) { alert("Click a column header/cell first."); return; }
+      const newName = prompt("Enter name for new column:", "NewColumn");
+      if(!newName || tableKeys.includes(newName)) return;
+
+      const targetIndex = tableKeys.indexOf(window.activeColField) + 1;
+      tableKeys.splice(targetIndex, 0, newName);
+      linksData.forEach(row => row[newName] = "");
+      window.activeColField = newName; // focus new
+      window.renderTableEditor();
+  };
+
+  // ColumnDupNext
+  const btnColDupNext = document.getElementById('btn-col-dup-next');
+  if(btnColDupNext) btnColDupNext.onclick = () => {
+      if(!window.activeColField) { alert("Click a column header/cell first."); return; }
+      const oldK = window.activeColField;
+      const newName = prompt("Enter name for duplicated column:", oldK + "_copy");
+      if(!newName) return;
+
+      const finalName = getUniqueColName(newName);
+      const targetIndex = tableKeys.indexOf(oldK) + 1;
+      tableKeys.splice(targetIndex, 0, finalName);
+
+      linksData.forEach(row => {
+          row[finalName] = row[oldK] !== undefined ? row[oldK] : "";
+      });
+      window.activeColField = finalName;
+      window.renderTableEditor();
+  };
+
+  // ColumnNameEdit
+  const btnColNameEdit = document.getElementById('btn-col-name-edit');
+  if(btnColNameEdit) btnColNameEdit.onclick = () => {
+      if(!window.activeColField) { alert("Click a column header/cell first."); return; }
+      const oldK = window.activeColField;
+      const newK = prompt("Rename column:", oldK);
+      if(newK && newK !== oldK && !tableKeys.includes(newK)) {
+          tableKeys[tableKeys.indexOf(oldK)] = newK;
+          linksData.forEach(row => { row[newK] = row[oldK]; delete row[oldK]; });
+          window.activeColField = newK;
+          window.renderTableEditor();
+      }
+  };
+
+  // ColumnDelete
+  const btnColDelete = document.getElementById('btn-col-delete');
+  if(btnColDelete) btnColDelete.onclick = () => {
+      if(!window.activeColField) { alert("Click a column header/cell first."); return; }
+      const k = window.activeColField;
+      if(confirm('Delete column ' + k + ' from ALL rows?')) {
+          tableKeys = tableKeys.filter(x => x !== k);
+          linksData.forEach(row => delete row[k]);
+          window.activeColField = tableKeys[0] || null; // reset
+          window.renderTableEditor();
+      }
+  };
+
+  // ExportChosen
+  const btnExportChosen = document.getElementById('btn-export-chosen');
+  if(btnExportChosen) btnExportChosen.onclick = () => {
+      const selectedRows = window.tabulatorTable.getSelectedRows();
+      if(selectedRows.length === 0) { alert("Check the boxes of rows to export first."); return; }
+
+      const exportData = selectedRows.map(row => row.getData());
+      if (window.triggerDownload) {
+          const ts = new Date().toISOString().replace(/[:.]/g, '-');
+          window.triggerDownload(`export_${ts}.json`, exportData);
+      } else {
+          // Fallback download if triggerDownload isn't defined
+          const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url; a.download = 'export.json';
+          document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      }
+  };
+
+  // Import
+  const btnImport = document.getElementById('btn-import');
+  const inputImport = document.getElementById('input-import-json');
+  if(btnImport && inputImport) {
+      btnImport.onclick = () => inputImport.click();
+      // Important: replace the event listener cleanly so it doesn't fire multiple times
+      inputImport.onchange = (e) => {
+          const file = e.target.files[0];
+          if(!file) return;
+          const reader = new FileReader();
+          reader.onload = function(evt) {
+              try {
+                  const importedData = JSON.parse(evt.target.result);
+                  if(!Array.isArray(importedData)) throw new Error("JSON is not an array");
+
+                  // Ask user: Append or Replace?
+                  if(confirm("Click OK to APPEND to existing table. Click Cancel to REPLACE current table.")) {
+                      // Append
+                      importedData.forEach(r => linksData.push(r));
+
+                      // Discover any new keys
+                      importedData.forEach(r => {
+                          Object.keys(r).forEach(k => {
+                              if(!tableKeys.includes(k)) tableKeys.push(k);
+                          });
+                      });
+                  } else {
+                      // Replace
+                      linksData = importedData;
+                      tableKeys = [];
+                      linksData.forEach(r => Object.keys(r).forEach(k => {
+                          if(!tableKeys.includes(k)) tableKeys.push(k);
+                      }));
                   }
-                  window.tabulatorTable.addRow(data, false, row);
-                  linksData.push(data);
-              });
-          } else {
-              if (window.duplicateActiveRow) {
-                  window.duplicateActiveRow();
-              } else {
-                  alert("Select a row to duplicate first.");
+                  window.renderTableEditor(); // Redraw with new data and headers
+              } catch(err) {
+                  alert("Failed to load JSON: " + err.message);
               }
-          }
-      };
-  }
-
-  const btnDupCol = document.getElementById('btn-duplicate-col-action');
-  if(btnDupCol) {
-      btnDupCol.onclick = () => {
-          const colToDup = prompt("Enter the name of the column to duplicate:");
-          if(colToDup && tableKeys.includes(colToDup)) {
-              let newColName = prompt("Enter name for the new column:", colToDup + '_copy');
-              if (!newColName) return; 
-
-              let counter = 1;
-              let finalColName = newColName;
-              while(tableKeys.includes(finalColName)) {
-                  counter++;
-                  finalColName = newColName + counter;
-              }
-
-              const targetIndex = tableKeys.indexOf(colToDup) + 1;
-              tableKeys.splice(targetIndex, 0, finalColName);
-
-              linksData.forEach(row => {
-                  row[finalColName] = row[colToDup] !== undefined ? row[colToDup] : "";
-              });
-
-              window.renderTableEditor();
-          } else if (colToDup) {
-              alert("Column not found. Make sure to match the case perfectly.");
-          }
-      };
-  }
-
-  const btnDel = document.getElementById('deleteSelectedRows');
-  if(btnDel) {
-      btnDel.style.display = 'inline-block'; 
-      btnDel.onclick = () => {
-          const selectedRows = window.tabulatorTable.getSelectedRows();
-          if(selectedRows.length > 0) {
-              if(confirm(`Delete ${selectedRows.length} selected rows?`)) {
-                  selectedRows.forEach(row => {
-                      const rowData = row.getData();
-                      const idx = linksData.indexOf(rowData);
-                      if(idx > -1) linksData.splice(idx, 1);
-                      row.delete();
-                  });
-              }
-          } else {
-              alert("Select rows to delete first.");
-          }
+              inputImport.value = ''; // Reset file input
+          };
+          reader.readAsText(file);
       };
   }
 };
-
 window.toggleRowSelect = function(idx, state) { if(state) selectedRows.add(idx); else selectedRows.delete(idx); renderTableEditor(); };
 window.toggleSelectAll = function(state) { if(state) { linksData.forEach((_, i) => selectedRows.add(i)); } else { selectedRows.clear(); } renderTableEditor(); };
 window.updateCell = function(r, k, v) { linksData[r][k] = v; };
