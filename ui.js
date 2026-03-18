@@ -1,9 +1,11 @@
-// Version 9: Header layout fixed
+// Version 10: Tabulator, correct buttons, sticky col widths, autocomplete
+
+// ─── Fullscreen overlay ──────────────────────────────────────────────────────
 window.openFS = function(it) {
   if(!it.link) return;
-  const fs=document.createElement('div');
-  fs.id='fs-overlay';
-  fs.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:99999;display:flex;align-items:center;justify-content:center;cursor:pointer;';
+  const fs = document.createElement('div');
+  fs.id = 'fs-overlay';
+  fs.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:99999;display:flex;align-items:center;justify-content:center;cursor:pointer;';
 
   const isVidNode = window.parseVideoAsset && window.parseVideoAsset(it.asset) !== null;
   if (isVidNode) {
@@ -11,702 +13,653 @@ window.openFS = function(it) {
     vidHost.id = 'fs-vid-' + it.cell;
     vidHost.style.cssText = 'width:100%; height:100%; pointer-events:none;';
     fs.appendChild(vidHost);
-
     const parsed = window.parseVideoAsset(it.asset);
     if (parsed) {
-      if (window.isYouTubeLink(it.link) && window.mountYouTubeClip) {
+      if (window.isYouTubeLink(it.link) && window.mountYouTubeClip)
         window.mountYouTubeClip(vidHost, it.link, parsed.start, parsed.dur, it.Mute !== '0');
-      } else if (window.isVimeoLink(it.link) && window.mountVimeoClip) {
+      else if (window.isVimeoLink(it.link) && window.mountVimeoClip)
         window.mountVimeoClip(vidHost, it.link, parsed.start, parsed.dur, it.Mute !== '0');
-      }
     }
   } else {
-    const img=document.createElement('img');
-    img.src=it.link; 
-    if (window.isPortrait) {
-      img.style.cssText='max-width:95vh;max-height:95vw;object-fit:contain;transform:rotate(90deg);';
-    } else {
-      img.style.cssText='max-width:95vw;max-height:95vh;object-fit:contain;';
-    }
+    const img = document.createElement('img');
+    img.src = it.link;
+    img.style.cssText = window.isPortrait
+      ? 'max-width:95vh;max-height:95vw;object-fit:contain;transform:rotate(90deg);'
+      : 'max-width:95vw;max-height:95vh;object-fit:contain;';
     fs.appendChild(img);
   }
 
   setTimeout(() => {
     fs.addEventListener('pointerup', e => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (isVidNode && fs.children[0]) {
-         if (window.stopCellVideoLoop) window.stopCellVideoLoop(fs.children[0].id);
-      }
+      e.preventDefault(); e.stopPropagation();
+      if (isVidNode && fs.children[0] && window.stopCellVideoLoop)
+        window.stopCellVideoLoop(fs.children[0].id);
       fs.remove();
     });
   }, 100);
-
   document.body.appendChild(fs);
-}
+};
 
-// menu
-function closeMenu(){
+// ─── Menu ────────────────────────────────────────────────────────────────────
+function closeMenu() {
   menuPanel.classList.remove('open');
   menuBtn.classList.remove('open');
   document.getElementById('settingsPanel').classList.remove('open');
-  document.getElementById('miSettings').textContent='Settings \u25b8';
+  document.getElementById('miSettings').textContent = 'Settings \u25b8';
 }
-menuBtn.addEventListener('pointerup',e=>{
+menuBtn.addEventListener('pointerup', e => {
   e.stopPropagation();
-  const o=menuPanel.classList.toggle('open');
-  menuBtn.classList.toggle('open',o);
-  if(!o) document.getElementById('settingsPanel').classList.remove('open');
+  const o = menuPanel.classList.toggle('open');
+  menuBtn.classList.toggle('open', o);
+  if (!o) document.getElementById('settingsPanel').classList.remove('open');
 });
-menuPanel.addEventListener('pointerup',e=>e.stopPropagation());
-document.addEventListener('pointerup',()=>{ if(menuPanel.classList.contains('open')) closeMenu(); });
+menuPanel.addEventListener('pointerup', e => e.stopPropagation());
+document.addEventListener('pointerup', () => { if (menuPanel.classList.contains('open')) closeMenu(); });
 
+// ─── State ───────────────────────────────────────────────────────────────────
 let rawJsonMode = false;
-let tableKeys = [];
-let sortCol = null;
-let sortAsc = true;
-let draggedCol = -1;
-let selectedRows = new Set();
-let colWidths = JSON.parse(localStorage.getItem('seeandlearn-colWidths') || '{}');
-let recycleData = JSON.parse(localStorage.getItem('seeandlearn-recycle') || '[]');
+let tableKeys   = [];
 
+// colWidths stored in localStorage as pixels. Default = 30 chars ≈ 210px (7px/char).
+// Minimum = 1 char ≈ 7px (Tabulator enforces via minWidth).
+const CHAR_W    = 7;   // approximate px per character in 13px sans-serif
+const COL_DEFAULT_PX = 30 * CHAR_W;  // 210
+const COL_MIN_PX     = 1  * CHAR_W;  // 7
+
+let colWidths   = JSON.parse(localStorage.getItem('seeandlearn-colWidths') || '{}');
+let recycleData = JSON.parse(localStorage.getItem('seeandlearn-recycle')   || '[]');
+
+// isColResizing kept for main.js Esc handler compatibility
 let isColResizing = false;
-let startX = 0, startW = 0, currentResizingCol = '';
-let resizePointerId = null, resizeHandleEl = null;
+window.stopColResize = function() {};
 
-window.initColResize = function(e, k) {
-  if (e.button !== undefined && e.button !== 0) return; // Only left click
-  e.preventDefault();
-  e.stopPropagation();
-
-  const th = document.getElementById('th-'+k);
-  if (!th) return;
-
-  isColResizing = true;
-  currentResizingCol = k;
-  startX = e.clientX || (e.touches && e.touches[0].clientX);
-  startW = th.offsetWidth;
-  resizePointerId = e.pointerId ?? null;
-  resizeHandleEl = e.currentTarget || e.target;
-
-  if (resizeHandleEl && resizeHandleEl.setPointerCapture && resizePointerId !== null) {
-    try { resizeHandleEl.setPointerCapture(resizePointerId); } catch(err) {}
-  }
-
-  document.body.style.cursor = 'col-resize';
-  document.body.style.userSelect = 'none';
-
-  window.addEventListener('pointermove', doColResize, true);
-  window.addEventListener('pointerup', stopColResize, true);
-  window.addEventListener('pointercancel', stopColResize, true);
-  window.addEventListener('blur', stopColResize, true);
-};
-
-function doColResize(e) {
-  if(!isColResizing) return;
-  if(e.buttons !== undefined && e.buttons === 0 && e.type !== 'pointerup') {
-    stopColResize(e);
-    return;
-  }
-  const clientX = e.clientX || (e.touches ? e.touches[0].clientX : startX);
-  let newW = startW + (clientX - startX);
-  if(newW < 24) newW = 24;
-  colWidths[currentResizingCol] = newW;
-  const th = document.getElementById('th-'+currentResizingCol);
-  if(th) {
-    th.style.width = newW + 'px';
-    th.style.minWidth = newW + 'px';
-    th.style.maxWidth = newW + 'px';
-  }
-}
-
-window.stopColResize = function(e) {
-  if(!isColResizing) return;
-  if (resizeHandleEl && resizeHandleEl.releasePointerCapture && resizePointerId !== null) {
-    try { resizeHandleEl.releasePointerCapture(resizePointerId); } catch(err) {}
-  }
-  isColResizing = false;
-  currentResizingCol = '';
-  resizePointerId = null;
-  resizeHandleEl = null;
-
-  document.body.style.cursor = '';
-  document.body.style.userSelect = '';
-
-  localStorage.setItem('seeandlearn-colWidths', JSON.stringify(colWidths));
-
-  window.removeEventListener('pointermove', doColResize, true);
-  window.removeEventListener('pointerup', stopColResize, true);
-  window.removeEventListener('pointercancel', stopColResize, true);
-  window.removeEventListener('blur', stopColResize, true);
-
-  renderTableEditor();
-}
-
-function calcPortrait() {
-  if(!tableKeys.includes('Portrait')) return;
-  linksData.forEach((row, i) => {
-    if((row.Portrait === undefined || row.Portrait === "") && row.link && row.link.match(/^https?:/i)) {
-      const img = new Image();
-      img.onload = () => {
-        const val = img.width < img.height ? "1" : "0";
-        if(row.Portrait !== val) {
-          row.Portrait = val;
-          const input = document.getElementById(`cell-${i}-Portrait`);
-          if(input) input.value = val;
-          localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
-        }
-      };
-      img.src = row.link;
-    }
-  });
-}
-
+// ─── Table-key helpers ───────────────────────────────────────────────────────
 function initTableKeys() {
   const keys = new Set();
   linksData.forEach(r => Object.keys(r).forEach(k => keys.add(k)));
   tableKeys = Array.from(keys);
-  if(tableKeys.length===0) tableKeys = ['show','asset','cell','fit','link','cname','sname','v.title','v.author','attribution','comment','Mute','Portrait'];
+  if (tableKeys.length === 0)
+    tableKeys = ['show','asset','cell','fit','link','cname','sname','v.title','v.author','attribution','comment','Mute','Portrait'];
 }
 
-function updateSelectedRowsButton() {
-  const btn = document.getElementById('deleteSelectedRows');
-  if(btn) btn.style.display = selectedRows.size > 0 ? 'block' : 'none';
+// ─── Autocomplete value lists ─────────────────────────────────────────────────
+function getDistinctValues(field) {
+  const s = new Set();
+  linksData.forEach(r => { const v = r[field]; if (v !== undefined && v !== null && String(v).trim()) s.add(String(v)); });
+  return Array.from(s).sort();
 }
 
+// ─── Sync Tabulator → linksData ──────────────────────────────────────────────
+function syncFromTabulator() {
+  if (!window.tabulatorTable) return;
+  linksData = window.tabulatorTable.getData();
+  localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+}
+
+// ─── Main Tabulator init ──────────────────────────────────────────────────────
 window.renderTableEditor = function() {
   const container = document.getElementById('tableEditor');
-  if(!container) return;
-  if(typeof tableKeys === 'undefined' || tableKeys.length===0) initTableKeys();
+  if (!container) return;
+  if (!tableKeys.length) initTableKeys();
 
-  // Clear the original custom container
+  // Destroy previous instance
+  if (window.tabulatorTable) {
+    try { window.tabulatorTable.destroy(); } catch(e) {}
+    window.tabulatorTable = null;
+  }
   container.innerHTML = '';
 
-  if (window.tabulatorTable) {
-      window.tabulatorTable.destroy();
-      window.tabulatorTable = null;
-  }
+  // Build autocomplete lists from current data
+  const cnameList  = getDistinctValues('cname');
+  const snameList  = getDistinctValues('sname');
+  const vAuthorList= getDistinctValues('v.author');
 
-  // Common Header Menu for Off-The-Shelf operations
+  // Header right-click menu (rename / delete / duplicate)
   const headerMenu = [
-      {
-          label: "Rename Column",
-          action: function(e, column) {
-              const oldK = column.getField();
-              const newK = prompt('Rename column:', oldK);
-              if(newK && newK !== oldK && !tableKeys.includes(newK)) {
-                  tableKeys[tableKeys.indexOf(oldK)] = newK;
-                  linksData.forEach(row => { row[newK] = row[oldK]; delete row[oldK]; });
-                  window.renderTableEditor();
-              }
-          }
-      },
-      {
-          label: "Duplicate Column",
-          action: function(e, column) {
-              const oldK = column.getField();
-              let newK = prompt("Enter name for the new column:", oldK + '_copy');
-              if (!newK) return;
-
-              let counter = 1;
-              let finalColName = newK;
-              while(tableKeys.includes(finalColName)) {
-                  counter++;
-                  finalColName = newK + counter;
-              }
-
-              const targetIndex = tableKeys.indexOf(oldK) + 1;
-              tableKeys.splice(targetIndex, 0, finalColName);
-
-              // Map data over
-              linksData.forEach(row => {
-                  row[finalColName] = row[oldK] !== undefined ? row[oldK] : "";
-              });
-
-              window.renderTableEditor();
-          }
-      },
-      {
-          label: "Delete Column",
-          action: function(e, column) {
-              const k = column.getField();
-              if(confirm('Delete column ' + k + ' from ALL rows?')) {
-                  tableKeys = tableKeys.filter(x => x !== k);
-                  linksData.forEach(row => delete row[k]);
-                  window.renderTableEditor();
-              }
-          }
+    {
+      label: '✏ ColNameEdit',
+      action(e, col) {
+        const oldK = col.getField();
+        const newK = prompt('Rename column:', oldK);
+        if (!newK || newK === oldK) return;
+        if (tableKeys.includes(newK)) { alert('Name already exists.'); return; }
+        tableKeys[tableKeys.indexOf(oldK)] = newK;
+        linksData.forEach(row => { row[newK] = row[oldK] !== undefined ? row[oldK] : ''; delete row[oldK]; });
+        window.renderTableEditor();
       }
+    },
+    {
+      label: '⧉ ColDupNext',
+      action(e, col) {
+        const oldK = col.getField();
+        const newK = prompt('New column name (copy of "' + oldK + '"):', oldK + '_copy');
+        if (!newK) return;
+        let finalK = newK, n = 2;
+        while (tableKeys.includes(finalK)) finalK = newK + n++;
+        const idx = tableKeys.indexOf(oldK);
+        tableKeys.splice(idx + 1, 0, finalK);
+        linksData.forEach(row => { row[finalK] = row[oldK] !== undefined ? row[oldK] : ''; });
+        window.renderTableEditor();
+      }
+    },
+    {
+      label: '✖ ColDelete',
+      action(e, col) {
+        const k = col.getField();
+        if (!confirm('Delete column "' + k + '" from ALL rows?')) return;
+        tableKeys = tableKeys.filter(x => x !== k);
+        linksData.forEach(row => delete row[k]);
+        window.renderTableEditor();
+      }
+    }
   ];
 
-  // Setup columns
+  // Column definitions
   const cols = [];
 
-  // Add Row Delete Column
+  // ── Row-delete column (no title/header — pure action) ──
   cols.push({
-      title: "Del",
-      formatter: () => "<span style='color:#f66; font-size:18px; font-weight:bold; cursor:pointer;'>&times;</span>",
-      width: 50,
-      hozAlign: "center",
-      headerSort: false,
-      cellClick: function(e, cell) {
-          if(confirm("Delete row?")) {
-              const row = cell.getRow();
-              const rowData = row.getData();
-              const idx = linksData.indexOf(rowData);
-              if(idx > -1) linksData.splice(idx, 1);
-              row.delete();
-          }
-      }
+    title: 'Del',
+    field: '_del',
+    width: 36, minWidth: 36,
+    resizable: false,
+    headerSort: false,
+    hozAlign: 'center',
+    formatter: () => "<span style='color:#f55;font-size:16px;cursor:pointer;line-height:1;'>✕</span>",
+    cellClick(e, cell) {
+      if (!confirm('Delete this row?')) return;
+      const data = cell.getRow().getData();
+      recycleData.push(data);
+      localStorage.setItem('seeandlearn-recycle', JSON.stringify(recycleData));
+      const idx = linksData.findIndex(r => r === data);
+      if (idx > -1) linksData.splice(idx, 1);
+      cell.getRow().delete();
+      localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+    }
   });
 
-  // Add Row Selection Column
+  // ── Row-selection column ──
   cols.push({
-      formatter: "rowSelection", 
-      titleFormatter: "rowSelection", 
-      width: 50, 
-      hozAlign: "center", 
-      headerSort: false
+    formatter: 'rowSelection',
+    titleFormatter: 'rowSelection',
+    width: 36, minWidth: 36,
+    resizable: false,
+    headerSort: false,
+    hozAlign: 'center',
+    cellClick(e, cell) { cell.getRow().toggleSelect(); }
   });
 
+  // ── Move up/down column ──
+  cols.push({
+    title: '↕',
+    field: '_move',
+    width: 46, minWidth: 46,
+    resizable: false,
+    headerSort: false,
+    hozAlign: 'center',
+    formatter: () => "<span style='cursor:pointer;color:#aaa;font-size:13px;'>▲▼</span>",
+    cellClick(e, cell) {
+      // clicked ▲ if y < mid of cell, else ▼
+      const rect = cell.getElement().getBoundingClientRect();
+      const mid  = rect.top + rect.height / 2;
+      const dir  = e.clientY < mid ? -1 : 1;
+      const rows = window.tabulatorTable.getRows();
+      const pos  = cell.getRow().getPosition(true) - 1; // 0-based
+      const tgt  = pos + dir;
+      if (tgt < 0 || tgt >= rows.length) return;
+      // swap in linksData
+      const tmp = linksData[pos]; linksData[pos] = linksData[tgt]; linksData[tgt] = tmp;
+      localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+      window.renderTableEditor();
+    }
+  });
+
+  // ── Data columns ──
   tableKeys.forEach(k => {
-      let colDef = { 
-          title: k, 
-          field: k, 
-          editor: "input",
-          headerSort: true,
-          headerMenu: headerMenu,
-          width: colWidths[k] || 150 // Forces width limit
-      };
+    const w = colWidths[k] !== undefined ? colWidths[k] : COL_DEFAULT_PX;
 
-      // Dropdown autocomplete for cname, sname, v.author
-      if (k === 'cname' || k === 'sname' || k === 'v.author') {
-          colDef.editor = "list";
-          colDef.editorParams = {
-              valuesLookup: "active", // Tabulator built-in autocomplete from active column data
-              autocomplete: true,
-              freetext: true,
-              listOnEmpty: true
-          };
+    let colDef = {
+      title: k,          // exact field name — no decoration
+      field: k,
+      editor: 'input',
+      headerSort: true,
+      headerMenu: headerMenu,
+      width: w,
+      minWidth: COL_MIN_PX,
+      resizable: true,
+      overflow: 'hidden',
+      headerTooltip: k,
+      cellEdited(cell) {
+        // Write edit straight back to the live linksData object
+        const row = cell.getRow().getData();
+        const field = cell.getField();
+        // getData() returns the live object when reactiveData:true
+        localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
       }
-      cols.push(colDef);
+    };
+
+    // Autocomplete for cname, sname, v.author
+    if (k === 'cname') {
+      colDef.editor = 'list';
+      colDef.editorParams = {
+        values: cnameList,
+        autocomplete: true,
+        freetext: true,
+        allowEmpty: true,
+        listOnEmpty: true,
+        filterDelay: 100
+      };
+    } else if (k === 'sname') {
+      colDef.editor = 'list';
+      colDef.editorParams = {
+        values: snameList,
+        autocomplete: true,
+        freetext: true,
+        allowEmpty: true,
+        listOnEmpty: true,
+        filterDelay: 100
+      };
+    } else if (k === 'v.author') {
+      colDef.editor = 'list';
+      colDef.editorParams = {
+        values: vAuthorList,
+        autocomplete: true,
+        freetext: true,
+        allowEmpty: true,
+        listOnEmpty: true,
+        filterDelay: 100
+      };
+    }
+
+    cols.push(colDef);
   });
 
-  // Initialize Tabulator
+  // ─── Tabulator init ───────────────────────────────────────────────────────
   window.tabulatorTable = new Tabulator(container, {
-      data: linksData,
-      reactiveData: true, 
-      // Removed layout: "fitData" so width property works and long text clips instead of expanding endlessly
-      columns: cols,
-      selectableRows: true, 
-      history: true,
-      columnResized: function(column) {
-          const field = column.getField();
-          if(field) {
-              colWidths[field] = column.getWidth();
-              localStorage.setItem('seeandlearn-colWidths', JSON.stringify(colWidths));
-          }
-      }
+    data: linksData,
+    reactiveData: true,
+    columns: cols,
+    layout: 'fitDataNoStretch',
+    selectableRows: true,
+    history: false,
+    movableColumns: false,   // column reorder via our buttons only
+    height: '100%',
+
+    // Save column width when user drags resize handle
+    columnResized(column) {
+      const field = column.getField();
+      if (!field || field.startsWith('_')) return;
+      colWidths[field] = column.getWidth();
+      localStorage.setItem('seeandlearn-colWidths', JSON.stringify(colWidths));
+    },
+
+    // Show/hide Delete Selected button based on selection
+    rowSelectionChanged(data, rows) {
+      const btn = document.getElementById('deleteSelectedRows');
+      if (btn) btn.style.display = rows.length > 0 ? 'inline-block' : 'none';
+    }
   });
-
-  // Wire up Top Buttons
-  const btnAdd = document.getElementById('addTableItem');
-  if(btnAdd) {
-      btnAdd.onclick = () => {
-          const newRow = {};
-          tableKeys.forEach(k => newRow[k] = '');
-          window.tabulatorTable.addRow(newRow, true);
-      };
-  }
-
-  const btnDupRow = document.getElementById('btn-duplicate-row-action');
-  if(btnDupRow) {
-      btnDupRow.onclick = () => {
-          const selectedRows = window.tabulatorTable.getSelectedRows();
-          if(selectedRows.length > 0) {
-              selectedRows.forEach(row => {
-                  const data = Object.assign({}, row.getData());
-                  if(window.getFirstEmptyCell) {
-                      data.cell = window.getFirstEmptyCell(); 
-                  }
-                  window.tabulatorTable.addRow(data, false, row);
-                  linksData.push(data);
-              });
-          } else {
-              if (window.duplicateActiveRow) {
-                  window.duplicateActiveRow();
-              } else {
-                  alert("Select a row to duplicate first.");
-              }
-          }
-      };
-  }
-
-  const btnDupCol = document.getElementById('btn-duplicate-col-action');
-  if(btnDupCol) {
-      btnDupCol.onclick = () => {
-          const colToDup = prompt("Enter the name of the column to duplicate:");
-          if(colToDup && tableKeys.includes(colToDup)) {
-              let newColName = prompt("Enter name for the new column:", colToDup + '_copy');
-              if (!newColName) return; 
-
-              let counter = 1;
-              let finalColName = newColName;
-              while(tableKeys.includes(finalColName)) {
-                  counter++;
-                  finalColName = newColName + counter;
-              }
-
-              const targetIndex = tableKeys.indexOf(colToDup) + 1;
-              tableKeys.splice(targetIndex, 0, finalColName);
-
-              linksData.forEach(row => {
-                  row[finalColName] = row[colToDup] !== undefined ? row[colToDup] : "";
-              });
-
-              window.renderTableEditor();
-          } else if (colToDup) {
-              alert("Column not found. Make sure to match the case perfectly.");
-          }
-      };
-  }
-
-  const btnDel = document.getElementById('deleteSelectedRows');
-  if(btnDel) {
-      btnDel.style.display = 'inline-block'; 
-      btnDel.onclick = () => {
-          const selectedRows = window.tabulatorTable.getSelectedRows();
-          if(selectedRows.length > 0) {
-              if(confirm(`Delete ${selectedRows.length} selected rows?`)) {
-                  selectedRows.forEach(row => {
-                      const rowData = row.getData();
-                      const idx = linksData.indexOf(rowData);
-                      if(idx > -1) linksData.splice(idx, 1);
-                      row.delete();
-                  });
-              }
-          } else {
-              alert("Select rows to delete first.");
-          }
-      };
-  }
 };
 
-window.toggleRowSelect = function(idx, state) { if(state) selectedRows.add(idx); else selectedRows.delete(idx); renderTableEditor(); };
-window.toggleSelectAll = function(state) { if(state) { linksData.forEach((_, i) => selectedRows.add(i)); } else { selectedRows.clear(); } renderTableEditor(); };
-window.updateCell = function(r, k, v) { linksData[r][k] = v; };
-window.colDragStart = function(e, i) { draggedCol = i; };
-window.colDrop = function(e, i) {
-  if(draggedCol === -1 || draggedCol === i) return;
-  const key = tableKeys.splice(draggedCol, 1)[0];
-  tableKeys.splice(i, 0, key); rebuildLinksDataKeys(); renderTableEditor();
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+window.getFirstEmptyCell = function() {
+  const occ = new Set();
+  linksData.forEach(r => { if (r && r.cell) occ.add(String(r.cell).toLowerCase()); });
+  const letters = 'abcde';
+  for (let r = 1; r <= 5; r++)
+    for (let c = 0; c < 5; c++) {
+      const cs = r + letters[c];
+      if (!occ.has(cs)) return cs;
+    }
+  return '';
 };
-window.rebuildLinksDataKeys = function() {
-  linksData = linksData.map(obj => {
-    const newObj = {};
-    tableKeys.forEach(k => { if(obj.hasOwnProperty(k)) newObj[k] = obj[k]; });
-    Object.keys(obj).forEach(k => { if(!tableKeys.includes(k)) newObj[k] = obj[k]; });
-    return newObj;
+
+// ─── Toolbar button actions ────────────────────────────────────────────────
+//
+// RowAddNext  — insert empty row after last selected (or at top if nothing selected)
+// RowAddBottom— append empty row at bottom
+// RowDupNext  — duplicate selected row(s), insert after, assign new cell
+// RowDelete   — delete selected rows (with confirm)
+// ColAddNext  — add new column after current (prompt for name)
+// ColDupNext  — duplicate column (via header menu or button)
+// ColNameEdit — rename column (via header menu or button)
+// ColDelete   — delete column (via header menu or button)
+// ExportChosen— download links.json of selected rows (or all if none selected)
+// Import      — import JSON file and merge into linksData
+
+document.getElementById('addTableItem').addEventListener('click', function() {
+  // RowAddNext — add row at top (before first selected, or at very top)
+  if (!window.tabulatorTable) return;
+  const newRow = {};
+  tableKeys.forEach(k => newRow[k] = '');
+  window.tabulatorTable.addRow(newRow, true); // true = top
+  linksData.unshift(newRow);
+  localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+});
+
+document.getElementById('btn-row-add-bottom').addEventListener('click', function() {
+  // RowAddBottom — append at bottom
+  if (!window.tabulatorTable) return;
+  const newRow = {};
+  tableKeys.forEach(k => newRow[k] = '');
+  window.tabulatorTable.addRow(newRow, false); // false = bottom
+  linksData.push(newRow);
+  localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+});
+
+document.getElementById('btn-duplicate-row-action').addEventListener('click', function() {
+  // RowDupNext — duplicate selected row(s), insert right after, new cell id
+  if (!window.tabulatorTable) return;
+  const sel = window.tabulatorTable.getSelectedRows();
+  if (!sel.length) { alert('Select a row to duplicate first.'); return; }
+  // Process in reverse order so inserts stay in right place
+  [...sel].reverse().forEach(row => {
+    const srcData = row.getData();
+    const newRow  = JSON.parse(JSON.stringify(srcData));
+    newRow.cell   = window.getFirstEmptyCell();
+    const idx = linksData.indexOf(srcData);
+    if (idx > -1) {
+      linksData.splice(idx + 1, 0, newRow);
+    } else {
+      linksData.push(newRow);
+    }
   });
-}
-window.sortData = function(k) {
-  if(sortCol === k) sortAsc = !sortAsc; else { sortCol = k; sortAsc = true; }
-  linksData.sort((a,b) => {
-    let v1 = a[k]!==undefined?a[k]:''; let v2 = b[k]!==undefined?b[k]:'';
-    if(!isNaN(v1) && !isNaN(v2) && v1!=='' && v2!=='') { v1=Number(v1); v2=Number(v2); }
-    if(v1 < v2) return sortAsc ? -1 : 1; if(v1 > v2) return sortAsc ? 1 : -1; return 0;
+  localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+  window.renderTableEditor();
+});
+
+document.getElementById('deleteSelectedRows').addEventListener('click', function() {
+  // RowDelete
+  if (!window.tabulatorTable) return;
+  const sel = window.tabulatorTable.getSelectedRows();
+  if (!sel.length) { alert('Select rows to delete first.'); return; }
+  if (!confirm('Delete ' + sel.length + ' selected row(s)?')) return;
+  const deleted = [];
+  sel.forEach(row => {
+    const d = row.getData();
+    deleted.push(d);
+    recycleData.push(d);
+    const idx = linksData.indexOf(d);
+    if (idx > -1) linksData.splice(idx, 1);
+    row.delete();
   });
-  selectedRows.clear(); renderTableEditor();
-};
-window.renameCol = function(oldK) {
-  const newK = prompt('Rename column:', oldK);
-  if(!newK || newK === oldK || tableKeys.includes(newK)) return;
+  localStorage.setItem('seeandlearn-recycle', JSON.stringify(recycleData));
+  localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+  this.style.display = 'none';
+});
+
+document.getElementById('btn-col-add').addEventListener('click', function() {
+  // ColAddNext — add a new empty column
+  const newK = prompt('New column name:');
+  if (!newK) return;
+  if (tableKeys.includes(newK)) { alert('Column already exists.'); return; }
+  // Insert after last selected column, or at end
+  tableKeys.push(newK);
+  linksData.forEach(row => { if (row[newK] === undefined) row[newK] = ''; });
+  localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+  window.renderTableEditor();
+});
+
+document.getElementById('btn-duplicate-col-action').addEventListener('click', function() {
+  // ColDupNext
+  if (!window.tabulatorTable) return;
+  const cols = window.tabulatorTable.getColumns().map(c => c.getField()).filter(f => f && !f.startsWith('_'));
+  const src = prompt('Column to duplicate:\n' + cols.join(', '));
+  if (!src || !tableKeys.includes(src)) { if (src) alert('Column "' + src + '" not found.'); return; }
+  const newK = prompt('New column name:', src + '_copy');
+  if (!newK) return;
+  let finalK = newK, n = 2;
+  while (tableKeys.includes(finalK)) finalK = newK + n++;
+  const idx = tableKeys.indexOf(src);
+  tableKeys.splice(idx + 1, 0, finalK);
+  linksData.forEach(row => { row[finalK] = row[src] !== undefined ? row[src] : ''; });
+  localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+  window.renderTableEditor();
+});
+
+document.getElementById('btn-col-rename').addEventListener('click', function() {
+  // ColNameEdit
+  if (!window.tabulatorTable) return;
+  const cols = tableKeys;
+  const oldK = prompt('Column to rename:\n' + cols.join(', '));
+  if (!oldK || !tableKeys.includes(oldK)) { if (oldK) alert('Column "' + oldK + '" not found.'); return; }
+  const newK = prompt('New name for "' + oldK + '":', oldK);
+  if (!newK || newK === oldK) return;
+  if (tableKeys.includes(newK)) { alert('Name already exists.'); return; }
   tableKeys[tableKeys.indexOf(oldK)] = newK;
-  linksData.forEach(row => { if(row.hasOwnProperty(oldK)) { row[newK] = row[oldK]; delete row[oldK]; } });
-  rebuildLinksDataKeys(); renderTableEditor();
+  linksData.forEach(row => { row[newK] = row[oldK] !== undefined ? row[oldK] : ''; delete row[oldK]; });
+  localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+  window.renderTableEditor();
+});
+
+document.getElementById('btn-col-delete').addEventListener('click', function() {
+  // ColDelete
+  if (!window.tabulatorTable) return;
+  const cols = tableKeys;
+  const k = prompt('Column to delete:\n' + cols.join(', '));
+  if (!k || !tableKeys.includes(k)) { if (k) alert('Column "' + k + '" not found.'); return; }
+  if (!confirm('Delete column "' + k + '" from ALL rows?')) return;
+  tableKeys = tableKeys.filter(x => x !== k);
+  linksData.forEach(row => delete row[k]);
+  localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+  window.renderTableEditor();
+});
+
+document.getElementById('btn-export-chosen').addEventListener('click', function() {
+  // ExportChosen — download just selected rows (or all if none selected)
+  syncFromTabulator();
+  const sel = window.tabulatorTable ? window.tabulatorTable.getSelectedRows() : [];
+  const data = sel.length > 0 ? sel.map(r => r.getData()) : linksData;
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = sel.length > 0 ? 'links_selected.json' : 'links.json';
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(a.href);
+});
+
+document.getElementById('btn-import').addEventListener('click', function() {
+  // Import — pick a JSON file and merge into linksData
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = '.json,application/json';
+  inp.onchange = function() {
+    const file = this.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+      try {
+        const imported = JSON.parse(ev.target.result);
+        if (!Array.isArray(imported)) { alert('Expected a JSON array.'); return; }
+        const merge = confirm('Merge imported rows with existing data?\nOK = merge, Cancel = replace all.');
+        if (merge) {
+          imported.forEach(r => linksData.push(r));
+        } else {
+          linksData.length = 0;
+          imported.forEach(r => linksData.push(r));
+        }
+        initTableKeys();
+        localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+        window.renderTableEditor();
+      } catch(e) { alert('Invalid JSON: ' + e.message); }
+    };
+    reader.readAsText(file);
+  };
+  inp.click();
+});
+
+// Ctrl+D inside table modal — duplicate active/selected row
+window.addEventListener('keydown', function(e) {
+  if (e.ctrlKey && e.key.toLowerCase() === 'd') {
+    const jsonMod = document.getElementById('jsonModal');
+    if (jsonMod && jsonMod.classList.contains('open')) {
+      e.preventDefault(); e.stopPropagation();
+      document.getElementById('btn-duplicate-row-action').click();
+    }
+  }
+}, true);
+
+// ─── Raw JSON toggle ──────────────────────────────────────────────────────────
+document.getElementById('toggleRawJson').addEventListener('click', function() {
+  rawJsonMode = !rawJsonMode;
+  this.textContent = rawJsonMode ? 'Show Visual Editor' : 'Show Raw JSON';
+  if (rawJsonMode) {
+    syncFromTabulator();
+    document.getElementById('jsonText').value = JSON.stringify(linksData, null, 2);
+    document.getElementById('tableEditor').style.display  = 'none';
+    document.getElementById('jsonText').style.display     = 'block';
+    document.getElementById('tableToolbar').style.display = 'none';
+  } else {
+    try { linksData = JSON.parse(document.getElementById('jsonText').value); }
+    catch(e) { alert('Invalid JSON'); rawJsonMode = true; return; }
+    document.getElementById('tableEditor').style.display  = 'block';
+    document.getElementById('jsonText').style.display     = 'none';
+    document.getElementById('tableToolbar').style.display = 'flex';
+    initTableKeys(); window.renderTableEditor();
+  }
+});
+
+// ─── Open table editor from menu ──────────────────────────────────────────────
+document.getElementById('miTables').addEventListener('pointerup', e => {
+  e.stopPropagation(); closeMenu();
+  if (typeof isAdmin === 'function' && !isAdmin()) { alert('Admin privileges required.'); return; }
+  rawJsonMode = false;
+  document.getElementById('toggleRawJson').textContent   = 'Show Raw JSON';
+  document.getElementById('tableEditor').style.display   = 'block';
+  document.getElementById('jsonText').style.display      = 'none';
+  document.getElementById('tableToolbar').style.display  = 'flex';
+  document.getElementById('deleteSelectedRows').style.display = 'none';
+  document.getElementById('jsonStatus').textContent      = '';
+  document.getElementById('jsonModal').classList.add('open');
+  initTableKeys();
+  window.renderTableEditor();
+});
+
+// ─── Apply / Push / Download / Cancel ────────────────────────────────────────
+window.applyJsonChanges = function() {
+  try {
+    if (rawJsonMode) {
+      const d = JSON.parse(document.getElementById('jsonText').value);
+      if (!Array.isArray(d)) throw new Error('Expected array');
+      linksData = d;
+    } else {
+      syncFromTabulator();
+    }
+    localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+    document.getElementById('jsonModal').classList.remove('open');
+    render(); return true;
+  } catch(e) { document.getElementById('jsonStatus').textContent = 'Error: ' + e.message; return false; }
 };
+document.getElementById('jsonApply').addEventListener('click', window.applyJsonChanges);
+document.getElementById('jsonPush').addEventListener('click', e => {
+  e.preventDefault(); e.stopPropagation();
+  if (window.applyJsonChanges()) window.pushToGitHub();
+});
+document.getElementById('jsonDl').addEventListener('click', saveJson);
+document.getElementById('jsonCancel').addEventListener('click', () => {
+  document.getElementById('jsonModal').classList.remove('open');
+});
+document.getElementById('jsonModal').addEventListener('pointerup', e => e.stopPropagation());
+document.getElementById('jsonText').addEventListener('keydown', e => {
+  if (e.ctrlKey && e.key.toLowerCase() === 's') { e.preventDefault(); window.applyJsonChanges(); }
+});
+
+// ─── Save JSON (local download) ────────────────────────────────────────────
+function saveJson() {
+  syncFromTabulator();
+  localStorage.setItem('mlynx-links', JSON.stringify(linksData));
+  const blob = new Blob([JSON.stringify(linksData, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'links.json';
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(a.href);
+}
+
 window.triggerDownload = async function(filename, data) {
   const jsonText = JSON.stringify(data, null, 2);
   try {
     if (window.showSaveFilePicker) {
       const handle = await window.showSaveFilePicker({
-        id: 'seeandlearn-backup-folder',
-        startIn: 'documents',
+        id: 'seeandlearn-backup-folder', startIn: 'documents',
         suggestedName: filename,
-        types: [{ description: 'JSON File', accept: {'application/json': ['.json']} }]
+        types: [{ description: 'JSON File', accept: { 'application/json': ['.json'] } }]
       });
       const writable = await handle.createWritable();
-      await writable.write(jsonText);
-      await writable.close();
-      return;
+      await writable.write(jsonText); await writable.close(); return;
     }
-  } catch(e) {
-    if(e.name !== 'AbortError') console.error(e);
-    return;
-  }
-
+  } catch(e) { if (e.name !== 'AbortError') console.error(e); return; }
   const blob = new Blob([jsonText], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-};
-
-window.deleteCol = function(k) {
-  if(!confirm('Delete column "' + k + '" from ALL rows?')) return;
-  const ts = new Date().toISOString().replace(/[:.]/g, '-');
-  triggerDownload(`links_${ts}.json`, linksData);
-  localStorage.setItem('seeandlearn-backup', JSON.stringify(linksData));
-  tableKeys = tableKeys.filter(x => x !== k);
-  linksData.forEach(row => delete row[k]);
-  renderTableEditor();
-};
-
-window.addCol = function() {
-  const newK = prompt('New column name:');
-  if(!newK || tableKeys.includes(newK)) return;
-  tableKeys.push(newK);
-  linksData.forEach(row => row[newK] = "");
-  rebuildLinksDataKeys();
-  renderTableEditor();
-};
-
-window.addRow = function() {
-  const newRow = {};
-  tableKeys.forEach(k => newRow[k] = "");
-  linksData.push(newRow);
-  renderTableEditor();
-};
-
-window.deleteRow = function(idx) {
-  if(confirm('Delete row?')) {
-    triggerDownload('recycle.json', [linksData[idx]]);
-    recycleData.push(linksData[idx]);
-    localStorage.setItem('seeandlearn-recycle', JSON.stringify(recycleData));
-    linksData.splice(idx, 1);
-    selectedRows.delete(idx);
-    renderTableEditor();
-  }
-};
-
-document.getElementById('deleteSelectedRows').addEventListener('click', () => {
-  if(selectedRows.size === 0) return;
-  if(confirm(`Delete ${selectedRows.size} selected rows?`)) {
-    const indices = Array.from(selectedRows).sort((a,b)=>b-a);
-    const deleted = [];
-    indices.forEach(i => {
-      deleted.push(linksData[i]);
-      recycleData.push(linksData[i]);
-      linksData.splice(i, 1);
-    });
-    triggerDownload('recycle.json', deleted);
-    localStorage.setItem('seeandlearn-recycle', JSON.stringify(recycleData));
-    selectedRows.clear();
-    renderTableEditor();
-  }
-});
-window.moveRow = function(idx, dir) {
-  if(idx+dir < 0 || idx+dir >= linksData.length) return;
-  const temp = linksData[idx]; linksData[idx] = linksData[idx+dir]; linksData[idx+dir] = temp;
-  if(selectedRows.has(idx) && !selectedRows.has(idx+dir)) { selectedRows.delete(idx); selectedRows.add(idx+dir); } 
-  else if(!selectedRows.has(idx) && selectedRows.has(idx+dir)) { selectedRows.add(idx); selectedRows.delete(idx+dir); }
-  renderTableEditor();
-};
-document.getElementById('addTableItem').addEventListener('click', window.addRow);
-document.getElementById('toggleRawJson').addEventListener('click', function() {
-  rawJsonMode = !rawJsonMode; this.textContent = rawJsonMode ? 'Show Visual Editor' : 'Show Raw JSON';
-  if(rawJsonMode) {
-    document.getElementById('jsonText').value = JSON.stringify(linksData, null, 2);
-    document.getElementById('tableEditor').style.display = 'none'; document.getElementById('jsonText').style.display = 'block';
-    document.getElementById('addTableItem').style.display = 'none'; document.getElementById('deleteSelectedRows').style.display = 'none';
-  } else {
-    try { linksData = JSON.parse(document.getElementById('jsonText').value); } catch(e) { alert("Invalid JSON"); rawJsonMode = true; return; }
-    document.getElementById('tableEditor').style.display = 'block'; document.getElementById('jsonText').style.display = 'none';
-    document.getElementById('addTableItem').style.display = 'block'; initTableKeys(); renderTableEditor();
-  }
-});
-document.getElementById('miTables').addEventListener('pointerup',e=>{
-  e.stopPropagation(); closeMenu();
-  if(typeof isAdmin === 'function' && !isAdmin()) { alert('Admin privileges required.'); return; }
-  rawJsonMode = false; selectedRows.clear(); document.getElementById('toggleRawJson').textContent = 'Show Raw JSON';
-  document.getElementById('tableEditor').style.display = 'block'; document.getElementById('jsonText').style.display = 'none';
-  document.getElementById('addTableItem').style.display = 'block'; initTableKeys(); renderTableEditor();
-  document.getElementById('jsonStatus').textContent=''; document.getElementById('jsonModal').classList.add('open');
-});
-document.getElementById('miSaveJson').addEventListener('pointerup',e=>{ e.stopPropagation(); closeMenu(); saveJson(); });
-document.getElementById('miHelp').addEventListener('pointerup',e=>{
-  e.stopPropagation(); closeMenu();
-  alert('Mlynx\n\nTap cell image -> fullscreen\nTap empty cell -> quick-fill (Ctrl+S to save)\nHamburger -> Tables (JSON editor), Save JSON (Ctrl+Alt+S), Settings');
-});
-document.getElementById('miSettings').addEventListener('pointerup',e=>{
-  e.stopPropagation();
-  const sp=document.getElementById('settingsPanel');
-  const o=sp.classList.toggle('open');
-  e.currentTarget.textContent=o?'Settings \u25be':'Settings \u25b8';
-});
-
-function syncFit(){
-  document.getElementById('togFit').checked=(fitMode==='ei');
-  document.getElementById('fitLabel').textContent=fitMode==='ei'?'Img: Entire Image':'Img: Fill Cell';
-}
-document.getElementById('togFit').addEventListener('change',function(){
-  fitMode=this.checked?'ei':'fc'; localStorage.setItem('mlynx-fit',fitMode); syncFit(); render();
-});
-document.getElementById('togCellLbl').addEventListener('change',function(){ showCellLbl=this.checked; render(); });
-document.getElementById('togCname').addEventListener('change',function(){ showCname=this.checked; render(); });
-
-
-// Ctrl+Alt+S global
-document.addEventListener('keydown',e=>{
-  if(e.ctrlKey&&e.altKey&&e.key.toLowerCase()==='s'){ e.preventDefault(); saveJson(); }
-});
-
-// Save JSON
-function saveJson(){
-  localStorage.setItem('mlynx-links',JSON.stringify(linksData));
-  const blob=new Blob([JSON.stringify(linksData,null,2)],{type:'application/json'});
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob); a.download='links.json';
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = filename;
   document.body.appendChild(a); a.click();
-  document.body.removeChild(a); URL.revokeObjectURL(a.href);
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+};
+
+// ─── Settings / menu items ────────────────────────────────────────────────────
+document.getElementById('miSaveJson').addEventListener('pointerup', e => { e.stopPropagation(); closeMenu(); saveJson(); });
+document.getElementById('miHelp').addEventListener('pointerup', e => {
+  e.stopPropagation(); closeMenu();
+  alert('SeeAndLearn\n\nTap cell image → fullscreen\nTap empty cell → quick-fill (Ctrl+S to save)\nHamburger → Tables, Save JSON (Ctrl+Alt+S), Settings');
+});
+document.getElementById('miSettings').addEventListener('pointerup', e => {
+  e.stopPropagation();
+  const sp = document.getElementById('settingsPanel');
+  const o  = sp.classList.toggle('open');
+  e.currentTarget.textContent = o ? 'Settings \u25be' : 'Settings \u25b8';
+});
+
+function syncFit() {
+  document.getElementById('togFit').checked    = (fitMode === 'ei');
+  document.getElementById('fitLabel').textContent = fitMode === 'ei' ? 'Img: Entire Image' : 'Img: Fill Cell';
 }
+document.getElementById('togFit').addEventListener('change', function() {
+  fitMode = this.checked ? 'ei' : 'fc';
+  localStorage.setItem('mlynx-fit', fitMode); syncFit(); render();
+});
+document.getElementById('togCellLbl').addEventListener('change', function() { showCellLbl = this.checked; render(); });
+document.getElementById('togCname').addEventListener('change',   function() { showCname   = this.checked; render(); });
 
-// Quick-fill
-let qfCell='';
-document.getElementById('qfDesktop').style.display=ISMOBILE?'none':'block';
+// Ctrl+Alt+S global save
+document.addEventListener('keydown', e => {
+  if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 's') { e.preventDefault(); saveJson(); }
+});
 
-async 
+// ─── Quick-fill modal ─────────────────────────────────────────────────────────
+let qfCell = '';
+document.getElementById('qfDesktop').style.display = ISMOBILE ? 'none' : 'block';
 
+// ─── Get Video Info ───────────────────────────────────────────────────────────
 window.fillEmptyVideoInfo = async function() {
+  syncFromTabulator();
   const btn = document.getElementById('btn-get-vid-info');
-  if (btn) btn.textContent = "Fetching...";
+  if (btn) btn.textContent = 'Fetching...';
   let updated = false;
-
-  // ensure keys exist
-  if (!tableKeys.includes('v.title')) tableKeys.push('v.title');
+  if (!tableKeys.includes('v.title'))  tableKeys.push('v.title');
   if (!tableKeys.includes('v.author')) tableKeys.push('v.author');
   if (!tableKeys.includes('Portrait')) tableKeys.push('Portrait');
 
-  const promises = linksData.map(async (row, i) => {
+  await Promise.all(linksData.map(async row => {
     const isVid = row.asset && window.parseVideoAsset && window.parseVideoAsset(row.asset) !== null;
-    if (isVid && row.link && row.link.match(/^https?:/i)) {
-      if (!row['v.title'] || !row['v.author'] || !row.Portrait) {
-        try {
-          const res = await fetch('https://noembed.com/embed?url=' + encodeURIComponent(row.link));
-          const data = await res.json();
-          if (data.title && !row['v.title']) { row['v.title'] = data.title; updated = true; }
-          if (data.author_name && !row['v.author']) { row['v.author'] = data.author_name; updated = true; }
-          if (data.width && data.height && (!row.Portrait || row.Portrait === "")) {
-            row.Portrait = data.width < data.height ? "1" : "0";
-            updated = true;
-          }
-        } catch(e) {}
+    if (!isVid || !row.link || !row.link.match(/^https?:/i)) return;
+    if (row['v.title'] && row['v.author'] && row.Portrait) return;
+    try {
+      const res  = await fetch('https://noembed.com/embed?url=' + encodeURIComponent(row.link));
+      const data = await res.json();
+      if (data.title      && !row['v.title'])  { row['v.title']  = data.title;       updated = true; }
+      if (data.author_name && !row['v.author']) { row['v.author'] = data.author_name; updated = true; }
+      if (data.width && data.height && (!row.Portrait || row.Portrait === '')) {
+        row.Portrait = data.width < data.height ? '1' : '0'; updated = true;
       }
-    }
-  });
+    } catch(e) {}
+  }));
 
-  await Promise.all(promises);
-
-  if (updated) {
-    localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
-    if (window.renderTableEditor) window.renderTableEditor();
-  }
-  if (btn) btn.textContent = "Get Video Info";
+  if (updated) { localStorage.setItem('seeandlearn-links', JSON.stringify(linksData)); window.renderTableEditor(); }
+  if (btn) btn.textContent = 'Get Video Info';
 };
 
-
-
-
-
-window.lastActiveRowIdx = -1;
-
-document.addEventListener('focusin', function(e) {
-  if (e.target && e.target.id && e.target.id.startsWith('cell-')) {
-    window.lastActiveRowIdx = parseInt(e.target.id.split('-')[1]);
-  }
-});
-
-window.getFirstEmptyCell = function() {
-  try {
-    const occ = new Set();
-    linksData.forEach(r => { if(r && r.cell) occ.add(String(r.cell).toUpperCase()); });
-    const letters = "ABCDE";
-    for(let r=1; r<=5; r++) {
-      for(let c=0; c<5; c++) {
-        let cs = r + letters[c];
-        if(!occ.has(cs)) return cs;
-      }
-    }
-  } catch(e) { console.error(e); }
-  return "";
-};
-
+// ─── duplicateActiveRow (kept for Ctrl+D compat) ──────────────────────────────
 window.duplicateActiveRow = function() {
-  try {
-    let rIdx = window.lastActiveRowIdx;
-    if (typeof selectedRows !== 'undefined' && selectedRows.size > 0) {
-      rIdx = Array.from(selectedRows)[0];
-    }
-    if (rIdx < 0 && linksData.length > 0) rIdx = linksData.length - 1; 
-
-    if (rIdx >= 0 && rIdx < linksData.length) {
-       const newRow = JSON.parse(JSON.stringify(linksData[rIdx]));
-       newRow.cell = window.getFirstEmptyCell();
-       linksData.splice(rIdx + 1, 0, newRow);
-
-       try { localStorage.setItem('seeandlearn-links', JSON.stringify(linksData)); } catch(e){}
-
-       if(window.renderTableEditor) window.renderTableEditor();
-
-       window.lastActiveRowIdx = rIdx + 1;
-
-       const btn = document.getElementById('btn-duplicate-row-action');
-       if(btn) {
-         const oldBg = btn.style.background;
-         btn.style.background = '#fff';
-         btn.style.color = '#000';
-         setTimeout(() => {
-           btn.style.background = oldBg;
-           btn.style.color = '#eaf';
-         }, 200);
-       }
-
-       setTimeout(() => {
-         const isVidNode = newRow.asset && window.parseVideoAsset && window.parseVideoAsset(newRow.asset) !== null;
-         if (isVidNode && window.openVideoEditor) {
-           window.openVideoEditor(linksData[rIdx + 1]);
-         }
-       }, 200);
-    } else {
-       alert("No row selected to duplicate! Click on a row first.");
-    }
-  } catch(err) {
-    alert("Duplicate Error: " + err.message);
-  }
+  document.getElementById('btn-duplicate-row-action').click();
 };
 
-window.addEventListener('keydown', function(e) {
-  if (e.ctrlKey && e.key.toLowerCase() === 'd') {
-    const jsonMod = document.getElementById('jsonModal');
-    if (jsonMod && jsonMod.classList.contains('open')) {
-      e.preventDefault();
-      e.stopPropagation();
-      window.duplicateActiveRow();
-    }
-  }
-}, true); // Use capture phase to beat browser default Ctrl+D
-
-// Wait until DOM is ready to bind the button, or bind it directly to the document
-document.addEventListener('click', function(e) {
-  if (e.target && e.target.id === 'btn-duplicate-row-action') {
-    window.duplicateActiveRow();
-  }
-});
-
-
-
-
+// ─── lastActiveRowIdx (kept for video editor compat) ─────────────────────────
+window.lastActiveRowIdx = -1;

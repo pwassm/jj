@@ -41,6 +41,12 @@ window.pushToGitHub = async function() {
 
   showGhBalloon("Pushing to GitHub...", 0);
 
+  // Always flush Tabulator edits into linksData before pushing
+  if (typeof syncFromTabulator === 'function') syncFromTabulator();
+  else if (window.tabulatorTable) {
+    try { linksData = window.tabulatorTable.getData(); } catch(e) {}
+  }
+
   try {
     const path = 'links.json';
     const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;

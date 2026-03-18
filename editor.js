@@ -63,26 +63,10 @@ document.getElementById('qfPasteBtn').addEventListener('pointerup',async e=>{
   }catch(err){ alert('Tap Image link field and paste manually.'); }
 });
 
-// JSON editor
-window.applyJsonChanges = function() {
-  try {
-    if(rawJsonMode) {
-      const d=JSON.parse(document.getElementById('jsonText').value);
-      if(!Array.isArray(d)) throw new Error('Expected array');
-      linksData=d;
-    }
-    localStorage.setItem('seeandlearn-links',JSON.stringify(linksData));
-    document.getElementById('jsonModal').classList.remove('open');
-    render(); return true;
-  } catch(e) { document.getElementById('jsonStatus').textContent='Error: '+e.message; return false; }
-}
-document.getElementById('jsonApply').addEventListener('click', window.applyJsonChanges);
-document.getElementById('jsonPush').addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); if (window.applyJsonChanges()) { window.pushToGitHub(); } });
-document.getElementById('jsonDl').addEventListener('click',saveJson);
-document.getElementById('jsonCancel').addEventListener('click',()=>document.getElementById('jsonModal').classList.remove('open'));
-document.getElementById('jsonModal').addEventListener('pointerup',e=>e.stopPropagation());
+// JSON editor Apply/Push/Cancel/Download are wired in ui.js
+// Ctrl+S in raw-json textarea
 document.getElementById('jsonText').addEventListener('keydown',e=>{
-  if(e.ctrlKey&&e.key.toLowerCase()==='s'){ e.preventDefault(); document.getElementById('jsonApply').dispatchEvent(new Event('pointerup')); }
+  if(e.ctrlKey&&e.key.toLowerCase()==='s'){ e.preventDefault(); if(window.applyJsonChanges) window.applyJsonChanges(); }
 });
 
 // bootstrap
