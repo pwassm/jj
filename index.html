@@ -315,26 +315,25 @@ input[type="text"], input[type="search"], textarea, .tabulator-editor { color: #
   <div id="jsonBox">
     <div id="jsonTitle">&#x1F4CB; Table Editor: links.json</div>
     <div id="tableEditorWrap" style="flex:1; display:flex; flex-direction:column; overflow:hidden; gap:10px;">
+
       <div style="display:flex; justify-content:space-between; align-items:center;">
-        
-        <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom: 8px;">
-          <button id="btn-row-add-next" class="tb-btn">RowAddNext</button>
+        <div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom: 6px;">
+          <button id="addTableItem" class="tb-btn" style="padding:8px 16px;">RowAddNext</button>
           <button id="btn-row-add-bottom" class="tb-btn">RowAddBottom</button>
           <button id="btn-row-dup-next" class="tb-btn">RowDupNext</button>
-          <button id="btn-row-delete" class="tb-btn" style="color:#f88;">RowDelete</button>
+          <button id="deleteSelectedRows" class="tb-btn" style="padding:8px 16px; color:#f88; background:rgba(180,0,0,0.3);">RowDelete</button>
 
-          <button id="btn-col-add-next" class="tb-btn">ColumnAddNext</button>
-          <button id="btn-col-dup-next" class="tb-btn">ColumnDupNext</button>
-          <button id="btn-col-name-edit" class="tb-btn">ColumnNameEdit</button>
-          <button id="btn-col-delete" class="tb-btn" style="color:#f88;">ColumnDelete</button>
+          <button id="btn-col-add-next" class="tb-btn">ColAddNext</button>
+          <button id="btn-col-dup-next" class="tb-btn">ColDupNext</button>
+          <button id="btn-col-name-edit" class="tb-btn">ColNameEdit</button>
+          <button id="btn-col-delete" class="tb-btn" style="color:#f88; background:rgba(180,0,0,0.3);">ColDelete</button>
 
           <button id="btn-export-chosen" class="tb-btn" style="color:#8f8;">ExportChosen</button>
           <button id="btn-import" class="tb-btn" style="color:#8f8;">Import</button>
-          <input type="file" id="input-import-json" accept=".json" style="display:none;">
         </div>
-<button id="toggleRawJson" style="padding:8px 16px; border-radius:6px; border:1px solid #555; background:#2a2a3e; color:#fff; cursor:pointer;">Show Raw JSON</button>
+        <button id="toggleRawJson" style="padding:8px 16px; border-radius:6px; border:1px solid #555; background:#2a2a3e; color:#fff; cursor:pointer;">Show Raw JSON</button>
       </div>
-      <div id="tableEditor" style="flex:1; overflow:auto; background:#0a0a1a; border:1px solid #444; border-radius:6px;"></div>
+id="tableEditor" style="flex:1; overflow:auto; background:#0a0a1a; border:1px solid #444; border-radius:6px;"></div>
       <textarea id="jsonText" style="display:none; flex:1; background:#0a0a1a; border:1px solid #444; color:#cfc; padding:12px; font-size:13px; font-family:monospace; line-height:1.4; border-radius:6px; resize:none; overflow:auto;"></textarea>
     </div>
     <div id="jsonBtns">
