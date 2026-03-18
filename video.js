@@ -374,19 +374,3 @@ window.openVideoEditor = function(it) {
   document.addEventListener('keydown', handleKey, true);
   updatePreviewNormal();
 };
-
-
-window.toggleCellVideo = function(cellId) {
-    const player = window.seeLearnVideoPlayers[cellId];
-    if (!player) return;
-    if (typeof player.getPlayerState === 'function') {
-        const state = player.getPlayerState();
-        if (state === 1) player.pauseVideo();
-        else player.playVideo();
-    } else if (typeof player.getPaused === 'function') {
-        player.getPaused().then(paused => {
-            if (paused) player.play();
-            else player.pause();
-        });
-    }
-};
