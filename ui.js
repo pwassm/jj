@@ -11,6 +11,7 @@ window.openFS = function(it) {
     vidHost.id = 'fs-vid-' + it.cell;
     vidHost.style.cssText = 'width:100%; height:100%; pointer-events:none;';
     fs.appendChild(vidHost);
+    vidHost.dataset.noAutoPause = '1';
 
     const parsed = window.parseVideoAsset(it.asset);
     if (parsed) {
@@ -399,6 +400,13 @@ document.getElementById('togFit').addEventListener('change',function(){
   fitMode=this.checked?'ei':'fc'; localStorage.setItem('mlynx-fit',fitMode); syncFit(); render();
 });
 document.getElementById('togCellLbl').addEventListener('change',function(){ showCellLbl=this.checked; render(); });
+
+document.getElementById('togAutoPause').checked = window.autoPauseMode;
+document.getElementById('togAutoPause').addEventListener('change', function() {
+  window.autoPauseMode = this.checked;
+  localStorage.setItem('seeandlearn-autopause', window.autoPauseMode ? 'true' : 'false');
+});
+
 document.getElementById('togCname').addEventListener('change',function(){ showCname=this.checked; render(); });
 
 
@@ -586,7 +594,7 @@ window.duplicateActiveCol = function() {
     if (btn) {
         const oldBg = btn.style.background;
         btn.style.background = '#fff'; btn.style.color = '#000';
-        setTimeout(() => { btn.style.background = oldBg; btn.style.color = '#eaf'; }, 200);
+        setTimeout(() => { btn.style.background = oldBg; btn.style.color = '#efa'; }, 200);
     }
   } catch(err) {
     alert("Duplicate Col Error: " + err.message);
