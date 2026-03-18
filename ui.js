@@ -244,7 +244,11 @@ window.renderTableEditor = function() {
       if (k === 'cname' || k === 'sname' || k === 'v.author') {
           colDef.editor = "list";
           colDef.editorParams = {
-              valuesLookup: "active",
+              // Dynamically get all unique values in this column across linksData
+              values: function(cell) {
+                  const field = cell.getField();
+                  return [...new Set(linksData.map(r => r[field]).filter(x => x))].sort();
+              },
               autocomplete: true,
               freetext: true,
               listOnEmpty: true,
@@ -272,7 +276,7 @@ window.renderTableEditor = function() {
       }
   });
 
-  // --- TOP BUTTON ACTIONS (same as before) ---
+  // --- TOP BUTTON ACTIONS ---
 
   // RowAddNext
   const btnRowAddNext = document.getElementById('btn-row-add-next');
@@ -283,11 +287,13 @@ window.renderTableEditor = function() {
       const activeRow = window.activeRowNode;
       if (activeRow) {
           window.tabulatorTable.addRow(newRow, false, activeRow);
+          // Insert into linksData immediately after activeRow's underlying data
           const rowData = activeRow.getData();
           const targetIdx = linksData.indexOf(rowData);
           if(targetIdx > -1) linksData.splice(targetIdx + 1, 0, newRow);
           else linksData.push(newRow);
       } else {
+          // Fallback to top if no row active
           window.tabulatorTable.addRow(newRow, true);
           linksData.unshift(newRow);
       }
@@ -298,7 +304,7 @@ window.renderTableEditor = function() {
   if(btnRowAddBottom) btnRowAddBottom.onclick = () => {
       const newRow = {};
       tableKeys.forEach(k => newRow[k] = '');
-      window.tabulatorTable.addRow(newRow, false);
+      window.tabulatorTable.addRow(newRow, false); // bottom
       linksData.push(newRow);
   };
 
@@ -309,18 +315,22 @@ window.renderTableEditor = function() {
       let targetRow = window.activeRowNode;
 
       if(selectedRows.length > 0) {
-          selectedRows.reverse().forEach(row => {
+          // If rows are explicitly checked, duplicate them
+          selectedRows.reverse().forEach(row => { // reverse to maintain selection order when inserting after
               const data = Object.assign({}, row.getData());
               if(window.getFirstEmptyCell) data.cell = window.getFirstEmptyCell(); 
               window.tabulatorTable.addRow(data, false, row);
+
               const idx = linksData.indexOf(row.getData());
               if(idx > -1) linksData.splice(idx + 1, 0, data);
               else linksData.push(data);
           });
       } else if (targetRow) {
+          // If no row checked, duplicate the last clicked row
           const data = Object.assign({}, targetRow.getData());
           if(window.getFirstEmptyCell) data.cell = window.getFirstEmptyCell();
           window.tabulatorTable.addRow(data, false, targetRow);
+
           const idx = linksData.indexOf(targetRow.getData());
           if(idx > -1) linksData.splice(idx + 1, 0, data);
           else linksData.push(data);
@@ -376,7 +386,7 @@ window.renderTableEditor = function() {
       const targetIndex = tableKeys.indexOf(window.activeColField) + 1;
       tableKeys.splice(targetIndex, 0, newName);
       linksData.forEach(row => row[newName] = "");
-      window.activeColField = newName;
+      window.activeColField = newName; // focus new
       window.renderTableEditor();
   };
 
@@ -421,7 +431,7 @@ window.renderTableEditor = function() {
       if(confirm('Delete column ' + k + ' from ALL rows?')) {
           tableKeys = tableKeys.filter(x => x !== k);
           linksData.forEach(row => delete row[k]);
-          window.activeColField = tableKeys[0] || null;
+          window.activeColField = tableKeys[0] || null; // reset
           window.renderTableEditor();
       }
   };
@@ -437,6 +447,7 @@ window.renderTableEditor = function() {
           const ts = new Date().toISOString().replace(/[:.]/g, '-');
           window.triggerDownload(`export_${ts}.json`, exportData);
       } else {
+          // Fallback download if triggerDownload isn't defined
           const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
@@ -450,6 +461,7 @@ window.renderTableEditor = function() {
   const inputImport = document.getElementById('input-import-json');
   if(btnImport && inputImport) {
       btnImport.onclick = () => inputImport.click();
+      // Important: replace the event listener cleanly so it doesn't fire multiple times
       inputImport.onchange = (e) => {
           const file = e.target.files[0];
           if(!file) return;
@@ -459,46 +471,35 @@ window.renderTableEditor = function() {
                   const importedData = JSON.parse(evt.target.result);
                   if(!Array.isArray(importedData)) throw new Error("JSON is not an array");
 
-                  if(confirm("OK = APPEND to existing table. Cancel = REPLACE current table.")) {
+                  // Ask user: Append or Replace?
+                  if(confirm("Click OK to APPEND to existing table. Click Cancel to REPLACE current table.")) {
+                      // Append
                       importedData.forEach(r => linksData.push(r));
+
+                      // Discover any new keys
                       importedData.forEach(r => {
                           Object.keys(r).forEach(k => {
                               if(!tableKeys.includes(k)) tableKeys.push(k);
                           });
                       });
                   } else {
+                      // Replace
                       linksData = importedData;
                       tableKeys = [];
                       linksData.forEach(r => Object.keys(r).forEach(k => {
                           if(!tableKeys.includes(k)) tableKeys.push(k);
                       }));
                   }
-                  window.renderTableEditor();
+                  window.renderTableEditor(); // Redraw with new data and headers
               } catch(err) {
                   alert("Failed to load JSON: " + err.message);
               }
-              inputImport.value = '';
+              inputImport.value = ''; // Reset file input
           };
           reader.readAsText(file);
       };
   }
 };
-
-document.getElementById('miTables').addEventListener('pointerup',e=>{
-  e.stopPropagation(); closeMenu();
-  if(typeof isAdmin === 'function' && !isAdmin()) { alert('Admin privileges required.'); return; }
-  rawJsonMode = false; selectedRows.clear(); 
-  let tr = document.getElementById('toggleRawJson'); if(tr) tr.textContent = 'Show Raw JSON';
-
-  let te = document.getElementById('tableEditor'); if(te) te.style.display = 'block'; 
-  let jt = document.getElementById('jsonText'); if(jt) jt.style.display = 'none';
-  let ati = document.getElementById('addTableItem'); if(ati) ati.style.display = 'block'; 
-
-  initTableKeys(); renderTableEditor();
-
-  let js = document.getElementById('jsonStatus'); if(js) js.textContent=''; 
-  let jm = document.getElementById('jsonModal'); if(jm) jm.classList.add('open');
-});
 window.toggleRowSelect = function(idx, state) { if(state) selectedRows.add(idx); else selectedRows.delete(idx); renderTableEditor(); };
 window.toggleSelectAll = function(state) { if(state) { linksData.forEach((_, i) => selectedRows.add(i)); } else { selectedRows.clear(); } renderTableEditor(); };
 window.updateCell = function(r, k, v) { linksData[r][k] = v; };
@@ -626,39 +627,23 @@ window.moveRow = function(idx, dir) {
 document.getElementById('addTableItem').addEventListener('click', window.addRow);
 document.getElementById('toggleRawJson').addEventListener('click', function() {
   rawJsonMode = !rawJsonMode; this.textContent = rawJsonMode ? 'Show Visual Editor' : 'Show Raw JSON';
-  let te = document.getElementById('tableEditor');
-  let jt = document.getElementById('jsonText');
-  let ati = document.getElementById('addTableItem');
-  let dsr = document.getElementById('deleteSelectedRows');
-
   if(rawJsonMode) {
-    if(jt) jt.value = JSON.stringify(linksData, null, 2);
-    if(te) te.style.display = 'none'; 
-    if(jt) jt.style.display = 'block';
-    if(ati) ati.style.display = 'none'; 
-    if(dsr) dsr.style.display = 'none';
+    document.getElementById('jsonText').value = JSON.stringify(linksData, null, 2);
+    document.getElementById('tableEditor').style.display = 'none'; document.getElementById('jsonText').style.display = 'block';
+    document.getElementById('addTableItem').style.display = 'none'; document.getElementById('deleteSelectedRows').style.display = 'none';
   } else {
     try { linksData = JSON.parse(document.getElementById('jsonText').value); } catch(e) { alert("Invalid JSON"); rawJsonMode = true; return; }
-    if(te) te.style.display = 'block'; 
-    if(jt) jt.style.display = 'none';
-    if(ati) ati.style.display = 'block'; 
-    initTableKeys(); renderTableEditor();
+    document.getElementById('tableEditor').style.display = 'block'; document.getElementById('jsonText').style.display = 'none';
+    document.getElementById('addTableItem').style.display = 'block'; initTableKeys(); renderTableEditor();
   }
 });
 document.getElementById('miTables').addEventListener('pointerup',e=>{
   e.stopPropagation(); closeMenu();
   if(typeof isAdmin === 'function' && !isAdmin()) { alert('Admin privileges required.'); return; }
-  rawJsonMode = false; selectedRows.clear(); 
-  let tr = document.getElementById('toggleRawJson'); if(tr) tr.textContent = 'Show Raw JSON';
-
-  let te = document.getElementById('tableEditor'); if(te) te.style.display = 'block'; 
-  let jt = document.getElementById('jsonText'); if(jt) jt.style.display = 'none';
-  let ati = document.getElementById('addTableItem'); if(ati) ati.style.display = 'block'; 
-
-  initTableKeys(); renderTableEditor();
-
-  let js = document.getElementById('jsonStatus'); if(js) js.textContent=''; 
-  let jm = document.getElementById('jsonModal'); if(jm) jm.classList.add('open');
+  rawJsonMode = false; selectedRows.clear(); document.getElementById('toggleRawJson').textContent = 'Show Raw JSON';
+  document.getElementById('tableEditor').style.display = 'block'; document.getElementById('jsonText').style.display = 'none';
+  document.getElementById('addTableItem').style.display = 'block'; initTableKeys(); renderTableEditor();
+  document.getElementById('jsonStatus').textContent=''; document.getElementById('jsonModal').classList.add('open');
 });
 document.getElementById('miSaveJson').addEventListener('pointerup',e=>{ e.stopPropagation(); closeMenu(); saveJson(); });
 document.getElementById('miHelp').addEventListener('pointerup',e=>{
