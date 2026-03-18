@@ -506,16 +506,30 @@ window.duplicateActiveRow = function() {
     if (typeof selectedRows !== 'undefined' && selectedRows.size > 0) {
       rIdx = Array.from(selectedRows)[0];
     }
-    if (rIdx < 0 && linksData.length > 0) rIdx = linksData.length - 1; 
+    if (rIdx === undefined || rIdx < 0 || isNaN(rIdx)) {
+        if (typeof linksData !== 'undefined' && linksData.length > 0) {
+            rIdx = linksData.length - 1; 
+        } else {
+            alert("No data available to duplicate!");
+            return;
+        }
+    }
 
-    if (rIdx >= 0 && rIdx < linksData.length) {
+    if (rIdx >= 0 && typeof linksData !== 'undefined' && rIdx < linksData.length) {
+       console.log("Duplicating row index: " + rIdx);
        const newRow = JSON.parse(JSON.stringify(linksData[rIdx]));
-       newRow.cell = window.getFirstEmptyCell();
+       if (window.getFirstEmptyCell) {
+           newRow.cell = window.getFirstEmptyCell();
+       } else {
+           newRow.cell = "";
+       }
        linksData.splice(rIdx + 1, 0, newRow);
 
-       try { localStorage.setItem('seeandlearn-links', JSON.stringify(linksData)); } catch(e){}
+       try { localStorage.setItem('seeandlearn-links', JSON.stringify(linksData)); } catch(e){ console.error(e); }
 
-       if(window.renderTableEditor) window.renderTableEditor();
+       if(window.renderTableEditor) {
+           window.renderTableEditor();
+       }
 
        window.lastActiveRowIdx = rIdx + 1;
 
@@ -540,7 +554,8 @@ window.duplicateActiveRow = function() {
        alert("No row selected to duplicate! Click on a row first.");
     }
   } catch(err) {
-    alert("Duplicate Error: " + err.message);
+    alert("Duplicate Error: " + err.message + "
+" + err.stack);
   }
 };
 

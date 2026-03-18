@@ -119,6 +119,8 @@ window.mountYouTubeClip = async function(hostEl, url, startSec, dur, isMuted, cu
         window.seeLearnVideoTimers[cellId] = setInterval(() => {
           try {
             const t = e.target.getCurrentTime();
+            // Check pause
+
             if (!noAutoPause && window.autoPauseMode && !hostEl.dataset.hasAutoPaused && t >= Number(startSec) + 0.1) {
                 e.target.pauseVideo();
                 hostEl.dataset.hasAutoPaused = '1';
