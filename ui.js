@@ -182,13 +182,14 @@ window.renderTableEditor = function() {
   // Clear the original custom container
   container.innerHTML = '';
 
-  // Setup columns based on tableKeys
+  // Setup columns based on tableKeys and saved widths
   const cols = tableKeys.map(k => {
       let colDef = { 
           title: k, 
           field: k, 
           editor: "input",
-          headerSort: true
+          headerSort: true,
+          width: colWidths[k] || 150 // default to 150px wide unless resized
       };
 
       // Dropdown autocomplete for specific columns
@@ -213,11 +214,16 @@ window.renderTableEditor = function() {
   // Initialize Tabulator
   window.tabulatorTable = new Tabulator(container, {
       data: linksData,
-      reactiveData: true, // Automatically keeps linksData in sync with table edits
-      layout: "fitData",
+      reactiveData: true, 
+      layout: "fitData", // columns stick to their set width or data size, but width attribute forces it
       columns: cols,
-      selectableRows: true, // v6 syntax
+      selectableRows: true, 
       history: true,
+      columnResized: function(column) {
+          // Save column width to existing localStorage variable
+          colWidths[column.getField()] = column.getWidth();
+          localStorage.setItem('seeandlearn-colWidths', JSON.stringify(colWidths));
+      }
   });
 
   // Wire up Top Buttons
@@ -241,12 +247,11 @@ window.renderTableEditor = function() {
               selectedRows.forEach(row => {
                   const data = Object.assign({}, row.getData());
                   if(window.getFirstEmptyCell) {
-                      data.cell = window.getFirstEmptyCell(); // Match original logic if possible
+                      data.cell = window.getFirstEmptyCell(); 
                   }
                   window.tabulatorTable.addRow(data, false, row);
               });
           } else {
-              // Try falling back to old active row if none checked, or alert
               if (window.duplicateActiveRow) {
                   window.duplicateActiveRow();
               } else {
@@ -256,27 +261,33 @@ window.renderTableEditor = function() {
       };
   }
 
-  // 3. Duplicate Column
+  // 3. Duplicate Column (Fixed)
   const btnDupCol = document.getElementById('btn-duplicate-col-action');
   if(btnDupCol) {
       btnDupCol.onclick = () => {
           const colToDup = prompt("Enter the name of the column to duplicate:");
           if(colToDup && tableKeys.includes(colToDup)) {
-              let newColName = colToDup + '_copy';
-              let counter = 1;
-              while(tableKeys.includes(newColName)) {
-                  counter++;
-                  newColName = colToDup + '_copy' + counter;
-              }
-              tableKeys.push(newColName);
+              let newColName = prompt("Enter name for the new column:", colToDup + '_copy');
+              if (!newColName) return; // cancelled
 
-              // Apply data
-              const allData = window.tabulatorTable.getData();
-              allData.forEach(row => {
-                  row[newColName] = row[colToDup];
+              // Ensure unique name
+              let counter = 1;
+              let finalColName = newColName;
+              while(tableKeys.includes(finalColName)) {
+                  counter++;
+                  finalColName = newColName + counter;
+              }
+
+              // Insert next to the original column
+              const targetIndex = tableKeys.indexOf(colToDup) + 1;
+              tableKeys.splice(targetIndex, 0, finalColName);
+
+              // Copy data directly into the main linksData array
+              linksData.forEach(row => {
+                  row[finalColName] = row[colToDup];
               });
 
-              // Full redraw required to pick up new tableKeys mapping
+              // Redraw the entire table to register new column and data
               window.renderTableEditor();
           } else if (colToDup) {
               alert("Column not found.");
@@ -287,7 +298,7 @@ window.renderTableEditor = function() {
   // 4. Delete Selected
   const btnDel = document.getElementById('deleteSelectedRows');
   if(btnDel) {
-      btnDel.style.display = 'inline-block'; // Ensure it's visible with Tabulator
+      btnDel.style.display = 'inline-block'; 
       btnDel.onclick = () => {
           const selectedRows = window.tabulatorTable.getSelectedRows();
           if(selectedRows.length > 0) {

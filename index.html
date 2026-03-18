@@ -182,17 +182,19 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
 /* Tabulator Dark Theme Overrides */
 .tabulator { background-color: #0a0a1a !important; border: 1px solid #444 !important; color: #fff !important; }
 .tabulator-header { background-color: #1a1a2a !important; color: #fff !important; border-bottom: 1px solid #444 !important; }
-.tabulator-row { background-color: #0a0a1a !important; border-bottom: 1px solid #333 !important; }
-.tabulator-row:nth-child(even) { background-color: #111122 !important; }
-.tabulator-row.tabulator-selected { background-color: #2e1c1c !important; }
+.tabulator-row { background-color: #0a0a1a !important; border-bottom: 1px solid #333 !important; color: #fff !important; }
+.tabulator-row:nth-child(even) { background-color: #111122 !important; color: #fff !important; }
+.tabulator-row.tabulator-selected { background-color: #2e1c1c !important; color: #fff !important; }
 .tabulator-row:hover { background-color: #223 !important; }
-.tabulator-cell { border-right: 1px solid #333 !important; padding: 4px !important; }
+.tabulator-cell { border-right: 1px solid #333 !important; padding: 4px !important; color: #fff !important; }
 .tabulator-col { background-color: #1a1a2a !important; border-right: 1px solid #444 !important; }
-.tabulator-col-title { color: #ccc !important; font-size: 14px; }
+.tabulator-col-title { color: #fff !important; font-size: 14px; font-weight: bold; }
 .tabulator-edit-list { background: #1a1a2a !important; color: #fff !important; border: 1px solid #555 !important; }
-.tabulator-edit-list-item { padding: 4px !important; }
+.tabulator-edit-list-item { padding: 4px !important; color: #fff !important; }
 .tabulator-edit-list-item:hover { background: #334 !important; }
 .tabulator-edit-list-item.active { background: #446 !important; }
+/* Force inputs inside the table to be dark mode and white text */
+input[type="text"], input[type="search"], textarea, .tabulator-editor { color: #fff !important; background: #222 !important; border: 1px solid #555 !important; }
 </style>
 </head>
 <body>
