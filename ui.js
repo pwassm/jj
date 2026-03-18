@@ -62,87 +62,11 @@ menuBtn.addEventListener('pointerup',e=>{
 menuPanel.addEventListener('pointerup',e=>e.stopPropagation());
 document.addEventListener('pointerup',()=>{ if(menuPanel.classList.contains('open')) closeMenu(); });
 
+
 let rawJsonMode = false;
 let tableKeys = [];
-let sortCol = null;
-let sortAsc = true;
-let draggedCol = -1;
-let selectedRows = new Set();
-let colWidths = JSON.parse(localStorage.getItem('seeandlearn-colWidths') || '{}');
 let recycleData = JSON.parse(localStorage.getItem('seeandlearn-recycle') || '[]');
-
-let isColResizing = false;
-let startX = 0, startW = 0, currentResizingCol = '';
-let resizePointerId = null, resizeHandleEl = null;
-
-window.initColResize = function(e, k) {
-  if (e.button !== undefined && e.button !== 0) return; // Only left click
-  e.preventDefault();
-  e.stopPropagation();
-
-  const th = document.getElementById('th-'+k);
-  if (!th) return;
-
-  isColResizing = true;
-  currentResizingCol = k;
-  startX = e.clientX || (e.touches && e.touches[0].clientX);
-  startW = th.offsetWidth;
-  resizePointerId = e.pointerId ?? null;
-  resizeHandleEl = e.currentTarget || e.target;
-
-  if (resizeHandleEl && resizeHandleEl.setPointerCapture && resizePointerId !== null) {
-    try { resizeHandleEl.setPointerCapture(resizePointerId); } catch(err) {}
-  }
-
-  document.body.style.cursor = 'col-resize';
-  document.body.style.userSelect = 'none';
-
-  window.addEventListener('pointermove', doColResize, true);
-  window.addEventListener('pointerup', stopColResize, true);
-  window.addEventListener('pointercancel', stopColResize, true);
-  window.addEventListener('blur', stopColResize, true);
-};
-
-function doColResize(e) {
-  if(!isColResizing) return;
-  if(e.buttons !== undefined && e.buttons === 0 && e.type !== 'pointerup') {
-    stopColResize(e);
-    return;
-  }
-  const clientX = e.clientX || (e.touches ? e.touches[0].clientX : startX);
-  let newW = startW + (clientX - startX);
-  if(newW < 24) newW = 24;
-  colWidths[currentResizingCol] = newW;
-  const th = document.getElementById('th-'+currentResizingCol);
-  if(th) {
-    th.style.width = newW + 'px';
-    th.style.minWidth = newW + 'px';
-    th.style.maxWidth = newW + 'px';
-  }
-}
-
-window.stopColResize = function(e) {
-  if(!isColResizing) return;
-  if (resizeHandleEl && resizeHandleEl.releasePointerCapture && resizePointerId !== null) {
-    try { resizeHandleEl.releasePointerCapture(resizePointerId); } catch(err) {}
-  }
-  isColResizing = false;
-  currentResizingCol = '';
-  resizePointerId = null;
-  resizeHandleEl = null;
-
-  document.body.style.cursor = '';
-  document.body.style.userSelect = '';
-
-  localStorage.setItem('seeandlearn-colWidths', JSON.stringify(colWidths));
-
-  window.removeEventListener('pointermove', doColResize, true);
-  window.removeEventListener('pointerup', stopColResize, true);
-  window.removeEventListener('pointercancel', stopColResize, true);
-  window.removeEventListener('blur', stopColResize, true);
-
-  renderTableEditor();
-}
+window.tabulatorTable = null;
 
 function calcPortrait() {
   if(!tableKeys.includes('Portrait')) return;
@@ -170,196 +94,140 @@ function initTableKeys() {
   if(tableKeys.length===0) tableKeys = ['show','asset','cell','fit','link','cname','sname','v.title','v.author','attribution','comment','Mute','Portrait'];
 }
 
-function updateSelectedRowsButton() {
-  const btn = document.getElementById('deleteSelectedRows');
-  if(btn) btn.style.display = selectedRows.size > 0 ? 'block' : 'none';
-}
-
 window.renderTableEditor = function() {
   const container = document.getElementById('tableEditor');
   if(!container) return;
-  if(tableKeys.length===0) initTableKeys();
 
-  selectedRows = new Set(Array.from(selectedRows).filter(idx => idx < linksData.length));
-  updateSelectedRowsButton();
+  if(tableKeys.length === 0) initTableKeys();
 
-  let html = '<div style="display:table; border-collapse:collapse; color:#fff; font-family:sans-serif; font-size:13px; table-layout:fixed;">';
-  html += '<div style="display:table-row; font-weight:bold; position:sticky; top:0; z-index:10; background:#222; box-shadow: 0 4px 10px rgba(0,0,0,0.8);">';
-  html += `<div style="display:table-cell; padding:12px 8px; border:1px solid #444; border-top:2px solid #8ef; border-bottom:2px solid #8ef; width:60px; min-width:60px; max-width:60px; text-align:center; vertical-align:bottom; box-sizing:border-box;">
-             <input type="checkbox" onchange="toggleSelectAll(this.checked)" ${selectedRows.size>0 && selectedRows.size===linksData.length?'checked':''}>
-             <span style="margin-left:4px;">Del</span>
-           </div>`;
-
-  tableKeys.forEach((k, i) => {
-    let w = colWidths[k] || 150;
-    html += `<div id="th-${k}" style="display:table-cell; border:1px solid #444; border-top:2px solid #8ef; border-bottom:2px solid #8ef; background:#222; width:${w}px; min-width:${w}px; max-width:${w}px; position:relative; box-sizing:border-box; vertical-align:bottom;" 
-               draggable="true" ondragstart="colDragStart(event, ${i})" ondragover="event.preventDefault(); this.style.background='#444'" ondragleave="this.style.background='#222'" ondrop="this.style.background='#222'; colDrop(event, ${i})">
-               <div style="position:relative; width:100%; min-height:60px; padding:12px 12px 8px 6px; box-sizing:border-box;">
-
-                 <div style="display:flex; flex-direction:column; align-items:flex-start; gap:4px; margin-bottom:12px;">
-                   <button onclick="deleteCol('${k}')" style="background:none;border:none;color:#f66;cursor:pointer;font-size:14px;padding:0;line-height:1;text-align:left;" title="Delete Column">&#10006;</button>
-                   <button onclick="renameCol('${k}')" style="background:none;border:none;color:#8ef;cursor:pointer;font-size:14px;padding:0;line-height:1;text-align:left;" title="Rename Column">&#9998;</button>
-                 </div>
-
-                 <span style="cursor:pointer; display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; width:100%; user-select:none; font-size:14px; text-align:left; color:#ccc;" onclick="sortData('${k}')" title="Sort by ${k}">${k} ${sortCol===k?(sortAsc?'\u25B2':'\u25BC'):''}</span>
-
-                 <div onpointerdown="initColResize(event, '${k}')" ondragstart="event.preventDefault(); event.stopPropagation();" style="position:absolute; right:0; top:0; width:10px; height:100%; cursor:col-resize; background:transparent; z-index:12; border-left:1px solid #555;" title="Drag to resize"></div>
-               </div>
-             </div>`;
-  });
-
-  html += '<div style="display:table-cell; padding:12px 8px; border:1px solid #444; border-top:2px solid #8ef; border-bottom:2px solid #8ef; width:60px; min-width:60px; background:#222; vertical-align:bottom; box-sizing:border-box;"><button onclick="addCol()" style="cursor:pointer;background:#2a2a3e;color:#fff;border:1px solid #555;padding:4px 8px;border-radius:4px;">+ Col</button></div></div>';
-
-  html += '<div style="display:table-row; height:12px; background:transparent;"></div>';
-
-  linksData.forEach((row, rIdx) => {
-    const isSel = selectedRows.has(rIdx);
-    html += `<div style="display:table-row; background:${isSel ? '#2e1c1c' : (rIdx%2===0?'#111':'#1a1a1a')};">`;
-    html += `<div style="display:table-cell; padding:10px 4px 4px 4px; border:1px solid #444; text-align:center;">
-               <input type="checkbox" ${isSel?'checked':''} onchange="toggleRowSelect(${rIdx}, this.checked)">
-               <button onclick="deleteRow(${rIdx})" style="color:#f66;background:none;border:none;cursor:pointer;font-size:14px; margin-left:6px;" title="Delete Row">&#10006;</button>
-             </div>`;
-    tableKeys.forEach(k => {
-      const val = (row[k] === undefined || row[k] === null) ? '' : String(row[k]).replace(/"/g, '&quot;');
-      html += `<div style="display:table-cell; padding:0; border:1px solid #444; overflow:hidden;">
-                 <input id="cell-${rIdx}-${k}" type="text" value="${val}" onchange="updateCell(${rIdx}, '${k}', this.value)" style="width:100%; height:100%; min-height:30px; background:transparent; color:#fff; border:none; padding:10px 8px 4px 8px; box-sizing:border-box;">
-               </div>`;
-    });
-    html += `<div style="display:table-cell; padding:10px 4px 4px 4px; border:1px solid #444; text-align:center;">
-               <button onclick="moveRow(${rIdx}, -1)" style="cursor:pointer;background:none;border:none;color:#aaa;font-size:16px;">&#9650;</button>
-               <button onclick="moveRow(${rIdx}, 1)" style="cursor:pointer;background:none;border:none;color:#aaa;font-size:16px;">&#9660;</button>
-             </div></div>`;
-  });
-  html += '</div>';
-  container.innerHTML = html;
-  calcPortrait();
-};
-
-window.toggleRowSelect = function(idx, state) { if(state) selectedRows.add(idx); else selectedRows.delete(idx); renderTableEditor(); };
-window.toggleSelectAll = function(state) { if(state) { linksData.forEach((_, i) => selectedRows.add(i)); } else { selectedRows.clear(); } renderTableEditor(); };
-window.updateCell = function(r, k, v) { linksData[r][k] = v; };
-window.colDragStart = function(e, i) { draggedCol = i; };
-window.colDrop = function(e, i) {
-  if(draggedCol === -1 || draggedCol === i) return;
-  const key = tableKeys.splice(draggedCol, 1)[0];
-  tableKeys.splice(i, 0, key); rebuildLinksDataKeys(); renderTableEditor();
-};
-window.rebuildLinksDataKeys = function() {
-  linksData = linksData.map(obj => {
-    const newObj = {};
-    tableKeys.forEach(k => { if(obj.hasOwnProperty(k)) newObj[k] = obj[k]; });
-    Object.keys(obj).forEach(k => { if(!tableKeys.includes(k)) newObj[k] = obj[k]; });
-    return newObj;
-  });
-}
-window.sortData = function(k) {
-  if(sortCol === k) sortAsc = !sortAsc; else { sortCol = k; sortAsc = true; }
-  linksData.sort((a,b) => {
-    let v1 = a[k]!==undefined?a[k]:''; let v2 = b[k]!==undefined?b[k]:'';
-    if(!isNaN(v1) && !isNaN(v2) && v1!=='' && v2!=='') { v1=Number(v1); v2=Number(v2); }
-    if(v1 < v2) return sortAsc ? -1 : 1; if(v1 > v2) return sortAsc ? 1 : -1; return 0;
-  });
-  selectedRows.clear(); renderTableEditor();
-};
-window.renameCol = function(oldK) {
-  const newK = prompt('Rename column:', oldK);
-  if(!newK || newK === oldK || tableKeys.includes(newK)) return;
-  tableKeys[tableKeys.indexOf(oldK)] = newK;
-  linksData.forEach(row => { if(row.hasOwnProperty(oldK)) { row[newK] = row[oldK]; delete row[oldK]; } });
-  rebuildLinksDataKeys(); renderTableEditor();
-};
-window.triggerDownload = async function(filename, data) {
-  const jsonText = JSON.stringify(data, null, 2);
-  try {
-    if (window.showSaveFilePicker) {
-      const handle = await window.showSaveFilePicker({
-        id: 'seeandlearn-backup-folder',
-        startIn: 'documents',
-        suggestedName: filename,
-        types: [{ description: 'JSON File', accept: {'application/json': ['.json']} }]
-      });
-      const writable = await handle.createWritable();
-      await writable.write(jsonText);
-      await writable.close();
+  if (window.tabulatorTable) {
+      // If initialized, just update data
+      window.tabulatorTable.replaceData(linksData);
       return;
-    }
-  } catch(e) {
-    if(e.name !== 'AbortError') console.error(e);
-    return;
   }
 
-  const blob = new Blob([jsonText], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  // Define columns dynamically from keys
+  let cols = [
+      {formatter:"rowSelection", titleFormatter:"rowSelection", hozAlign:"center", headerSort:false, width:50, cellClick:function(e, cell){ cell.getRow().toggleSelect(); }}
+  ];
+
+  tableKeys.forEach(k => {
+      let colDef = { 
+          title: k, 
+          field: k, 
+          editor: "input", 
+          headerFilter: "input", 
+          width: 150,
+          editable: true
+      };
+
+      // Magic feature: Turn 'cname' into an autocomplete dropdown!
+      if (k === 'cname' || k === 'v.author') {
+          colDef.editor = "list";
+          colDef.editorParams = { autocomplete: true, clearable: true, allowEmpty: true, valuesLookup: true };
+      }
+      cols.push(colDef);
+  });
+
+  window.tabulatorTable = new Tabulator("#tableEditor", {
+      data: linksData,
+      reactiveData: true, // Auto-syncs grid edits with linksData array
+      layout: "fitData",
+      columns: cols,
+      history: true, // Enables Ctrl+Z to undo
+      rowFormatter: function(row) {
+          // Highlight empty cells or specific rules
+      },
+      cellEdited: function(cell) {
+          try { localStorage.setItem('seeandlearn-links', JSON.stringify(linksData)); } catch(e){}
+          calcPortrait();
+      }
+  });
 };
 
-window.deleteCol = function(k) {
-  if(!confirm('Delete column "' + k + '" from ALL rows?')) return;
-  const ts = new Date().toISOString().replace(/[:.]/g, '-');
-  triggerDownload(`links_${ts}.json`, linksData);
-  localStorage.setItem('seeandlearn-backup', JSON.stringify(linksData));
-  tableKeys = tableKeys.filter(x => x !== k);
-  linksData.forEach(row => delete row[k]);
-  renderTableEditor();
-};
-
-window.addCol = function() {
-  const newK = prompt('New column name:');
-  if(!newK || tableKeys.includes(newK)) return;
-  tableKeys.push(newK);
-  linksData.forEach(row => row[newK] = "");
-  rebuildLinksDataKeys();
-  renderTableEditor();
-};
-
+// Add Row
 window.addRow = function() {
   const newRow = {};
   tableKeys.forEach(k => newRow[k] = "");
-  linksData.push(newRow);
-  renderTableEditor();
+  if(window.tabulatorTable) window.tabulatorTable.addRow(newRow, true); // true = add to top
 };
 
-window.deleteRow = function(idx) {
-  if(confirm('Delete row?')) {
-    triggerDownload('recycle.json', [linksData[idx]]);
-    recycleData.push(linksData[idx]);
-    localStorage.setItem('seeandlearn-recycle', JSON.stringify(recycleData));
-    linksData.splice(idx, 1);
-    selectedRows.delete(idx);
-    renderTableEditor();
-  }
-};
-
+// Delete Selected
 document.getElementById('deleteSelectedRows').addEventListener('click', () => {
-  if(selectedRows.size === 0) return;
-  if(confirm(`Delete ${selectedRows.size} selected rows?`)) {
-    const indices = Array.from(selectedRows).sort((a,b)=>b-a);
-    const deleted = [];
-    indices.forEach(i => {
-      deleted.push(linksData[i]);
-      recycleData.push(linksData[i]);
-      linksData.splice(i, 1);
-    });
-    triggerDownload('recycle.json', deleted);
-    localStorage.setItem('seeandlearn-recycle', JSON.stringify(recycleData));
-    selectedRows.clear();
-    renderTableEditor();
+  if(!window.tabulatorTable) return;
+  let selected = window.tabulatorTable.getSelectedRows();
+  if(selected.length === 0) { alert("Check the boxes next to rows you want to delete."); return; }
+
+  if(confirm(`Delete ${selected.length} rows?`)) {
+      selected.forEach(row => {
+          recycleData.push(row.getData());
+          row.delete();
+      });
+      localStorage.setItem('seeandlearn-recycle', JSON.stringify(recycleData));
+      localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
   }
 });
-window.moveRow = function(idx, dir) {
-  if(idx+dir < 0 || idx+dir >= linksData.length) return;
-  const temp = linksData[idx]; linksData[idx] = linksData[idx+dir]; linksData[idx+dir] = temp;
-  if(selectedRows.has(idx) && !selectedRows.has(idx+dir)) { selectedRows.delete(idx); selectedRows.add(idx+dir); } 
-  else if(!selectedRows.has(idx) && selectedRows.has(idx+dir)) { selectedRows.add(idx); selectedRows.delete(idx+dir); }
-  renderTableEditor();
+
+// Duplicate Row
+window.duplicateActiveRow = function() {
+  if(!window.tabulatorTable) return;
+  let selected = window.tabulatorTable.getSelectedRows();
+  if(selected.length === 0) {
+      alert("Please check the box next to the row you want to duplicate.");
+      return;
+  }
+
+  let rowToDup = selected[0];
+  let newRowData = JSON.parse(JSON.stringify(rowToDup.getData()));
+  if(window.getFirstEmptyCell) {
+      try { newRowData.cell = window.getFirstEmptyCell(); } catch(e) {}
+  }
+
+  window.tabulatorTable.addRow(newRowData, false, rowToDup); // insert below
+  try { localStorage.setItem('seeandlearn-links', JSON.stringify(linksData)); } catch(e){}
+
+  const btn = document.getElementById('btn-duplicate-row-action');
+  if (btn) {
+      const oldBg = btn.style.background;
+      btn.style.background = '#fff'; btn.style.color = '#000';
+      setTimeout(() => { btn.style.background = oldBg; btn.style.color = '#eaf'; }, 200);
+  }
 };
-document.getElementById('addTableItem').addEventListener('click', window.addRow);
+
+// Duplicate Column
+window.duplicateActiveCol = function() {
+  if(!window.tabulatorTable) return;
+  let colToCopy = prompt("Enter the exact column name to duplicate (e.g., v.title, cname, comment):");
+  if(!colToCopy) return;
+  if(!tableKeys.includes(colToCopy)) {
+      alert(`Column '${colToCopy}' not found!`);
+      return;
+  }
+
+  let newCol = colToCopy + "_copy";
+  let counter = 1;
+  while(tableKeys.includes(newCol)) {
+      counter++;
+      newCol = colToCopy + "_copy" + counter;
+  }
+
+  tableKeys.push(newCol);
+
+  // Clone data
+  linksData.forEach(r => {
+      if(r[colToCopy] !== undefined) r[newCol] = JSON.parse(JSON.stringify(r[colToCopy]));
+  });
+
+  window.tabulatorTable.addColumn({
+      title: newCol, 
+      field: newCol, 
+      editor: "input", 
+      headerFilter: "input"
+  }, false, colToCopy);
+
+  try { localStorage.setItem('seeandlearn-links', JSON.stringify(linksData)); } catch(e){}
+};
+
 document.getElementById('toggleRawJson').addEventListener('click', function() {
   rawJsonMode = !rawJsonMode; this.textContent = rawJsonMode ? 'Show Visual Editor' : 'Show Raw JSON';
   if(rawJsonMode) {
@@ -500,65 +368,6 @@ window.getFirstEmptyCell = function() {
   return "";
 };
 
-window.duplicateActiveRow = function() {
-  try {
-    let rIdx = window.lastActiveRowIdx;
-    if (typeof selectedRows !== 'undefined' && selectedRows.size > 0) {
-      rIdx = Array.from(selectedRows)[0];
-    }
-
-    // Fallback: if we somehow lost focus, just duplicate the very last row!
-    if (rIdx === undefined || rIdx < 0 || isNaN(rIdx)) {
-        if (linksData.length > 0) {
-            rIdx = linksData.length - 1; 
-        } else {
-            return; // completely empty table
-        }
-    }
-
-    if (rIdx >= 0 && rIdx < linksData.length) {
-       // Deep copy the row
-       const newRow = JSON.parse(JSON.stringify(linksData[rIdx]));
-
-       // Try to assign empty cell
-       if (window.getFirstEmptyCell) {
-           try { newRow.cell = window.getFirstEmptyCell(); } catch(e) { newRow.cell = ""; }
-       }
-
-       // Insert it into the array right below
-       linksData.splice(rIdx + 1, 0, newRow);
-
-       // Save and re-render
-       try { localStorage.setItem('seeandlearn-links', JSON.stringify(linksData)); } catch(e){}
-
-       // Call exactly the same as Add Row does!
-       window.renderTableEditor();
-
-       // Setup for the next click
-       window.lastActiveRowIdx = rIdx + 1;
-
-       // Flash the button
-       const btn = document.getElementById('btn-duplicate-row-action');
-       if (btn) {
-         const oldBg = btn.style.background;
-         btn.style.background = '#fff';
-         btn.style.color = '#000';
-         setTimeout(() => { btn.style.background = oldBg; btn.style.color = '#eaf'; }, 200);
-       }
-
-       // Open video editor if it's a video
-       setTimeout(() => {
-         try {
-             if (newRow.asset && window.parseVideoAsset && window.parseVideoAsset(newRow.asset) !== null) {
-               if (window.openVideoEditor) window.openVideoEditor(linksData[rIdx + 1]);
-             }
-         } catch(e) {}
-       }, 200);
-    }
-  } catch(err) {
-    alert("Duplicate Error: " + err.message);
-  }
-};
 
 window.addEventListener('keydown', function(e) {
   if (e.ctrlKey && e.key.toLowerCase() === 'd') {
@@ -583,50 +392,3 @@ document.addEventListener('click', function(e) {
 
 
 
-window.duplicateActiveCol = function() {
-  try {
-    let col = window.lastActiveColKey;
-
-    // Fallback: if no column selected, just duplicate the last available column
-    if (!col || typeof col !== 'string') {
-        if (tableKeys.length > 0) {
-            col = tableKeys[tableKeys.length - 1];
-        } else {
-            return;
-        }
-    }
-
-    let newCol = col + "_copy";
-    let counter = 1;
-    while(tableKeys.includes(newCol)) {
-        counter++;
-        newCol = col + "_copy" + counter;
-    }
-
-    const colIdx = tableKeys.indexOf(col);
-    if (colIdx >= 0) tableKeys.splice(colIdx + 1, 0, newCol);
-    else tableKeys.push(newCol);
-
-    linksData.forEach(row => {
-        if (row[col] !== undefined) {
-            try {
-                row[newCol] = JSON.parse(JSON.stringify(row[col]));
-            } catch(e) {
-                row[newCol] = row[col]; // fallback for primitives
-            }
-        }
-    });
-
-    if(window.rebuildLinksDataKeys) window.rebuildLinksDataKeys();
-    window.renderTableEditor();
-
-    const btn = document.getElementById('btn-duplicate-col-action');
-    if (btn) {
-        const oldBg = btn.style.background;
-        btn.style.background = '#fff'; btn.style.color = '#000';
-        setTimeout(() => { btn.style.background = oldBg; btn.style.color = '#efa'; }, 200);
-    }
-  } catch(err) {
-    alert("Duplicate Col Error: " + err.message);
-  }
-};
