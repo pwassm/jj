@@ -175,6 +175,24 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
 .token-status { font-size: 12px; color: #8ef; min-height: 14px; }
   body.ctrl-pressed .cellMediaHost, body.ctrl-pressed iframe { pointer-events: none !important; }
 </style>
+<script type="text/javascript" src="https://unpkg.com/tabulator-tables@6.2.1/dist/js/tabulator.min.js"></script>
+
+<style>
+/* Tabulator Dark Theme Overrides */
+.tabulator { background-color: #0a0a1a !important; border: 1px solid #444 !important; color: #fff !important; }
+.tabulator-header { background-color: #1a1a2a !important; color: #fff !important; border-bottom: 1px solid #444 !important; }
+.tabulator-row { background-color: #0a0a1a !important; border-bottom: 1px solid #333 !important; }
+.tabulator-row:nth-child(even) { background-color: #111122 !important; }
+.tabulator-row.tabulator-selected { background-color: #2e1c1c !important; }
+.tabulator-row:hover { background-color: #223 !important; }
+.tabulator-cell { border-right: 1px solid #333 !important; padding: 4px !important; }
+.tabulator-col { background-color: #1a1a2a !important; border-right: 1px solid #444 !important; }
+.tabulator-col-title { color: #ccc !important; font-size: 14px; }
+.tabulator-edit-list { background: #1a1a2a !important; color: #fff !important; border: 1px solid #555 !important; }
+.tabulator-edit-list-item { padding: 4px !important; }
+.tabulator-edit-list-item:hover { background: #334 !important; }
+.tabulator-edit-list-item.active { background: #446 !important; }
+</style>
 </head>
 <body>
 
@@ -276,6 +294,7 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
         <div style="display:flex; gap:10px;">
           <button id="addTableItem" style="padding:8px 16px; border-radius:6px; border:1px solid #4af; background:rgba(0,80,180,0.3); color:#8ef; cursor:pointer;">+ Add Row</button>
           <button id="btn-duplicate-row-action" style="padding:8px 16px; border-radius:6px; border:1px solid #a8f; background:rgba(160,80,200,0.3); color:#eaf; cursor:pointer;">Duplicate (^D)</button>
+          <button id="btn-duplicate-col-action" style="padding:8px 16px; border-radius:6px; border:1px solid #a8f; background:rgba(160,80,200,0.3); color:#eaf; cursor:pointer;">Dup Col</button>
           <button id="btn-get-vid-info" onclick="if(window.fillEmptyVideoInfo)window.fillEmptyVideoInfo()" style="padding:8px 16px; border-radius:6px; border:1px solid #ff8; background:rgba(180,180,0,0.2); color:#ff8; cursor:pointer;">Get Video Info</button>
           <button id="deleteSelectedRows" style="padding:8px 16px; border-radius:6px; border:1px solid #f66; background:rgba(180,0,0,0.3); color:#f88; cursor:pointer; display:none;">Delete Selected</button>
         </div>

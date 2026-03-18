@@ -177,61 +177,128 @@ function updateSelectedRowsButton() {
 window.renderTableEditor = function() {
   const container = document.getElementById('tableEditor');
   if(!container) return;
-  if(tableKeys.length===0) initTableKeys();
+  if(typeof tableKeys === 'undefined' || tableKeys.length===0) initTableKeys();
 
-  selectedRows = new Set(Array.from(selectedRows).filter(idx => idx < linksData.length));
-  updateSelectedRowsButton();
+  // Clear the original custom container
+  container.innerHTML = '';
 
-  let html = '<div style="display:table; border-collapse:collapse; color:#fff; font-family:sans-serif; font-size:13px; table-layout:fixed;">';
-  html += '<div style="display:table-row; font-weight:bold; position:sticky; top:0; z-index:10; background:#222; box-shadow: 0 4px 10px rgba(0,0,0,0.8);">';
-  html += `<div style="display:table-cell; padding:12px 8px; border:1px solid #444; border-top:2px solid #8ef; border-bottom:2px solid #8ef; width:60px; min-width:60px; max-width:60px; text-align:center; vertical-align:bottom; box-sizing:border-box;">
-             <input type="checkbox" onchange="toggleSelectAll(this.checked)" ${selectedRows.size>0 && selectedRows.size===linksData.length?'checked':''}>
-             <span style="margin-left:4px;">Del</span>
-           </div>`;
+  // Setup columns based on tableKeys
+  const cols = tableKeys.map(k => {
+      let colDef = { 
+          title: k, 
+          field: k, 
+          editor: "input",
+          headerSort: true
+      };
 
-  tableKeys.forEach((k, i) => {
-    let w = colWidths[k] || 150;
-    html += `<div id="th-${k}" style="display:table-cell; border:1px solid #444; border-top:2px solid #8ef; border-bottom:2px solid #8ef; background:#222; width:${w}px; min-width:${w}px; max-width:${w}px; position:relative; box-sizing:border-box; vertical-align:bottom;" 
-               draggable="true" ondragstart="colDragStart(event, ${i})" ondragover="event.preventDefault(); this.style.background='#444'" ondragleave="this.style.background='#222'" ondrop="this.style.background='#222'; colDrop(event, ${i})">
-               <div style="position:relative; width:100%; min-height:60px; padding:12px 12px 8px 6px; box-sizing:border-box;">
-
-                 <div style="display:flex; flex-direction:column; align-items:flex-start; gap:4px; margin-bottom:12px;">
-                   <button onclick="deleteCol('${k}')" style="background:none;border:none;color:#f66;cursor:pointer;font-size:14px;padding:0;line-height:1;text-align:left;" title="Delete Column">&#10006;</button>
-                   <button onclick="renameCol('${k}')" style="background:none;border:none;color:#8ef;cursor:pointer;font-size:14px;padding:0;line-height:1;text-align:left;" title="Rename Column">&#9998;</button>
-                 </div>
-
-                 <span style="cursor:pointer; display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; width:100%; user-select:none; font-size:14px; text-align:left; color:#ccc;" onclick="sortData('${k}')" title="Sort by ${k}">${k} ${sortCol===k?(sortAsc?'\u25B2':'\u25BC'):''}</span>
-
-                 <div onpointerdown="initColResize(event, '${k}')" ondragstart="event.preventDefault(); event.stopPropagation();" style="position:absolute; right:0; top:0; width:10px; height:100%; cursor:col-resize; background:transparent; z-index:12; border-left:1px solid #555;" title="Drag to resize"></div>
-               </div>
-             </div>`;
+      // Dropdown autocomplete for specific columns
+      if (k === 'cname' || k === 'v.author') {
+          const uniqueValues = [...new Set(linksData.map(r => r[k]).filter(x => x))].sort();
+          colDef.editor = "list";
+          colDef.editorParams = {
+              values: uniqueValues,
+              autocomplete: true,
+              freetext: true,
+              listOnEmpty: true
+          };
+      }
+      return colDef;
   });
 
-  html += '<div style="display:table-cell; padding:12px 8px; border:1px solid #444; border-top:2px solid #8ef; border-bottom:2px solid #8ef; width:60px; min-width:60px; background:#222; vertical-align:bottom; box-sizing:border-box;"><button onclick="addCol()" style="cursor:pointer;background:#2a2a3e;color:#fff;border:1px solid #555;padding:4px 8px;border-radius:4px;">+ Col</button></div></div>';
+  // Destroy previous instance if it exists
+  if (window.tabulatorTable) {
+      window.tabulatorTable.destroy();
+  }
 
-  html += '<div style="display:table-row; height:12px; background:transparent;"></div>';
-
-  linksData.forEach((row, rIdx) => {
-    const isSel = selectedRows.has(rIdx);
-    html += `<div style="display:table-row; background:${isSel ? '#2e1c1c' : (rIdx%2===0?'#111':'#1a1a1a')};">`;
-    html += `<div style="display:table-cell; padding:10px 4px 4px 4px; border:1px solid #444; text-align:center;">
-               <input type="checkbox" ${isSel?'checked':''} onchange="toggleRowSelect(${rIdx}, this.checked)">
-               <button onclick="deleteRow(${rIdx})" style="color:#f66;background:none;border:none;cursor:pointer;font-size:14px; margin-left:6px;" title="Delete Row">&#10006;</button>
-             </div>`;
-    tableKeys.forEach(k => {
-      const val = (row[k] === undefined || row[k] === null) ? '' : String(row[k]).replace(/"/g, '&quot;');
-      html += `<div style="display:table-cell; padding:0; border:1px solid #444; overflow:hidden;">
-                 <input id="cell-${rIdx}-${k}" type="text" value="${val}" onchange="updateCell(${rIdx}, '${k}', this.value)" style="width:100%; height:100%; min-height:30px; background:transparent; color:#fff; border:none; padding:10px 8px 4px 8px; box-sizing:border-box;">
-               </div>`;
-    });
-    html += `<div style="display:table-cell; padding:10px 4px 4px 4px; border:1px solid #444; text-align:center;">
-               <button onclick="moveRow(${rIdx}, -1)" style="cursor:pointer;background:none;border:none;color:#aaa;font-size:16px;">&#9650;</button>
-               <button onclick="moveRow(${rIdx}, 1)" style="cursor:pointer;background:none;border:none;color:#aaa;font-size:16px;">&#9660;</button>
-             </div></div>`;
+  // Initialize Tabulator
+  window.tabulatorTable = new Tabulator(container, {
+      data: linksData,
+      reactiveData: true, // Automatically keeps linksData in sync with table edits
+      layout: "fitData",
+      columns: cols,
+      selectableRows: true, // v6 syntax
+      history: true,
   });
-  html += '</div>';
-  container.innerHTML = html;
-  calcPortrait();
+
+  // Wire up Top Buttons
+
+  // 1. Add Row
+  const btnAdd = document.getElementById('addTableItem');
+  if(btnAdd) {
+      btnAdd.onclick = () => {
+          const newRow = {};
+          tableKeys.forEach(k => newRow[k] = '');
+          window.tabulatorTable.addRow(newRow, true);
+      };
+  }
+
+  // 2. Duplicate Row
+  const btnDupRow = document.getElementById('btn-duplicate-row-action');
+  if(btnDupRow) {
+      btnDupRow.onclick = () => {
+          const selectedRows = window.tabulatorTable.getSelectedRows();
+          if(selectedRows.length > 0) {
+              selectedRows.forEach(row => {
+                  const data = Object.assign({}, row.getData());
+                  if(window.getFirstEmptyCell) {
+                      data.cell = window.getFirstEmptyCell(); // Match original logic if possible
+                  }
+                  window.tabulatorTable.addRow(data, false, row);
+              });
+          } else {
+              // Try falling back to old active row if none checked, or alert
+              if (window.duplicateActiveRow) {
+                  window.duplicateActiveRow();
+              } else {
+                  alert("Select a row to duplicate first.");
+              }
+          }
+      };
+  }
+
+  // 3. Duplicate Column
+  const btnDupCol = document.getElementById('btn-duplicate-col-action');
+  if(btnDupCol) {
+      btnDupCol.onclick = () => {
+          const colToDup = prompt("Enter the name of the column to duplicate:");
+          if(colToDup && tableKeys.includes(colToDup)) {
+              let newColName = colToDup + '_copy';
+              let counter = 1;
+              while(tableKeys.includes(newColName)) {
+                  counter++;
+                  newColName = colToDup + '_copy' + counter;
+              }
+              tableKeys.push(newColName);
+
+              // Apply data
+              const allData = window.tabulatorTable.getData();
+              allData.forEach(row => {
+                  row[newColName] = row[colToDup];
+              });
+
+              // Full redraw required to pick up new tableKeys mapping
+              window.renderTableEditor();
+          } else if (colToDup) {
+              alert("Column not found.");
+          }
+      };
+  }
+
+  // 4. Delete Selected
+  const btnDel = document.getElementById('deleteSelectedRows');
+  if(btnDel) {
+      btnDel.style.display = 'inline-block'; // Ensure it's visible with Tabulator
+      btnDel.onclick = () => {
+          const selectedRows = window.tabulatorTable.getSelectedRows();
+          if(selectedRows.length > 0) {
+              if(confirm(`Delete ${selectedRows.length} selected rows?`)) {
+                  selectedRows.forEach(row => row.delete());
+              }
+          } else {
+              alert("Select rows to delete first.");
+          }
+      };
+  }
 };
 
 window.toggleRowSelect = function(idx, state) { if(state) selectedRows.add(idx); else selectedRows.delete(idx); renderTableEditor(); };
