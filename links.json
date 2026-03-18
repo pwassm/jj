@@ -318,7 +318,11 @@
     "DateAdded": "",
     "V.Title": "",
     "V.Author": "",
-    "VidRange": "3"
+    "VidRange": "3",
+    "V": {
+      "Author": "",
+      "Title": ""
+    }
   },
   {
     "show": "1",
