@@ -483,6 +483,22 @@ window.renderTableEditor = function() {
       };
   }
 };
+
+document.getElementById('miTables').addEventListener('pointerup',e=>{
+  e.stopPropagation(); closeMenu();
+  if(typeof isAdmin === 'function' && !isAdmin()) { alert('Admin privileges required.'); return; }
+  rawJsonMode = false; selectedRows.clear(); 
+  let tr = document.getElementById('toggleRawJson'); if(tr) tr.textContent = 'Show Raw JSON';
+
+  let te = document.getElementById('tableEditor'); if(te) te.style.display = 'block'; 
+  let jt = document.getElementById('jsonText'); if(jt) jt.style.display = 'none';
+  let ati = document.getElementById('addTableItem'); if(ati) ati.style.display = 'block'; 
+
+  initTableKeys(); renderTableEditor();
+
+  let js = document.getElementById('jsonStatus'); if(js) js.textContent=''; 
+  let jm = document.getElementById('jsonModal'); if(jm) jm.classList.add('open');
+});
 window.toggleRowSelect = function(idx, state) { if(state) selectedRows.add(idx); else selectedRows.delete(idx); renderTableEditor(); };
 window.toggleSelectAll = function(state) { if(state) { linksData.forEach((_, i) => selectedRows.add(i)); } else { selectedRows.clear(); } renderTableEditor(); };
 window.updateCell = function(r, k, v) { linksData[r][k] = v; };
@@ -610,23 +626,39 @@ window.moveRow = function(idx, dir) {
 document.getElementById('addTableItem').addEventListener('click', window.addRow);
 document.getElementById('toggleRawJson').addEventListener('click', function() {
   rawJsonMode = !rawJsonMode; this.textContent = rawJsonMode ? 'Show Visual Editor' : 'Show Raw JSON';
+  let te = document.getElementById('tableEditor');
+  let jt = document.getElementById('jsonText');
+  let ati = document.getElementById('addTableItem');
+  let dsr = document.getElementById('deleteSelectedRows');
+
   if(rawJsonMode) {
-    document.getElementById('jsonText').value = JSON.stringify(linksData, null, 2);
-    document.getElementById('tableEditor').style.display = 'none'; document.getElementById('jsonText').style.display = 'block';
-    document.getElementById('addTableItem').style.display = 'none'; document.getElementById('deleteSelectedRows').style.display = 'none';
+    if(jt) jt.value = JSON.stringify(linksData, null, 2);
+    if(te) te.style.display = 'none'; 
+    if(jt) jt.style.display = 'block';
+    if(ati) ati.style.display = 'none'; 
+    if(dsr) dsr.style.display = 'none';
   } else {
     try { linksData = JSON.parse(document.getElementById('jsonText').value); } catch(e) { alert("Invalid JSON"); rawJsonMode = true; return; }
-    document.getElementById('tableEditor').style.display = 'block'; document.getElementById('jsonText').style.display = 'none';
-    document.getElementById('addTableItem').style.display = 'block'; initTableKeys(); renderTableEditor();
+    if(te) te.style.display = 'block'; 
+    if(jt) jt.style.display = 'none';
+    if(ati) ati.style.display = 'block'; 
+    initTableKeys(); renderTableEditor();
   }
 });
 document.getElementById('miTables').addEventListener('pointerup',e=>{
   e.stopPropagation(); closeMenu();
   if(typeof isAdmin === 'function' && !isAdmin()) { alert('Admin privileges required.'); return; }
-  rawJsonMode = false; selectedRows.clear(); document.getElementById('toggleRawJson').textContent = 'Show Raw JSON';
-  document.getElementById('tableEditor').style.display = 'block'; document.getElementById('jsonText').style.display = 'none';
-  document.getElementById('addTableItem').style.display = 'block'; initTableKeys(); renderTableEditor();
-  document.getElementById('jsonStatus').textContent=''; document.getElementById('jsonModal').classList.add('open');
+  rawJsonMode = false; selectedRows.clear(); 
+  let tr = document.getElementById('toggleRawJson'); if(tr) tr.textContent = 'Show Raw JSON';
+
+  let te = document.getElementById('tableEditor'); if(te) te.style.display = 'block'; 
+  let jt = document.getElementById('jsonText'); if(jt) jt.style.display = 'none';
+  let ati = document.getElementById('addTableItem'); if(ati) ati.style.display = 'block'; 
+
+  initTableKeys(); renderTableEditor();
+
+  let js = document.getElementById('jsonStatus'); if(js) js.textContent=''; 
+  let jm = document.getElementById('jsonModal'); if(jm) jm.classList.add('open');
 });
 document.getElementById('miSaveJson').addEventListener('pointerup',e=>{ e.stopPropagation(); closeMenu(); saveJson(); });
 document.getElementById('miHelp').addEventListener('pointerup',e=>{
