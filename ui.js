@@ -506,56 +506,57 @@ window.duplicateActiveRow = function() {
     if (typeof selectedRows !== 'undefined' && selectedRows.size > 0) {
       rIdx = Array.from(selectedRows)[0];
     }
+
+    // Fallback: if we somehow lost focus, just duplicate the very last row!
     if (rIdx === undefined || rIdx < 0 || isNaN(rIdx)) {
-        if (typeof linksData !== 'undefined' && linksData.length > 0) {
+        if (linksData.length > 0) {
             rIdx = linksData.length - 1; 
         } else {
-            alert("No data available to duplicate!");
-            return;
+            return; // completely empty table
         }
     }
 
-    if (rIdx >= 0 && typeof linksData !== 'undefined' && rIdx < linksData.length) {
-       console.log("Duplicating row index: " + rIdx);
+    if (rIdx >= 0 && rIdx < linksData.length) {
+       // Deep copy the row
        const newRow = JSON.parse(JSON.stringify(linksData[rIdx]));
+
+       // Try to assign empty cell
        if (window.getFirstEmptyCell) {
-           newRow.cell = window.getFirstEmptyCell();
-       } else {
-           newRow.cell = "";
+           try { newRow.cell = window.getFirstEmptyCell(); } catch(e) { newRow.cell = ""; }
        }
+
+       // Insert it into the array right below
        linksData.splice(rIdx + 1, 0, newRow);
 
-       try { localStorage.setItem('seeandlearn-links', JSON.stringify(linksData)); } catch(e){ console.error(e); }
+       // Save and re-render
+       try { localStorage.setItem('seeandlearn-links', JSON.stringify(linksData)); } catch(e){}
 
-       if(window.renderTableEditor) {
-           window.renderTableEditor();
-       }
+       // Call exactly the same as Add Row does!
+       window.renderTableEditor();
 
+       // Setup for the next click
        window.lastActiveRowIdx = rIdx + 1;
 
+       // Flash the button
        const btn = document.getElementById('btn-duplicate-row-action');
-       if(btn) {
+       if (btn) {
          const oldBg = btn.style.background;
          btn.style.background = '#fff';
          btn.style.color = '#000';
-         setTimeout(() => {
-           btn.style.background = oldBg;
-           btn.style.color = '#eaf';
-         }, 200);
+         setTimeout(() => { btn.style.background = oldBg; btn.style.color = '#eaf'; }, 200);
        }
 
+       // Open video editor if it's a video
        setTimeout(() => {
-         const isVidNode = newRow.asset && window.parseVideoAsset && window.parseVideoAsset(newRow.asset) !== null;
-         if (isVidNode && window.openVideoEditor) {
-           window.openVideoEditor(linksData[rIdx + 1]);
-         }
+         try {
+             if (newRow.asset && window.parseVideoAsset && window.parseVideoAsset(newRow.asset) !== null) {
+               if (window.openVideoEditor) window.openVideoEditor(linksData[rIdx + 1]);
+             }
+         } catch(e) {}
        }, 200);
-    } else {
-       alert("No row selected to duplicate! Click on a row first.");
     }
   } catch(err) {
-    alert("Duplicate Error: " + err.message + "
-" + err.stack);
+    alert("Duplicate Error: " + err.message);
   }
 };
 
@@ -584,8 +585,16 @@ document.addEventListener('click', function(e) {
 
 window.duplicateActiveCol = function() {
   try {
-    const col = window.lastActiveColKey;
-    if (!col) { alert("No column selected! Click inside a cell in the column you want to duplicate."); return; }
+    let col = window.lastActiveColKey;
+
+    // Fallback: if no column selected, just duplicate the last available column
+    if (!col || typeof col !== 'string') {
+        if (tableKeys.length > 0) {
+            col = tableKeys[tableKeys.length - 1];
+        } else {
+            return;
+        }
+    }
 
     let newCol = col + "_copy";
     let counter = 1;
@@ -599,11 +608,17 @@ window.duplicateActiveCol = function() {
     else tableKeys.push(newCol);
 
     linksData.forEach(row => {
-        if (row[col] !== undefined) row[newCol] = row[col];
+        if (row[col] !== undefined) {
+            try {
+                row[newCol] = JSON.parse(JSON.stringify(row[col]));
+            } catch(e) {
+                row[newCol] = row[col]; // fallback for primitives
+            }
+        }
     });
 
     if(window.rebuildLinksDataKeys) window.rebuildLinksDataKeys();
-    if(window.renderTableEditor) window.renderTableEditor();
+    window.renderTableEditor();
 
     const btn = document.getElementById('btn-duplicate-col-action');
     if (btn) {
