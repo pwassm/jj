@@ -189,22 +189,31 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
 .tabulator-header { background-color: #1a1a2a !important; color: #fff !important; border-bottom: 1px solid #444 !important; }
 .tabulator-row { background-color: #0a0a1a !important; border-bottom: 1px solid #333 !important; color: #fff !important; }
 .tabulator-row:nth-child(even) { background-color: #111122 !important; color: #fff !important; }
-.tabulator-row.tabulator-selected { background-color: #2e1c1c !important; color: #fff !important; }
+.tabulator-row.tabulator-selected { background-color: #1a2a4a !important; color: #fff !important; }
 .tabulator-row:hover { background-color: #223 !important; }
 .tabulator-cell { border-right: 1px solid #333 !important; padding: 4px !important; color: #fff !important; }
 .tabulator-col { background-color: #1a1a2a !important; border-right: 1px solid #444 !important; }
-.tabulator-col-title { color: #fff !important; font-size: 14px; font-weight: bold; }
+.tabulator-col-title { color: #fff !important; font-size: 13px; font-weight: bold; }
 .tabulator-edit-list { background: #1a1a2a !important; color: #fff !important; border: 1px solid #555 !important; }
-.tabulator-edit-list-item { padding: 4px !important; color: #fff !important; }
+.tabulator-edit-list-item { padding: 4px 8px !important; color: #fff !important; }
 .tabulator-edit-list-item:hover { background: #334 !important; }
 .tabulator-edit-list-item.active { background: #446 !important; }
-/* Force inputs inside the table to be dark mode and white text */
-input[type="text"], input[type="search"], textarea, .tabulator-editor { color: #fff !important; background: #222 !important; border: 1px solid #555 !important; }
-
-/* Tabulator Menu Overrides */
+.tabulator-editor input { color: #fff !important; background: #1a1a2a !important; border: 1px solid #8ef !important; padding: 2px 4px !important; }
+/* Context/header menus */
 .tabulator-menu { background: #1a1a2a !important; color: #fff !important; border: 1px solid #555 !important; }
-.tabulator-menu-item { background: #1a1a2a !important; color: #fff !important; }
+.tabulator-menu-item { background: #1a1a2a !important; color: #fff !important; padding: 6px 14px !important; }
 .tabulator-menu-item:hover { background: #334 !important; }
+/* ── HIDE ALL HEADER ICON BUTTONS ── */
+/* These are the "three dots" / menu trigger icons Tabulator adds to column headers */
+.tabulator-col-header-menu-button { display: none !important; }
+.tabulator-header-popup-button    { display: none !important; }
+.tabulator-col-header-menu        { display: none !important; }
+/* The rowSelection titleFormatter adds a ⋮ handle — hide it */
+.tabulator-col[tabulator-field="_sel"] .tabulator-col-header-menu-button,
+.tabulator-col[tabulator-field="_del"] .tabulator-col-header-menu-button { display: none !important; }
+/* Movable column handle — keep it but style it subtle */
+.tabulator-col-handle { opacity: 0.3; }
+.tabulator-col-handle:hover { opacity: 0.8; }
 </style>
 </head>
 <body>
@@ -216,7 +225,7 @@ input[type="text"], input[type="search"], textarea, .tabulator-editor { color: #
 
 <div id="menuWrap">
   <div id="menuPanel">
-    <div id="menuDateStamp">Build: Mar 18, 2026 — zip53</div>
+    <div id="menuDateStamp">Build: Mar 18, 2026 — zip55</div>
     <div class="menu-item" id="miAdmin" style="opacity:0.45; color:#aaa; pointer-events:none; cursor:default; border-bottom:1px solid rgba(255,255,255,0.08);">&#128274; Admin</div>
     <div class="menu-item" id="miFastLinks">Links (Fast Paste)</div>
     <div class="menu-item" id="miTables">Tables (JSON editor)</div>
@@ -336,13 +345,13 @@ input[type="text"], input[type="search"], textarea, .tabulator-editor { color: #
   </div>
 </div>
 
-<script src="globals.js?v=31"></script>
-<script src="grid.js?v=31"></script>
-<script src="ui.js?v=31"></script>
-<script src="editor.js?v=31"></script>
-<script src="github.js?v=31"></script>
-<script src="video.js?v=31"></script>
-<script src="main.js?v=31"></script>
+<script src="globals.js?v=33"></script>
+<script src="grid.js?v=33"></script>
+<script src="ui.js?v=33"></script>
+<script src="editor.js?v=33"></script>
+<script src="github.js?v=33"></script>
+<script src="video.js?v=33"></script>
+<script src="main.js?v=33"></script>
 
 </body>
 </html>
