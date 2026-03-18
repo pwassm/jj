@@ -182,53 +182,134 @@ window.renderTableEditor = function() {
   // Clear the original custom container
   container.innerHTML = '';
 
-  // Setup columns based on tableKeys and saved widths
-  const cols = tableKeys.map(k => {
+  if (window.tabulatorTable) {
+      window.tabulatorTable.destroy();
+      window.tabulatorTable = null;
+  }
+
+  // Common Header Menu for Off-The-Shelf operations
+  const headerMenu = [
+      {
+          label: "Rename Column",
+          action: function(e, column) {
+              const oldK = column.getField();
+              const newK = prompt('Rename column:', oldK);
+              if(newK && newK !== oldK && !tableKeys.includes(newK)) {
+                  tableKeys[tableKeys.indexOf(oldK)] = newK;
+                  linksData.forEach(row => { row[newK] = row[oldK]; delete row[oldK]; });
+                  window.renderTableEditor();
+              }
+          }
+      },
+      {
+          label: "Duplicate Column",
+          action: function(e, column) {
+              const oldK = column.getField();
+              let newK = prompt("Enter name for the new column:", oldK + '_copy');
+              if (!newK) return;
+
+              let counter = 1;
+              let finalColName = newK;
+              while(tableKeys.includes(finalColName)) {
+                  counter++;
+                  finalColName = newK + counter;
+              }
+
+              const targetIndex = tableKeys.indexOf(oldK) + 1;
+              tableKeys.splice(targetIndex, 0, finalColName);
+
+              // Map data over
+              linksData.forEach(row => {
+                  row[finalColName] = row[oldK] !== undefined ? row[oldK] : "";
+              });
+
+              window.renderTableEditor();
+          }
+      },
+      {
+          label: "Delete Column",
+          action: function(e, column) {
+              const k = column.getField();
+              if(confirm('Delete column ' + k + ' from ALL rows?')) {
+                  tableKeys = tableKeys.filter(x => x !== k);
+                  linksData.forEach(row => delete row[k]);
+                  window.renderTableEditor();
+              }
+          }
+      }
+  ];
+
+  // Setup columns
+  const cols = [];
+
+  // Add Row Delete Column
+  cols.push({
+      title: "Del",
+      formatter: () => "<span style='color:#f66; font-size:18px; font-weight:bold; cursor:pointer;'>&times;</span>",
+      width: 50,
+      hozAlign: "center",
+      headerSort: false,
+      cellClick: function(e, cell) {
+          if(confirm("Delete row?")) {
+              const row = cell.getRow();
+              const rowData = row.getData();
+              const idx = linksData.indexOf(rowData);
+              if(idx > -1) linksData.splice(idx, 1);
+              row.delete();
+          }
+      }
+  });
+
+  // Add Row Selection Column
+  cols.push({
+      formatter: "rowSelection", 
+      titleFormatter: "rowSelection", 
+      width: 50, 
+      hozAlign: "center", 
+      headerSort: false
+  });
+
+  tableKeys.forEach(k => {
       let colDef = { 
           title: k, 
           field: k, 
           editor: "input",
           headerSort: true,
-          width: colWidths[k] || 150 // default to 150px wide unless resized
+          headerMenu: headerMenu,
+          width: colWidths[k] || 150 // Forces width limit
       };
 
-      // Dropdown autocomplete for specific columns
-      if (k === 'cname' || k === 'v.author') {
-          const uniqueValues = [...new Set(linksData.map(r => r[k]).filter(x => x))].sort();
+      // Dropdown autocomplete for cname, sname, v.author
+      if (k === 'cname' || k === 'sname' || k === 'v.author') {
           colDef.editor = "list";
           colDef.editorParams = {
-              values: uniqueValues,
+              valuesLookup: "active", // Tabulator built-in autocomplete from active column data
               autocomplete: true,
               freetext: true,
               listOnEmpty: true
           };
       }
-      return colDef;
+      cols.push(colDef);
   });
-
-  // Destroy previous instance if it exists
-  if (window.tabulatorTable) {
-      window.tabulatorTable.destroy();
-  }
 
   // Initialize Tabulator
   window.tabulatorTable = new Tabulator(container, {
       data: linksData,
       reactiveData: true, 
-      layout: "fitData", // columns stick to their set width or data size, but width attribute forces it
+      // Removed layout: "fitData" so width property works and long text clips instead of expanding endlessly
       columns: cols,
       selectableRows: true, 
       history: true,
       columnResized: function(column) {
-          // Save column width to existing localStorage variable
-          colWidths[column.getField()] = column.getWidth();
-          localStorage.setItem('seeandlearn-colWidths', JSON.stringify(colWidths));
+          const field = column.getField();
+          if(field) {
+              colWidths[field] = column.getWidth();
+              localStorage.setItem('seeandlearn-colWidths', JSON.stringify(colWidths));
+          }
       }
   });
 
   // Wire up Top Buttons
-
-  // 1. Add Row
   const btnAdd = document.getElementById('addTableItem');
   if(btnAdd) {
       btnAdd.onclick = () => {
@@ -238,7 +319,6 @@ window.renderTableEditor = function() {
       };
   }
 
-  // 2. Duplicate Row
   const btnDupRow = document.getElementById('btn-duplicate-row-action');
   if(btnDupRow) {
       btnDupRow.onclick = () => {
@@ -250,6 +330,7 @@ window.renderTableEditor = function() {
                       data.cell = window.getFirstEmptyCell(); 
                   }
                   window.tabulatorTable.addRow(data, false, row);
+                  linksData.push(data);
               });
           } else {
               if (window.duplicateActiveRow) {
@@ -261,16 +342,14 @@ window.renderTableEditor = function() {
       };
   }
 
-  // 3. Duplicate Column (Fixed)
   const btnDupCol = document.getElementById('btn-duplicate-col-action');
   if(btnDupCol) {
       btnDupCol.onclick = () => {
           const colToDup = prompt("Enter the name of the column to duplicate:");
           if(colToDup && tableKeys.includes(colToDup)) {
               let newColName = prompt("Enter name for the new column:", colToDup + '_copy');
-              if (!newColName) return; // cancelled
+              if (!newColName) return; 
 
-              // Ensure unique name
               let counter = 1;
               let finalColName = newColName;
               while(tableKeys.includes(finalColName)) {
@@ -278,24 +357,20 @@ window.renderTableEditor = function() {
                   finalColName = newColName + counter;
               }
 
-              // Insert next to the original column
               const targetIndex = tableKeys.indexOf(colToDup) + 1;
               tableKeys.splice(targetIndex, 0, finalColName);
 
-              // Copy data directly into the main linksData array
               linksData.forEach(row => {
-                  row[finalColName] = row[colToDup];
+                  row[finalColName] = row[colToDup] !== undefined ? row[colToDup] : "";
               });
 
-              // Redraw the entire table to register new column and data
               window.renderTableEditor();
           } else if (colToDup) {
-              alert("Column not found.");
+              alert("Column not found. Make sure to match the case perfectly.");
           }
       };
   }
 
-  // 4. Delete Selected
   const btnDel = document.getElementById('deleteSelectedRows');
   if(btnDel) {
       btnDel.style.display = 'inline-block'; 
@@ -303,7 +378,12 @@ window.renderTableEditor = function() {
           const selectedRows = window.tabulatorTable.getSelectedRows();
           if(selectedRows.length > 0) {
               if(confirm(`Delete ${selectedRows.length} selected rows?`)) {
-                  selectedRows.forEach(row => row.delete());
+                  selectedRows.forEach(row => {
+                      const rowData = row.getData();
+                      const idx = linksData.indexOf(rowData);
+                      if(idx > -1) linksData.splice(idx, 1);
+                      row.delete();
+                  });
               }
           } else {
               alert("Select rows to delete first.");
