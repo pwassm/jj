@@ -180,21 +180,6 @@ window.renderTableEditor = function() {
   if(typeof tableKeys === 'undefined' || tableKeys.length===0) initTableKeys();
 
   container.innerHTML = '';
-  // Safety check: make sure Tabulator loaded and globals ready
-  if (typeof Tabulator === 'undefined') {
-      container.innerHTML = "<div style='color:#f88; padding:20px; font-family:monospace;'><strong>Tabulator failed to load</strong><br>Check internet connection and CDN.<br>Open Console (F12) for details.</div>";
-      console.error("Tabulator library not loaded - CDN failed?");
-      return;
-  }
-  if (!linksData || !Array.isArray(linksData)) {
-      container.innerHTML = "<div style='color:#f88; padding:20px;'>No data loaded (linksData empty).</div>";
-      console.error("linksData not ready:", linksData);
-      return;
-  }
-  if (tableKeys.length === 0) {
-      initTableKeys();
-  }
-  console.log("Tabulator init with", linksData.length, "rows,", tableKeys.length, "columns");
   if (window.tabulatorTable) {
       window.tabulatorTable.destroy();
       window.tabulatorTable = null;
