@@ -89,6 +89,8 @@ window.mountYouTubeClip = async function(hostEl, url, startSec, dur, isMuted, cu
   if (!vid || !hostEl) return;
   await loadYouTubeApiOnce();
   const cellId = hostEl.id;
+  const noAutoPause = hostEl.dataset.noAutoPause === '1';
+  delete hostEl.dataset.hasAutoPaused;
   stopCellVideoLoop(cellId);
   hostEl.innerHTML = '';
   const innerId = 'yt_' + cellId.replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -117,6 +119,11 @@ window.mountYouTubeClip = async function(hostEl, url, startSec, dur, isMuted, cu
         window.seeLearnVideoTimers[cellId] = setInterval(() => {
           try {
             const t = e.target.getCurrentTime();
+              if (!noAutoPause && window.autoPauseMode && !hostEl.dataset.hasAutoPaused && t >= Number(startSec) + 0.1) {
+                  e.target.pauseVideo();
+                  hostEl.dataset.hasAutoPaused = '1';
+                  return;
+              }
             if (t >= endSec || t < Number(startSec)) {
               e.target.seekTo(customSeekTo !== undefined ? Number(customSeekTo) : Number(startSec), true);
               e.target.playVideo();
@@ -139,6 +146,8 @@ window.mountVimeoClip = async function(hostEl, url, startSec, dur, isMuted, cust
   if (!hostEl) return;
   await loadVimeoApiOnce();
   const cellId = hostEl.id;
+  const noAutoPause = hostEl.dataset.noAutoPause === '1';
+  delete hostEl.dataset.hasAutoPaused;
   stopCellVideoLoop(cellId);
   hostEl.innerHTML = '';
 
@@ -176,6 +185,11 @@ window.mountVimeoClip = async function(hostEl, url, startSec, dur, isMuted, cust
 
     window.seeLearnVideoTimers[cellId] = setInterval(() => {
       player.getCurrentTime().then(function(t) {
+          if (!noAutoPause && window.autoPauseMode && !hostEl.dataset.hasAutoPaused && t >= Number(startSec) + 0.1) {
+              player.pause();
+              hostEl.dataset.hasAutoPaused = '1';
+              return;
+          }
         if (t >= endSec || t < Number(startSec)) {
           player.setCurrentTime(customSeekTo !== undefined ? Number(customSeekTo) : Number(startSec));
           player.play();
@@ -271,7 +285,8 @@ window.openVideoEditor = function(it) {
      currentDur = formatDec(iDur.value) || 0.1;
      currentMute = iMute.checked;
 
-     if (window.isYouTubeLink(it.link)) {
+     host.dataset.noAutoPause = "1";
+    if (window.isYouTubeLink(it.link)) {
        window.mountYouTubeClip(host, it.link, currentStart, currentDur, currentMute, customSeekTo);
      } else if (window.isVimeoLink(it.link)) {
        window.mountVimeoClip(host, it.link, currentStart, currentDur, currentMute, customSeekTo);

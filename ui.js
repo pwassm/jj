@@ -11,6 +11,7 @@ window.openFS = function(it) {
     vidHost.id = 'fs-vid-' + it.cell;
     vidHost.style.cssText = 'width:100%; height:100%; pointer-events:none;';
     fs.appendChild(vidHost);
+    vidHost.dataset.noAutoPause = '1';
 
     const parsed = window.parseVideoAsset(it.asset);
     if (parsed) {
@@ -399,6 +400,13 @@ document.getElementById('togFit').addEventListener('change',function(){
   fitMode=this.checked?'ei':'fc'; localStorage.setItem('mlynx-fit',fitMode); syncFit(); render();
 });
 document.getElementById('togCellLbl').addEventListener('change',function(){ showCellLbl=this.checked; render(); });
+
+document.getElementById('togAutoPause').checked = autoPauseMode;
+document.getElementById('togAutoPause').addEventListener('change', function() {
+  autoPauseMode = this.checked;
+  localStorage.setItem('seeandlearn-autopause', autoPauseMode ? 'true' : 'false');
+});
+
 document.getElementById('togCname').addEventListener('change',function(){ showCname=this.checked; render(); });
 
 
