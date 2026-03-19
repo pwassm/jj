@@ -407,9 +407,20 @@ window.openVideoEditor = function(it) {
         }
       });
 
-      // Right-click band = open VidComment mini-editor for this segment
+      // Ctrl+right-click band = open VidComment mini-editor
       band.addEventListener('contextmenu', function(ev) {
         ev.preventDefault(); ev.stopPropagation();
+        if (!ev.ctrlKey) {
+          // Show brief hint if no ctrl
+          const hint = document.createElement('div');
+          hint.textContent = 'Ctrl+right-click to edit label';
+          hint.style.cssText = 'position:fixed;left:' + ev.clientX + 'px;top:' + ev.clientY + 'px;'
+            + 'background:#222;color:#8ef;padding:4px 8px;border-radius:4px;font-size:11px;'
+            + 'z-index:999999;pointer-events:none;';
+          document.body.appendChild(hint);
+          setTimeout(() => hint.remove(), 1500);
+          return;
+        }
         openCommentEditor(i, band);
       });
       timeline.appendChild(band);

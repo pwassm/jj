@@ -100,11 +100,62 @@ function flUpdateCnameDropdown() {
 function flReset() {
   document.getElementById('fastLinkInput').value  = '';
   document.getElementById('fastLinkCname').value  = '';
+  document.getElementById('fastLinkTopic').value  = '';
   document.getElementById('fastLinkStatus').textContent = '';
   document.getElementById('flCnameDropdown').style.display = 'none';
+  document.getElementById('flTopicDropdown').style.display = 'none';
   flPendingCell = '';
   setTimeout(() => document.getElementById('fastLinkInput').focus(), 80);
 }
+
+function flGetTopicTerms() {
+  const s = new Set();
+  linksData.forEach(r => {
+    if (r.Topic) r.Topic.split(',').map(t => t.trim()).filter(Boolean).forEach(t => s.add(t));
+  });
+  return Array.from(s).sort();
+}
+
+function flShowTopicDropdown(terms) {
+  const dd  = document.getElementById('flTopicDropdown');
+  const inp = document.getElementById('fastLinkTopic');
+  dd.innerHTML = '';
+  if (!terms.length) { dd.style.display = 'none'; return; }
+  terms.forEach(t => {
+    const item = document.createElement('div');
+    item.textContent = t;
+    item.style.cssText = 'padding:7px 12px;cursor:pointer;font-size:13px;color:#bbb;border-bottom:1px solid #244;';
+    item.addEventListener('mouseenter', () => item.style.background = '#1a3a5a');
+    item.addEventListener('mouseleave', () => item.style.background = '');
+    item.addEventListener('mousedown', e => {
+      e.preventDefault();
+      const parts = inp.value.split(',');
+      parts[parts.length - 1] = ' ' + t;
+      inp.value = parts.join(',') + ', ';
+      dd.style.display = 'none';
+      inp.focus();
+      flUpdateTopicDropdown();
+    });
+    dd.appendChild(item);
+  });
+  dd.style.display = 'block';
+}
+
+function flUpdateTopicDropdown() {
+  const inp = document.getElementById('fastLinkTopic');
+  const parts = inp.value.split(',');
+  const last = parts[parts.length - 1].trimStart();
+  const terms = flGetTopicTerms();
+  flShowTopicDropdown(last ? terms.filter(t => t.toLowerCase().startsWith(last.toLowerCase())) : terms);
+}
+
+document.getElementById('fastLinkTopic').addEventListener('input',  flUpdateTopicDropdown);
+document.getElementById('fastLinkTopic').addEventListener('focus',  flUpdateTopicDropdown);
+document.getElementById('fastLinkTopic').addEventListener('blur',   () => setTimeout(() => { document.getElementById('flTopicDropdown').style.display='none'; }, 150));
+document.getElementById('fastLinkTopic').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); document.getElementById('flNext').click(); }
+  if (e.key === 'Escape') document.getElementById('flTopicDropdown').style.display = 'none';
+});
 
 document.getElementById('miFastLinks').addEventListener('pointerup', e => {
   e.stopPropagation(); closeMenu();
@@ -155,10 +206,10 @@ document.getElementById('fastLinkCname').addEventListener('keydown', e => {
 document.getElementById('flNext').addEventListener('click', () => {
   const link  = document.getElementById('fastLinkInput').value.trim();
   const cname = document.getElementById('fastLinkCname').value.trim();
+  const topic = document.getElementById('fastLinkTopic').value.trim();
   if (!link) { document.getElementById('fastLinkStatus').textContent = 'Need a URL first.'; return; }
   if (!/^https?:\/\//i.test(link)) { document.getElementById('fastLinkStatus').textContent = 'Not a valid URL.'; return; }
 
-  // Find next empty cell
   const occ = occupied();
   let nextCell = '';
   outer: for(let r=1;r<=ROWS;r++) for(let c=1;c<=COLS;c++) {
@@ -168,14 +219,14 @@ document.getElementById('flNext').addEventListener('click', () => {
 
   const d=new Date();
   const da=`${String(d.getFullYear()).slice(-2)}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}.${String(d.getHours()).padStart(2,'0')}.${String(d.getMinutes()).padStart(2,'0')}.${String(d.getSeconds()).padStart(2,'0')}`;
-  linksData.push({show:"1",VidRange:"i",cell:nextCell,fit:"fc",link,cname,sname:"",attribution:"",comment:"",DateAdded:da,Mute:"1"});
+  linksData.push({show:"1",VidRange:"i",cell:nextCell,fit:"fc",link,cname,Topic:topic,sname:"",attribution:"",comment:"",DateAdded:da,Mute:"1"});
   localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
   render();
   document.getElementById('fastLinkStatus').textContent = '✓ Saved to ' + nextCell;
   flReset();
 });
 
-// Skip — save link only with no cname, reset
+// Skip — save link only, reset
 document.getElementById('flSkip').addEventListener('click', () => {
   const link = document.getElementById('fastLinkInput').value.trim();
   if (link && /^https?:\/\//i.test(link)) {
@@ -187,7 +238,7 @@ document.getElementById('flSkip').addEventListener('click', () => {
     if (nextCell) {
       const d=new Date();
       const da=`${String(d.getFullYear()).slice(-2)}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}.${String(d.getHours()).padStart(2,'0')}.${String(d.getMinutes()).padStart(2,'0')}.${String(d.getSeconds()).padStart(2,'0')}`;
-      linksData.push({show:"1",VidRange:"i",cell:nextCell,fit:"fc",link,cname:"",sname:"",attribution:"",comment:"",DateAdded:da,Mute:"1"});
+      linksData.push({show:"1",VidRange:"i",cell:nextCell,fit:"fc",link,cname:"",Topic:"",sname:"",attribution:"",comment:"",DateAdded:da,Mute:"1"});
       localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
       render();
     }
@@ -198,6 +249,7 @@ document.getElementById('flSkip').addEventListener('click', () => {
 document.getElementById('fastLinkExit').addEventListener('pointerup', () => {
   document.getElementById('fastLinkModal').style.display = 'none';
   document.getElementById('flCnameDropdown').style.display = 'none';
+  document.getElementById('flTopicDropdown').style.display = 'none';
   render();
 });
 
