@@ -59,6 +59,58 @@ function flGetCnameTerms() {
   return Array.from(s).sort();
 }
 
+// ── Shared dropdown arrow-key navigation ─────────────────────────────────────
+function flDropdownNav(ddId, inpEl, e, onSelect) {
+  const dd = document.getElementById(ddId);
+  if (!dd || dd.style.display === 'none') return false;
+  const items = Array.from(dd.querySelectorAll('[data-fl-item]'));
+  if (!items.length) return false;
+  const cur = dd.querySelector('[data-fl-focus]');
+  let idx = cur ? items.indexOf(cur) : -1;
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (cur) { cur.removeAttribute('data-fl-focus'); cur.style.background = ''; }
+    idx = Math.min(idx + 1, items.length - 1);
+    items[idx].setAttribute('data-fl-focus', '1');
+    items[idx].style.background = '#1a3a5a';
+    items[idx].scrollIntoView({ block: 'nearest' });
+    return true;
+  }
+  if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (cur) { cur.removeAttribute('data-fl-focus'); cur.style.background = ''; }
+    idx = Math.max(idx - 1, 0);
+    items[idx].setAttribute('data-fl-focus', '1');
+    items[idx].style.background = '#1a3a5a';
+    items[idx].scrollIntoView({ block: 'nearest' });
+    return true;
+  }
+  if (e.key === 'Enter' && cur) {
+    e.preventDefault();
+    onSelect(cur.textContent);
+    return true;
+  }
+  return false;
+}
+
+function flPickCname(t) {
+  const inp = document.getElementById('fastLinkCname');
+  const parts = inp.value.split(',');
+  parts[parts.length - 1] = ' ' + t;
+  inp.value = parts.join(',') + ', ';
+  document.getElementById('flCnameDropdown').style.display = 'none';
+  inp.focus(); flUpdateCnameDropdown();
+}
+
+function flPickTopic(t) {
+  const inp = document.getElementById('fastLinkTopic');
+  const parts = inp.value.split(',');
+  parts[parts.length - 1] = ' ' + t;
+  inp.value = parts.join(',') + ', ';
+  document.getElementById('flTopicDropdown').style.display = 'none';
+  inp.focus(); flUpdateTopicDropdown();
+}
+
 function flShowDropdown(terms) {
   const dd  = document.getElementById('flCnameDropdown');
   const inp = document.getElementById('fastLinkCname');
@@ -67,20 +119,11 @@ function flShowDropdown(terms) {
   terms.forEach(t => {
     const item = document.createElement('div');
     item.textContent = t;
-    item.style.cssText = 'padding:9px 12px;cursor:pointer;font-size:14px;color:#cef;border-bottom:1px solid #244;';
-    item.addEventListener('mouseenter', () => item.style.background = '#1a3a5a');
-    item.addEventListener('mouseleave', () => item.style.background = '');
-    item.addEventListener('mousedown', e => {
-      e.preventDefault();
-      // Splice this term into the last token position
-      const parts = inp.value.split(',');
-      parts[parts.length - 1] = ' ' + t;
-      inp.value = parts.join(',') + ', ';
-      dd.style.display = 'none';
-      inp.focus();
-      // Update for next token
-      flUpdateCnameDropdown();
-    });
+    item.setAttribute('data-fl-item', '1');
+    item.style.cssText = 'padding:6px 10px;cursor:pointer;font-size:13px;color:#cef;border-bottom:1px solid #244;';
+    item.addEventListener('mouseenter', () => { item.setAttribute('data-fl-focus','1'); item.style.background = '#1a3a5a'; });
+    item.addEventListener('mouseleave', () => { item.removeAttribute('data-fl-focus'); item.style.background = ''; });
+    item.addEventListener('mousedown', e => { e.preventDefault(); flPickCname(t); });
     dd.appendChild(item);
   });
   dd.style.display = 'block';
@@ -118,24 +161,16 @@ function flGetTopicTerms() {
 
 function flShowTopicDropdown(terms) {
   const dd  = document.getElementById('flTopicDropdown');
-  const inp = document.getElementById('fastLinkTopic');
   dd.innerHTML = '';
   if (!terms.length) { dd.style.display = 'none'; return; }
   terms.forEach(t => {
     const item = document.createElement('div');
     item.textContent = t;
-    item.style.cssText = 'padding:7px 12px;cursor:pointer;font-size:13px;color:#bbb;border-bottom:1px solid #244;';
-    item.addEventListener('mouseenter', () => item.style.background = '#1a3a5a');
-    item.addEventListener('mouseleave', () => item.style.background = '');
-    item.addEventListener('mousedown', e => {
-      e.preventDefault();
-      const parts = inp.value.split(',');
-      parts[parts.length - 1] = ' ' + t;
-      inp.value = parts.join(',') + ', ';
-      dd.style.display = 'none';
-      inp.focus();
-      flUpdateTopicDropdown();
-    });
+    item.setAttribute('data-fl-item', '1');
+    item.style.cssText = 'padding:6px 10px;cursor:pointer;font-size:13px;color:#bbb;border-bottom:1px solid #244;';
+    item.addEventListener('mouseenter', () => { item.setAttribute('data-fl-focus','1'); item.style.background = '#1a3a5a'; });
+    item.addEventListener('mouseleave', () => { item.removeAttribute('data-fl-focus'); item.style.background = ''; });
+    item.addEventListener('mousedown', e => { e.preventDefault(); flPickTopic(t); });
     dd.appendChild(item);
   });
   dd.style.display = 'block';
@@ -153,8 +188,10 @@ document.getElementById('fastLinkTopic').addEventListener('input',  flUpdateTopi
 document.getElementById('fastLinkTopic').addEventListener('focus',  flUpdateTopicDropdown);
 document.getElementById('fastLinkTopic').addEventListener('blur',   () => setTimeout(() => { document.getElementById('flTopicDropdown').style.display='none'; }, 150));
 document.getElementById('fastLinkTopic').addEventListener('keydown', e => {
+  if (flDropdownNav('flTopicDropdown', document.getElementById('fastLinkTopic'), e, flPickTopic)) return;
   if (e.key === 'Enter') { e.preventDefault(); document.getElementById('flNext').click(); }
   if (e.key === 'Escape') document.getElementById('flTopicDropdown').style.display = 'none';
+  if (e.key === 'Tab') { e.preventDefault(); document.getElementById('flNext').focus(); }
 });
 
 document.getElementById('miFastLinks').addEventListener('pointerup', e => {
@@ -185,21 +222,14 @@ document.getElementById('fastLinkPasteTop').addEventListener('click', async () =
 });
 
 // cname field — comma-aware custom dropdown
-document.getElementById('fastLinkCname').addEventListener('input', () => {
-  flUpdateCnameDropdown();
-});
-document.getElementById('fastLinkCname').addEventListener('focus', () => {
-  flUpdateCnameDropdown();
-});
-document.getElementById('fastLinkCname').addEventListener('blur', () => {
-  // Slight delay so mousedown on dropdown fires first
-  setTimeout(() => {
-    document.getElementById('flCnameDropdown').style.display = 'none';
-  }, 150);
-});
+document.getElementById('fastLinkCname').addEventListener('input',  flUpdateCnameDropdown);
+document.getElementById('fastLinkCname').addEventListener('focus',  flUpdateCnameDropdown);
+document.getElementById('fastLinkCname').addEventListener('blur',   () => setTimeout(() => { document.getElementById('flCnameDropdown').style.display='none'; }, 150));
 document.getElementById('fastLinkCname').addEventListener('keydown', e => {
+  if (flDropdownNav('flCnameDropdown', document.getElementById('fastLinkCname'), e, flPickCname)) return;
   if (e.key === 'Enter') { e.preventDefault(); document.getElementById('flNext').click(); }
   if (e.key === 'Escape') { document.getElementById('flCnameDropdown').style.display='none'; }
+  if (e.key === 'Tab') { e.preventDefault(); document.getElementById('fastLinkTopic').focus(); }
 });
 
 // Next — save link + cname, reset for another

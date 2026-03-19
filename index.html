@@ -239,7 +239,7 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
 
 <div id="menuWrap">
   <div id="menuPanel">
-    <div id="menuDateStamp">zip70 · Mar 19, 2026 02:26 PM PDT</div>
+    <div id="menuDateStamp">zip71 · Mar 19, 2026 04:00 PM PDT</div>
     <div class="menu-item" id="miAdmin" style="opacity:0.45; color:#aaa; pointer-events:none; cursor:default; border-bottom:1px solid rgba(255,255,255,0.08);">&#128274; Admin</div>
     <div class="menu-item" id="miFastLinks">Links (Fast Paste)</div>
     <div class="menu-item" id="miTables">Tables (JSON editor)</div>
@@ -319,34 +319,37 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
   </div>
 </div>
 
-<div id="fastLinkModal" style="display:none; position:fixed; inset:0; z-index:30000; background:rgba(0,0,0,0.95); align-items:center; justify-content:center; flex-direction:column; gap:14px; font-family:sans-serif;">
-  <h3 style="color:#8ef; margin:0;">Fast Link Paste</h3>
-  <div style="display:flex;flex-direction:column;gap:10px;width:82vw;max-width:440px;">
-    <!-- Link row -->
-    <button id="fastLinkPasteTop" style="padding:10px 20px;font-size:15px;border-radius:6px;border:1px solid #4af;background:#1a2a3a;color:#8ef;cursor:pointer;width:100%;">&#128203; Paste URL from Clipboard</button>
-    <input type="text" id="fastLinkInput" placeholder="URL will appear here after paste..." autocomplete="off"
-      style="width:100%;padding:12px;font-size:14px;border-radius:8px;border:1px solid #555;background:#111;color:#fff;outline:none;box-sizing:border-box;">
-    <!-- cname row with custom dropdown -->
-    <div style="position:relative;">
-      <datalist id="flCnameList"></datalist>
-      <input type="text" id="fastLinkCname" autocomplete="off" placeholder="Common name (comma-separated)..."
-        style="width:100%;padding:12px;font-size:15px;border-radius:8px;border:1px solid #4af;background:#111;color:#fff;outline:none;box-sizing:border-box;">
-      <div id="flCnameDropdown" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:1000;background:#1a2a3a;border:1px solid #4af;border-top:none;border-radius:0 0 8px 8px;max-height:160px;overflow-y:auto;"></div>
+<div id="fastLinkModal" style="display:none; position:fixed; inset:0; z-index:30000; background:rgba(0,0,0,0.92); align-items:flex-start; justify-content:center; flex-direction:column; font-family:sans-serif; padding:8px 0 0 0;">
+  <div style="width:100%;max-width:480px;padding:0 10px;box-sizing:border-box;margin:0 auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
+      <span style="color:#8ef;font-size:14px;font-weight:bold;">Fast Link Paste</span>
+      <button id="fastLinkExit" style="padding:3px 10px;font-size:12px;border-radius:4px;border:1px solid #f66;background:#3a1a1a;color:#f66;cursor:pointer;">✕ Exit</button>
     </div>
-    <!-- Topic row (optional) -->
-    <div style="position:relative;">
-      <input type="text" id="fastLinkTopic" autocomplete="off" placeholder="Topic (optional, comma-separated)..."
-        style="width:100%;padding:10px 12px;font-size:14px;border-radius:8px;border:1px solid #666;background:#111;color:#ccc;outline:none;box-sizing:border-box;">
-      <div id="flTopicDropdown" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:1000;background:#1a2a3a;border:1px solid #666;border-top:none;border-radius:0 0 8px 8px;max-height:120px;overflow-y:auto;"></div>
+    <!-- URL row -->
+    <div style="display:flex;gap:6px;margin-bottom:4px;">
+      <button id="fastLinkPasteTop" style="padding:7px 10px;font-size:13px;border-radius:5px;border:1px solid #4af;background:#1a2a3a;color:#8ef;cursor:pointer;white-space:nowrap;">📋 Paste</button>
+      <input type="text" id="fastLinkInput" placeholder="URL..." autocomplete="off"
+        style="flex:1;padding:7px 8px;font-size:13px;border-radius:5px;border:1px solid #555;background:#111;color:#fff;outline:none;box-sizing:border-box;">
     </div>
-    <div style="color:#f88;font-size:13px;min-height:16px;" id="fastLinkStatus"></div>
-    <!-- Buttons -->
-    <div style="display:flex;gap:10px;">
-      <button id="flNext" style="flex:1;padding:12px;font-size:15px;border-radius:8px;border:1px solid #5f5;background:rgba(0,120,0,0.3);color:#5f5;cursor:pointer;font-weight:bold;">Next &#x2192;</button>
-      <button id="flSkip" style="padding:12px 18px;font-size:14px;border-radius:8px;border:1px solid #555;background:#1a1a2a;color:#888;cursor:pointer;">Skip</button>
+    <!-- cname -->
+    <div style="position:relative;margin-bottom:4px;">
+      <input type="text" id="fastLinkCname" autocomplete="off" placeholder="Name (comma-separated)..."
+        style="width:100%;padding:7px 8px;font-size:13px;border-radius:5px;border:1px solid #4af;background:#111;color:#fff;outline:none;box-sizing:border-box;">
+      <div id="flCnameDropdown" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:1000;background:#1a2a3a;border:1px solid #4af;border-top:none;border-radius:0 0 6px 6px;max-height:140px;overflow-y:auto;"></div>
+    </div>
+    <!-- Topic -->
+    <div style="position:relative;margin-bottom:4px;">
+      <input type="text" id="fastLinkTopic" autocomplete="off" placeholder="Topic (optional)..."
+        style="width:100%;padding:7px 8px;font-size:13px;border-radius:5px;border:1px solid #666;background:#111;color:#ccc;outline:none;box-sizing:border-box;">
+      <div id="flTopicDropdown" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:1000;background:#1a2a3a;border:1px solid #666;border-top:none;border-radius:0 0 6px 6px;max-height:110px;overflow-y:auto;"></div>
+    </div>
+    <!-- Status + Buttons -->
+    <div style="color:#f88;font-size:12px;min-height:14px;margin-bottom:4px;" id="fastLinkStatus"></div>
+    <div style="display:flex;gap:8px;">
+      <button id="flNext" style="flex:1;padding:9px;font-size:14px;border-radius:6px;border:1px solid #5f5;background:rgba(0,120,0,0.3);color:#5f5;cursor:pointer;font-weight:bold;">Next →</button>
+      <button id="flSkip" style="padding:9px 14px;font-size:13px;border-radius:6px;border:1px solid #555;background:#1a1a2a;color:#888;cursor:pointer;">Skip</button>
     </div>
   </div>
-  <button id="fastLinkExit" style="padding:8px 24px;font-size:14px;border-radius:8px;border:1px solid #f66;background:#3a1a1a;color:#f66;cursor:pointer;">Exit (Esc)</button>
 </div>
 <div id="jsonModal">
   <div id="jsonBox">
@@ -389,14 +392,14 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
   </div>
 </div>
 
-<script src="globals.js?v=47"></script>
-<script src="grid.js?v=47"></script>
-<script src="ui.js?v=47"></script>
-<script src="editor.js?v=47"></script>
-<script src="github.js?v=47"></script>
-<script src="video.js?v=47"></script>
-<script src="instagram.js?v=47"></script>
-<script src="main.js?v=47"></script>
+<script src="globals.js?v=48"></script>
+<script src="grid.js?v=48"></script>
+<script src="ui.js?v=48"></script>
+<script src="editor.js?v=48"></script>
+<script src="github.js?v=48"></script>
+<script src="video.js?v=48"></script>
+<script src="instagram.js?v=48"></script>
+<script src="main.js?v=48"></script>
 
 </body>
 </html>

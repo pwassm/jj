@@ -13,21 +13,23 @@ window.openFS = function(it) {
     return parsed ? parsed.reduce((s, seg) => s + seg.dur, 0) : 0;
   }
   function toMMSS(sec) {
-    const s = Math.round(sec), m = Math.floor(s / 60);
+    const s = Math.round(Math.max(0, sec)), m = Math.floor(s / 60);
     return m + ':' + ('0' + (s % 60)).slice(-2);
   }
 
   // ── State ─────────────────────────────────────────────────────────────────
-  let audioMode  = parseInt(sessionStorage.getItem('fs-audio')  || '0', 10);
+  let audioMode  = parseInt(sessionStorage.getItem('fs-audio') || '0', 10);
   let playMode   = sessionStorage.getItem('fs-play')  || 'selected'; // 'selected'|'full'
-  let scrubMode  = sessionStorage.getItem('fs-scrub') || 'collapsed'; // 'collapsed'|'full'
+  let timelineExpanded = sessionStorage.getItem('fs-tl') === '1';    // false=collapsed bands, true=full timeline
   let playSpeed  = parseFloat(sessionStorage.getItem('fs-speed') || '1');
-  let totalVidDur = parsed ? Math.max.apply(null, parsed.map(s => s.start + s.dur)) + 10 : 0;
+  // Estimate total duration from segments; updated once player reports actual duration
+  let totalVidDur = parsed ? Math.max.apply(null, parsed.map(s => s.start + s.dur)) + 15 : 60;
+  let lastCurT = undefined;   // last known playback time for playhead
   let abA = null, abB = null, abLoopTimer = null;
   let isScrubbing = false;
 
-  const isMuted = () => audioMode === 0;
-  const COLOURS = ['#2a6ef5','#e5732a','#2aa87a','#c03ec0','#c0c03e','#e53a3a'];
+  const isMuted  = () => audioMode === 0;
+  const COLOURS  = ['#2a6ef5','#e5732a','#2aa87a','#c03ec0','#c0c03e','#e53a3a'];
 
   // ── Build DOM ──────────────────────────────────────────────────────────────
   const fs = document.createElement('div');
@@ -35,186 +37,212 @@ window.openFS = function(it) {
   fs.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:#000;'
     + 'z-index:99999;display:flex;flex-direction:column;font-family:sans-serif;';
 
-  // Upper info bar
+  // Upper info bar (absolute, overlays video)
   const topBar = document.createElement('div');
   topBar.style.cssText = 'position:absolute;top:0;left:0;right:0;z-index:20;'
     + 'display:flex;justify-content:space-between;align-items:flex-start;padding:8px 12px;'
-    + 'background:linear-gradient(to bottom,rgba(0,0,0,0.7) 0%,transparent 100%);pointer-events:none;';
-
+    + 'background:linear-gradient(to bottom,rgba(0,0,0,0.65) 0%,transparent 100%);pointer-events:none;';
   const topLeft = document.createElement('div');
-  topLeft.style.cssText = 'color:#fff;font-size:13px;text-shadow:0 1px 3px #000;pointer-events:none;';
+  topLeft.style.cssText = 'color:#fff;font-size:12px;text-shadow:0 1px 3px #000;pointer-events:none;line-height:1.4;';
   function updateTopLeft(fullDur) {
     topLeft.innerHTML = '<span style="color:#8ef;">▶ ' + toMMSS(selectedDurSec()) + '</span>'
-      + '&nbsp;<span style="color:#666;">|</span>&nbsp;'
+      + ' <span style="color:#555;">|</span> '
       + '<span style="color:#6a8;">⏱ ' + (fullDur ? toMMSS(fullDur) : '…') + '</span>';
   }
-  updateTopLeft(totalVidDur > 10 ? totalVidDur : null);
+  updateTopLeft(totalVidDur > 15 ? totalVidDur : null);
 
   const topRight = document.createElement('a');
   topRight.href = it.link; topRight.target = '_blank'; topRight.rel = 'noopener noreferrer';
-  topRight.style.cssText = 'color:#8ef;font-size:12px;text-decoration:underline;'
-    + 'text-shadow:0 1px 3px #000;pointer-events:auto;max-width:180px;overflow:hidden;'
-    + 'text-overflow:ellipsis;white-space:nowrap;';
+  topRight.style.cssText = 'color:#8ef;font-size:11px;text-decoration:underline;'
+    + 'text-shadow:0 1px 3px #000;pointer-events:auto;max-width:160px;overflow:hidden;'
+    + 'text-overflow:ellipsis;white-space:nowrap;display:block;';
   topRight.textContent = '↗ ' + (it['v.title'] || it.cname || 'Source');
   topRight.addEventListener('click', e => e.stopPropagation());
-
   topBar.appendChild(topLeft); topBar.appendChild(topRight);
 
   // Video host
   const vidHost = document.createElement('div');
   vidHost.id = 'fs-vid-' + (it.cell || 'x');
-  vidHost.style.cssText = 'flex:1;position:relative;overflow:hidden;pointer-events:none;min-height:0;';
+  vidHost.style.cssText = 'flex:1;position:relative;overflow:hidden;min-height:0;';
 
   // Bottom bar
   const bar = document.createElement('div');
-  bar.style.cssText = 'flex-shrink:0;background:rgba(0,0,0,0.85);padding:5px 10px 8px;'
+  bar.style.cssText = 'flex-shrink:0;background:rgba(0,0,0,0.88);padding:5px 8px 7px;'
     + 'display:flex;flex-direction:column;gap:4px;z-index:10;';
 
-  // ── Collapsed scrubber: just the segment label bands ──────────────────────
-  const scrubCollapsed = document.createElement('div');
-  scrubCollapsed.style.cssText = 'display:flex;gap:3px;height:26px;align-items:stretch;cursor:pointer;';
-  scrubCollapsed.title = 'Click to expand full timeline';
+  // ── Timeline bar (single element, two rendering modes) ────────────────────
+  // Clicking anywhere on it expands/collapses; scrubbing works in both modes.
+  // A thin white vertical line shows current playback position in both modes.
+  const tl = document.createElement('div');
+  tl.style.cssText = 'position:relative;height:30px;border-radius:5px;overflow:hidden;'
+    + 'cursor:crosshair;user-select:none;border:1px solid #333;';
 
-  function buildCollapsed() {
-    scrubCollapsed.innerHTML = '';
-    if (!parsed) return;
-    parsed.forEach(function(seg, i) {
-      const band = document.createElement('div');
-      band.style.cssText = 'flex:' + seg.dur + ';min-width:24px;border-radius:4px;'
-        + 'background:' + COLOURS[i % COLOURS.length] + ';opacity:0.85;'
-        + 'display:flex;align-items:center;justify-content:center;'
-        + 'font-size:10px;color:#fff;font-weight:bold;overflow:hidden;padding:0 3px;';
-      band.textContent = segLabel(i);
-      scrubCollapsed.appendChild(band);
-    });
-  }
-
-  // ── Full scrubber ──────────────────────────────────────────────────────────
-  const scrubFull = document.createElement('div');
-  scrubFull.style.cssText = 'position:relative;height:32px;background:#1a1a1a;'
-    + 'border-radius:5px;cursor:crosshair;overflow:hidden;user-select:none;border:1px solid #333;';
-
-  function fsScrubSec(e) {
-    const r = scrubFull.getBoundingClientRect();
+  function tlScrubSec(e) {
+    const r = tl.getBoundingClientRect();
     return (Math.max(0, Math.min(e.clientX - r.left, r.width)) / r.width) * totalVidDur;
   }
 
-  const timeLbl = document.createElement('span');
-  timeLbl.style.cssText = 'font-size:11px;color:#8ef;font-family:monospace;min-width:44px;';
-  timeLbl.textContent = '—';
+  // Render the timeline bar.
+  // Collapsed (Selected mode): coloured bands fill proportionally, no gaps.
+  //   The playhead moves within the coloured area only.
+  // Full (Full mode): dark background, bands at their real time positions, gaps visible.
+  function renderTL(curT) {
+    tl.innerHTML = '';
+    const W = tl.offsetWidth || (window.innerWidth - 20);
 
-  function fsRenderScrub(curT) {
-    scrubFull.innerHTML = '';
-    if (!totalVidDur) return;
-    const W = scrubFull.offsetWidth || window.innerWidth - 20, sc = W / totalVidDur;
-    if (parsed) {
-      parsed.forEach(function(seg, i) {
-        const band = document.createElement('div');
-        band.style.cssText = 'position:absolute;top:3px;height:26px;'
-          + 'left:' + (seg.start * sc) + 'px;width:' + Math.max(seg.dur * sc, 3) + 'px;'
-          + 'background:' + COLOURS[i % COLOURS.length] + ';opacity:0.55;border-radius:2px;'
-          + 'display:flex;align-items:center;justify-content:center;overflow:hidden;'
-          + 'font-size:9px;color:#fff;font-weight:bold;pointer-events:none;';
-        band.textContent = segLabel(i);
-        scrubFull.appendChild(band);
-      });
-    }
-    if (abA !== null) {
-      scrubFull.insertAdjacentHTML('beforeend',
-        '<div style="position:absolute;top:0;bottom:0;left:' + (abA*sc) + 'px;width:3px;background:#ff0;pointer-events:none;">'
-        + '<div style="font-size:8px;background:#ff0;color:#000;font-weight:bold;padding:0 2px;">A</div></div>');
-    }
-    if (abB !== null) {
-      scrubFull.insertAdjacentHTML('beforeend',
-        '<div style="position:absolute;top:0;bottom:0;left:' + (abB*sc) + 'px;width:3px;background:#f80;pointer-events:none;">'
-        + '<div style="font-size:8px;background:#f80;color:#000;font-weight:bold;padding:0 2px;">B</div></div>');
-    }
-    if (curT !== undefined && curT >= 0) {
-      const ph = document.createElement('div');
-      ph.style.cssText = 'position:absolute;top:0;bottom:0;left:' + (curT * sc) + 'px;'
-        + 'width:2px;background:#fff;opacity:0.9;pointer-events:none;z-index:5;';
-      scrubFull.appendChild(ph);
-      timeLbl.textContent = curT.toFixed(1) + 's';
+    if (!timelineExpanded) {
+      // ── Collapsed / Selected view: bands fill the bar proportionally ──────
+      // Background = dark
+      tl.style.background = '#1a1a1a';
+      if (parsed) {
+        const totalSel = selectedDurSec() || 1;
+        let xPx = 0;
+        parsed.forEach(function(seg, i) {
+          const wPx = Math.max(Math.round((seg.dur / totalSel) * W), 3);
+          const band = document.createElement('div');
+          band.style.cssText = 'position:absolute;top:2px;bottom:2px;'
+            + 'left:' + xPx + 'px;width:' + wPx + 'px;'
+            + 'background:' + COLOURS[i % COLOURS.length] + ';border-radius:2px;'
+            + 'display:flex;align-items:center;justify-content:center;overflow:hidden;'
+            + 'font-size:9px;color:#fff;font-weight:bold;pointer-events:none;';
+          band.textContent = segLabel(i);
+          tl.appendChild(band);
+          xPx += wPx + 1;
+        });
+        // Playhead: map curT onto the selected-only timeline
+        if (curT !== undefined) {
+          // Find which segment curT falls in and compute proportional position
+          let pxPos = 0, xAcc = 0;
+          parsed.forEach(function(seg, i) {
+            const wPx = Math.max(Math.round((seg.dur / totalSel) * W), 3);
+            if (curT >= seg.start && curT <= seg.start + seg.dur) {
+              pxPos = xAcc + Math.round(((curT - seg.start) / seg.dur) * wPx);
+            }
+            xAcc += wPx + 1;
+          });
+          addPlayhead(pxPos);
+          timeLbl.textContent = curT.toFixed(1) + 's';
+        }
+      }
+    } else {
+      // ── Expanded / Full view: real time scale, gaps visible ───────────────
+      tl.style.background = '#111';
+      const sc = W / totalVidDur;
+      if (parsed) {
+        parsed.forEach(function(seg, i) {
+          const band = document.createElement('div');
+          band.style.cssText = 'position:absolute;top:2px;bottom:2px;'
+            + 'left:' + Math.round(seg.start * sc) + 'px;'
+            + 'width:' + Math.max(Math.round(seg.dur * sc), 3) + 'px;'
+            + 'background:' + COLOURS[i % COLOURS.length] + ';opacity:0.65;border-radius:2px;'
+            + 'display:flex;align-items:center;justify-content:center;overflow:hidden;'
+            + 'font-size:9px;color:#fff;font-weight:bold;pointer-events:none;';
+          band.textContent = segLabel(i);
+          tl.appendChild(band);
+        });
+      }
+      // A/B markers
+      if (abA !== null) {
+        tl.insertAdjacentHTML('beforeend',
+          '<div style="position:absolute;top:0;bottom:0;left:' + Math.round(abA*sc) + 'px;width:3px;background:#ff0;pointer-events:none;z-index:4;">'
+          + '<div style="font-size:8px;background:#ff0;color:#000;font-weight:bold;line-height:1;padding:1px 2px;">A</div></div>');
+      }
+      if (abB !== null) {
+        tl.insertAdjacentHTML('beforeend',
+          '<div style="position:absolute;top:0;bottom:0;left:' + Math.round(abB*sc) + 'px;width:3px;background:#f80;pointer-events:none;z-index:4;">'
+          + '<div style="font-size:8px;background:#f80;color:#000;font-weight:bold;line-height:1;padding:1px 2px;">B</div></div>');
+      }
+      if (curT !== undefined) {
+        addPlayhead(Math.round(curT * sc));
+        timeLbl.textContent = curT.toFixed(1) + 's';
+      }
     }
   }
 
-  function applyScruberMode() {
-    if (scrubMode === 'collapsed') {
-      scrubCollapsed.style.display = 'flex';
-      scrubFull.style.display = 'none';
-    } else {
-      scrubCollapsed.style.display = 'none';
-      scrubFull.style.display = 'block';
-      // Render bands immediately when expanding
-      setTimeout(() => fsRenderScrub(undefined), 0);
-    }
-    scrubToggleBtn.textContent = scrubMode === 'collapsed' ? '⊕ Timeline' : '⊖ Timeline';
+  function addPlayhead(xPx) {
+    const ph = document.createElement('div');
+    ph.style.cssText = 'position:absolute;top:0;bottom:0;left:' + xPx + 'px;'
+      + 'width:3px;background:#fff;opacity:0.95;pointer-events:none;z-index:5;'
+      + 'box-shadow:0 0 4px rgba(255,255,255,0.8);';
+    tl.appendChild(ph);
   }
 
   // ── Controls row ──────────────────────────────────────────────────────────
   const ctrlRow = document.createElement('div');
-  ctrlRow.style.cssText = 'display:flex;align-items:center;gap:5px;flex-wrap:wrap;';
+  ctrlRow.style.cssText = 'display:flex;align-items:center;gap:5px;flex-wrap:nowrap;overflow-x:auto;';
 
   function mkBtn(label, title, extra) {
     const b = document.createElement('button');
     b.innerHTML = label; b.title = title || '';
-    b.style.cssText = 'padding:4px 8px;font-size:13px;border-radius:4px;cursor:pointer;'
-      + 'border:1px solid #555;background:#222;color:#ccc;flex-shrink:0;' + (extra || '');
+    b.style.cssText = 'padding:3px 7px;font-size:12px;border-radius:4px;cursor:pointer;'
+      + 'border:1px solid #555;background:#222;color:#ccc;flex-shrink:0;white-space:nowrap;' + (extra || '');
     return b;
   }
 
+  const timeLbl = document.createElement('span');
+  timeLbl.style.cssText = 'font-size:11px;color:#8ef;font-family:monospace;min-width:38px;flex-shrink:0;';
+  timeLbl.textContent = '—';
+
   const btnStepL = mkBtn('◀', 'Step back ~1 frame');
   const btnStepR = mkBtn('▶', 'Step forward ~1 frame');
+
   const speedWrap = document.createElement('label');
-  speedWrap.style.cssText = 'display:flex;align-items:center;gap:3px;font-size:11px;color:#aaa;';
-  speedWrap.innerHTML = 'Speed ';
+  speedWrap.style.cssText = 'display:flex;align-items:center;gap:2px;font-size:11px;color:#aaa;flex-shrink:0;';
+  speedWrap.innerHTML = 'Spd ';
   const speedSlider = document.createElement('input');
   speedSlider.type='range'; speedSlider.min='0.25'; speedSlider.max='2';
   speedSlider.step='0.25'; speedSlider.value=String(playSpeed);
-  speedSlider.style.cssText='width:60px;accent-color:#8ef;cursor:pointer;';
+  speedSlider.style.cssText='width:55px;accent-color:#8ef;cursor:pointer;';
   const speedLbl = document.createElement('span');
-  speedLbl.style.cssText='min-width:28px;color:#8ef;font-size:11px;font-family:monospace;';
+  speedLbl.style.cssText='min-width:26px;color:#8ef;font-size:11px;font-family:monospace;';
   speedLbl.textContent = playSpeed + 'x';
   speedWrap.appendChild(speedSlider); speedWrap.appendChild(speedLbl);
 
-  const scrubToggleBtn = mkBtn('⊕ Timeline', 'Show/hide full timeline', 'border-color:#666;color:#aaa;');
-  const playModeBtn    = mkBtn(playMode === 'selected' ? '◎ Selected' : '◉ Full',
-    'Play selected segments only, or full video', 'border-color:#4af;color:#8ef;');
-  const audioLabels = ['🔇 Mute', '🔊 Original', '🎵 Site'];
-  const audioBtn = mkBtn(audioLabels[audioMode], 'Cycle audio');
+  // Selected/Full PLAYBACK + timeline mode toggle (one button controls both)
+  const playModeBtn = mkBtn(
+    playMode === 'selected' ? '◎ Sel' : '◉ Full',
+    'Selected: play only clipped segments\nFull: play entire video',
+    'border-color:#4af;color:#8ef;');
+
+  const audioLabels = ['🔇', '🔊', '🎵'];
+  const audioBtn = mkBtn(audioLabels[audioMode], 'Audio: Mute / Original / Site');
+
   const abLbl = document.createElement('span');
-  abLbl.style.cssText='font-size:10px;color:#fa0;font-family:monospace;min-width:60px;';
-  abLbl.textContent = 'A:— B:—';
-  const closBtn = mkBtn('✕', 'Close', 'margin-left:auto;border-color:#f66;color:#f88;background:rgba(80,0,0,0.4);');
+  abLbl.style.cssText='font-size:10px;color:#fa0;font-family:monospace;flex-shrink:0;';
+  abLbl.textContent = '';
+
+  const closBtn = mkBtn('✕', 'Close (tap video)',
+    'margin-left:auto;border-color:#f66;color:#f88;background:rgba(80,0,0,0.4);');
 
   ctrlRow.appendChild(btnStepL); ctrlRow.appendChild(btnStepR);
-  ctrlRow.appendChild(timeLbl); ctrlRow.appendChild(speedWrap);
-  ctrlRow.appendChild(scrubToggleBtn); ctrlRow.appendChild(playModeBtn);
-  ctrlRow.appendChild(audioBtn); ctrlRow.appendChild(abLbl);
+  ctrlRow.appendChild(timeLbl);
+  ctrlRow.appendChild(speedWrap);
+  ctrlRow.appendChild(playModeBtn);
+  ctrlRow.appendChild(audioBtn);
+  ctrlRow.appendChild(abLbl);
   ctrlRow.appendChild(closBtn);
 
-  bar.appendChild(scrubCollapsed);
-  bar.appendChild(scrubFull);
+  bar.appendChild(tl);
   bar.appendChild(ctrlRow);
   fs.appendChild(topBar);
   fs.appendChild(vidHost);
   fs.appendChild(bar);
   document.body.appendChild(fs);
 
-  buildCollapsed();
-  applyScruberMode();
+  // Initial render
+  renderTL(undefined);
 
   // ── Player helpers ────────────────────────────────────────────────────────
-  const getP = () => window.seeLearnVideoPlayers[vidHost.id] || null;
-  const FRAME = 1/30;
+  const getP  = () => window.seeLearnVideoPlayers[vidHost.id] || null;
+  const FRAME = 1 / 30;
 
   function fsSeek(t) {
     const p = getP(); if (!p) return;
+    lastCurT = t;
     const kf = !window.keyframeOnly;
     if (typeof p.seekTo === 'function') try { p.seekTo(t, kf); } catch(ex) {}
     else if (p.setCurrentTime) p.setCurrentTime(t).catch(function(){});
-    fsRenderScrub(t);
-    timeLbl.textContent = t.toFixed(1) + 's';
+    renderTL(t);
   }
 
   function fsSetSpeed(r) {
@@ -230,7 +258,9 @@ window.openFS = function(it) {
     vidHost.innerHTML = '';
     if (!parsed) return;
     const seg0 = parsed[0], muted = isMuted();
-    const segsArg = playMode === 'selected' ? parsed : [{ start: 0, dur: totalVidDur || 9999 }];
+    const segsArg = playMode === 'selected'
+      ? parsed
+      : [{ start: 0, dur: totalVidDur || 9999 }];
     if (window.isYouTubeLink(it.link) && window.mountYouTubeClip)
       window.mountYouTubeClip(vidHost, it.link, seg0.start, seg0.dur, muted, undefined, segsArg);
     else if (window.isVimeoLink(it.link) && window.mountVimeoClip)
@@ -242,9 +272,14 @@ window.openFS = function(it) {
   if (!isVidNode) {
     const img = document.createElement('img');
     img.src = it.link;
-    img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;';
+    // Portrait: the grid canvas is rotated 90°; fullscreen images need the same treatment
+    img.style.cssText = window.isPortrait
+      ? 'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;transform:rotate(90deg);'
+      : 'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;';
     vidHost.appendChild(img);
     vidHost.style.cursor = 'pointer';
+    // Remove bottom bar for images — just tap to close
+    bar.style.display = 'none';
     vidHost.addEventListener('pointerup', () => fsClose());
     return;
   }
@@ -258,12 +293,10 @@ window.openFS = function(it) {
     let d;
     if (typeof p.getDuration === 'function') {
       try { d = p.getDuration(); } catch(ex) {}
-      if (d > 0) { durDone = true; totalVidDur = d; updateTopLeft(d);
-        buildCollapsed(); if (scrubMode === 'full') fsRenderScrub(undefined); }
+      if (d > 0) { durDone = true; totalVidDur = d; updateTopLeft(d); renderTL(lastCurT); }
     } else if (p.getDuration) {
       p.getDuration().then(v => {
-        if (v > 0) { durDone = true; totalVidDur = v; updateTopLeft(v);
-          buildCollapsed(); if (scrubMode === 'full') fsRenderScrub(undefined); }
+        if (v > 0) { durDone = true; totalVidDur = v; updateTopLeft(v); renderTL(lastCurT); }
       }).catch(function(){});
     }
   }, 400);
@@ -271,43 +304,56 @@ window.openFS = function(it) {
   const playTimer = setInterval(function() {
     const p = getP(); if (!p || isScrubbing) return;
     if (typeof p.getCurrentTime === 'function') {
-      try { const t = p.getCurrentTime(); if (typeof t === 'number' && t >= 0) {
-        if (scrubMode === 'full') fsRenderScrub(t);
-        else timeLbl.textContent = t.toFixed(1) + 's';
-      }} catch(ex) {}
+      try {
+        const t = p.getCurrentTime();
+        if (typeof t === 'number' && t >= 0) { lastCurT = t; renderTL(t); }
+      } catch(ex) {}
     } else if (p.getCurrentTime) {
       p.getCurrentTime().then(t => {
-        if (t >= 0) {
-          if (scrubMode === 'full') fsRenderScrub(t);
-          else timeLbl.textContent = t.toFixed(1) + 's';
-        }
+        if (t >= 0) { lastCurT = t; renderTL(t); }
       }).catch(function(){});
     }
   }, 250);
 
-  // ── Scrubber events ───────────────────────────────────────────────────────
-  scrubCollapsed.addEventListener('click', function() {
-    scrubMode = 'full';
-    sessionStorage.setItem('fs-scrub', 'full');
-    applyScruberMode();
-  });
-
-  scrubFull.addEventListener('pointerdown', function(e) {
-    if (e.ctrlKey) { e.preventDefault(); e.stopPropagation(); fsSetAbMark(fsScrubSec(e)); return; }
+  // ── Timeline interaction ──────────────────────────────────────────────────
+  tl.addEventListener('pointerdown', function(e) {
+    if (e.ctrlKey) {
+      e.preventDefault(); e.stopPropagation();
+      if (timelineExpanded) fsSetAbMark(tlScrubSec(e));
+      return;
+    }
     e.preventDefault(); isScrubbing = true;
-    scrubFull.setPointerCapture(e.pointerId); fsSeek(fsScrubSec(e));
+    tl.setPointerCapture(e.pointerId);
+    // Single tap without drag: toggle expand/collapse
+    const startX = e.clientX;
+    tl._tapStartX = startX;
+    fsSeek(tlScrubSec(e));
   });
-  scrubFull.addEventListener('pointermove', function(e) {
-    if (!isScrubbing) return; fsSeek(fsScrubSec(e));
+  tl.addEventListener('pointermove', function(e) {
+    if (!isScrubbing) return;
+    // Once moved more than 8px it's a scrub, not a tap
+    if (Math.abs(e.clientX - (tl._tapStartX || e.clientX)) > 8) {
+      tl._isScrubDrag = true;
+    }
+    fsSeek(tlScrubSec(e));
   });
-  scrubFull.addEventListener('pointerup', function(e) {
-    if (!isScrubbing) return; isScrubbing = false; fsSeek(fsScrubSec(e));
+  tl.addEventListener('pointerup', function(e) {
+    if (!isScrubbing) return;
+    isScrubbing = false;
+    const wasDrag = tl._isScrubDrag;
+    tl._isScrubDrag = false;
+    if (!wasDrag) {
+      // It was a tap — toggle expand
+      timelineExpanded = !timelineExpanded;
+      sessionStorage.setItem('fs-tl', timelineExpanded ? '1' : '0');
+    }
+    fsSeek(tlScrubSec(e));
   });
+  tl.addEventListener('pointercancel', function() { isScrubbing = false; tl._isScrubDrag = false; });
 
   // ── A/B ───────────────────────────────────────────────────────────────────
   function updateAbLbl() {
-    abLbl.textContent = (abA !== null ? 'A:' + abA.toFixed(1) : 'A:—')
-      + ' ' + (abB !== null ? 'B:' + abB.toFixed(1) : 'B:—');
+    abLbl.textContent = abA !== null ? ('A:' + abA.toFixed(1) + (abB !== null ? ' B:' + abB.toFixed(1) : '')) : '';
   }
 
   function startAbLoop() {
@@ -335,7 +381,7 @@ window.openFS = function(it) {
     if (abA === null || abB !== null) { abA = t; abB = null;
       if (abLoopTimer) { clearInterval(abLoopTimer); abLoopTimer = null; }
     } else { abB = t > abA ? t : abA + 1; startAbLoop(); }
-    updateAbLbl(); if (scrubMode === 'full') fsRenderScrub(undefined);
+    updateAbLbl(); renderTL(lastCurT);
   }
 
   // ── Buttons ───────────────────────────────────────────────────────────────
@@ -348,7 +394,6 @@ window.openFS = function(it) {
       p.getCurrentTime().then(t => fsSeek(Math.max(0, t - FRAME))).catch(function(){});
     }
   });
-
   btnStepR.addEventListener('click', function(e) {
     e.stopPropagation();
     const p = getP(); if (!p) return;
@@ -358,7 +403,6 @@ window.openFS = function(it) {
       p.getCurrentTime().then(t => fsSeek(t + FRAME)).catch(function(){});
     }
   });
-
   speedSlider.addEventListener('input', function(e) {
     e.stopPropagation();
     playSpeed = parseFloat(this.value);
@@ -366,22 +410,17 @@ window.openFS = function(it) {
     sessionStorage.setItem('fs-speed', playSpeed);
     fsSetSpeed(playSpeed);
   });
-
-  scrubToggleBtn.addEventListener('click', function(e) {
-    e.stopPropagation();
-    scrubMode = scrubMode === 'collapsed' ? 'full' : 'collapsed';
-    sessionStorage.setItem('fs-scrub', scrubMode);
-    applyScruberMode();
-  });
-
   playModeBtn.addEventListener('click', function(e) {
     e.stopPropagation();
     playMode = playMode === 'selected' ? 'full' : 'selected';
+    // Also sync timeline expand state
+    timelineExpanded = playMode === 'full';
     sessionStorage.setItem('fs-play', playMode);
-    this.textContent = playMode === 'selected' ? '◎ Selected' : '◉ Full';
+    sessionStorage.setItem('fs-tl',   timelineExpanded ? '1' : '0');
+    this.textContent = playMode === 'selected' ? '◎ Sel' : '◉ Full';
+    renderTL(lastCurT);
     mountFSPlayer();
   });
-
   audioBtn.addEventListener('click', function(e) {
     e.stopPropagation();
     audioMode = (audioMode + 1) % 3;
@@ -390,8 +429,8 @@ window.openFS = function(it) {
     this.textContent = audioLabels[audioMode];
     mountFSPlayer();
   });
-
   closBtn.addEventListener('click', function(e) { e.stopPropagation(); fsClose(); });
+  // Tap video area to close
   vidHost.addEventListener('pointerup', function(e) {
     if (!isScrubbing) { e.stopPropagation(); fsClose(); }
   });
