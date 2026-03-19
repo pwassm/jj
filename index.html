@@ -199,6 +199,20 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
 .tabulator-edit-list-item:hover { background: #334 !important; }
 .tabulator-edit-list-item.active { background: #446 !important; }
 .tabulator-editor input { color: #fff !important; background: #1a1a2a !important; border: 1px solid #8ef !important; padding: 2px 4px !important; }
+/* List editor (autocomplete dropdown input) */
+.tabulator-edit-list-tabulator-editor input,
+.tabulator-popup-container input { color: #fff !important; background: #1a1a2a !important; }
+/* The cell itself while editing */
+.tabulator-cell.tabulator-editing { background: #0d1a2a !important; border: 1px solid #8ef !important; }
+/* Input inside any editing cell */
+.tabulator-cell.tabulator-editing input,
+.tabulator-cell.tabulator-editing select,
+.tabulator-cell.tabulator-editing textarea { color: #fff !important; background: #0d1a2a !important; outline: none !important; border: none !important; width: 100% !important; }
+/* The autocomplete popup input box */
+.tabulator-edit-select-list { background: #1a1a2a !important; border: 1px solid #555 !important; }
+.tabulator-edit-select-list-item { color: #ddd !important; padding: 4px 8px !important; }
+.tabulator-edit-select-list-item:hover,
+.tabulator-edit-select-list-item.active { background: #334 !important; color: #fff !important; }
 /* Context/header menus */
 .tabulator-menu { background: #1a1a2a !important; color: #fff !important; border: 1px solid #555 !important; }
 .tabulator-menu-item { background: #1a1a2a !important; color: #fff !important; padding: 6px 14px !important; }
@@ -225,7 +239,7 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
 
 <div id="menuWrap">
   <div id="menuPanel">
-    <div id="menuDateStamp">Build: Mar 18, 2026 — zip55</div>
+    <div id="menuDateStamp">Build: Mar 18, 2026 — zip56</div>
     <div class="menu-item" id="miAdmin" style="opacity:0.45; color:#aaa; pointer-events:none; cursor:default; border-bottom:1px solid rgba(255,255,255,0.08);">&#128274; Admin</div>
     <div class="menu-item" id="miFastLinks">Links (Fast Paste)</div>
     <div class="menu-item" id="miTables">Tables (JSON editor)</div>
@@ -328,6 +342,7 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
           <button id="btn-get-vid-info"        title="Fetch video titles &amp; authors" onclick="if(window.fillEmptyVideoInfo)window.fillEmptyVideoInfo()" style="padding:6px 12px;border-radius:5px;border:1px solid #ff8;background:rgba(180,180,0,0.2);color:#ff8;cursor:pointer;font-size:13px;">Get Video Info</button>
           <button id="btn-export-chosen"       title="Download selected rows as JSON (all if none selected)" style="padding:6px 12px;border-radius:5px;border:1px solid #4f8;background:rgba(0,120,60,0.3);color:#4f8;cursor:pointer;font-size:13px;">ExportChosen</button>
           <button id="btn-import"              title="Import JSON file and merge"       style="padding:6px 12px;border-radius:5px;border:1px solid #4f8;background:rgba(0,80,60,0.3);color:#4f8;cursor:pointer;font-size:13px;">Import</button>
+          <button id="btn-make-json-topic"     title="Generate entries from a topic (stub)" style="padding:6px 12px;border-radius:5px;border:1px solid #f9a;background:rgba(180,80,0,0.3);color:#f9a;cursor:pointer;font-size:13px;">MakeJsonFromTopic</button>
         </div>
         <span id="focusIndicator" style="font-size:11px;color:#666;padding:0 8px;align-self:center;white-space:nowrap;">Focus: — · col: —</span>
         <button id="toggleRawJson" style="padding:6px 14px;border-radius:5px;border:1px solid #555;background:#2a2a3e;color:#fff;cursor:pointer;font-size:13px;white-space:nowrap;">Show Raw JSON</button>
@@ -345,13 +360,13 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
   </div>
 </div>
 
-<script src="globals.js?v=33"></script>
-<script src="grid.js?v=33"></script>
-<script src="ui.js?v=33"></script>
-<script src="editor.js?v=33"></script>
-<script src="github.js?v=33"></script>
-<script src="video.js?v=33"></script>
-<script src="main.js?v=33"></script>
+<script src="globals.js?v=34"></script>
+<script src="grid.js?v=34"></script>
+<script src="ui.js?v=34"></script>
+<script src="editor.js?v=34"></script>
+<script src="github.js?v=34"></script>
+<script src="video.js?v=34"></script>
+<script src="main.js?v=34"></script>
 
 </body>
 </html>

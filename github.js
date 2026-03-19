@@ -19,27 +19,21 @@ function showGhBalloon(msg, duration=2000) {
 window.pushToGitHub = async function() {
   const token = localStorage.getItem('github-token');
   if (!token) {
-    alert("1. Open Settings -> Turn on GitHub Sync\n2. Paste your token and press Enter");
-    document.getElementById('settingsPanel').classList.add('open');
-    const tg = document.getElementById('togGithub');
-    if (tg) tg.checked = true;
-    const setup = document.getElementById('githubTokenSetup');
-    if (setup) setup.classList.add('open');
-    const inp = document.getElementById('tokenInput');
-    if (inp) inp.focus();
-    return;
+    const t = prompt('No GitHub token found.\nEnter your GitHub Fine-Grained PAT (Contents:Write)\nor set it via Settings → GitHub Sync:');
+    if (!t || !t.trim()) { showGhBalloon('Push cancelled — no token.', 2500); return; }
+    localStorage.setItem('github-token', t.trim());
   }
   let owner = localStorage.getItem('github-owner');
   let repo = localStorage.getItem('github-repo');
   if (!owner || !repo) {
     owner = prompt('GitHub Owner (username):', owner || '') || '';
     repo = prompt('Repository Name:', repo || '') || '';
-    if (!owner || !repo) return;
+    if (!owner || !repo) { showGhBalloon('Push cancelled — no repo.', 2500); return; }
     localStorage.setItem('github-owner', owner);
     localStorage.setItem('github-repo', repo);
   }
 
-  showGhBalloon("Pushing to GitHub...", 0);
+  showGhBalloon('Pushing to GitHub...', 0);
 
   try {
     const path = 'links.json';

@@ -302,13 +302,43 @@ window.renderTableEditor = function() {
 
     if (k === 'cname') {
       colDef.editor = 'list';
-      colDef.editorParams = { values: cnameVals, autocomplete: true, freetext: true, allowEmpty: true, listOnEmpty: true };
+      colDef.editorParams = {
+        values: cnameVals.length ? cnameVals : undefined,
+        valuesLookup: cnameVals.length ? false : 'active',
+        autocomplete: true,
+        freetext: true,
+        allowEmpty: true,
+        listOnEmpty: true,
+        filterFunc: function(term, label, value) {
+          return String(label).toLowerCase().includes(String(term).toLowerCase());
+        }
+      };
     } else if (k === 'sname') {
       colDef.editor = 'list';
-      colDef.editorParams = { values: snameVals, autocomplete: true, freetext: true, allowEmpty: true, listOnEmpty: true };
+      colDef.editorParams = {
+        values: snameVals.length ? snameVals : undefined,
+        valuesLookup: snameVals.length ? false : 'active',
+        autocomplete: true,
+        freetext: true,
+        allowEmpty: true,
+        listOnEmpty: true,
+        filterFunc: function(term, label, value) {
+          return String(label).toLowerCase().includes(String(term).toLowerCase());
+        }
+      };
     } else if (k === 'v.author') {
       colDef.editor = 'list';
-      colDef.editorParams = { values: vAuthorVals, autocomplete: true, freetext: true, allowEmpty: true, listOnEmpty: true };
+      colDef.editorParams = {
+        values: vAuthorVals.length ? vAuthorVals : undefined,
+        valuesLookup: vAuthorVals.length ? false : 'active',
+        autocomplete: true,
+        freetext: true,
+        allowEmpty: true,
+        listOnEmpty: true,
+        filterFunc: function(term, label, value) {
+          return String(label).toLowerCase().includes(String(term).toLowerCase());
+        }
+      };
     }
 
     cols.push(colDef);
@@ -563,11 +593,13 @@ window.applyJsonChanges = function() {
 };
 
 document.getElementById('jsonApply').addEventListener('click', window.applyJsonChanges);
-document.getElementById('jsonPush').addEventListener('click', e => {
+document.getElementById('jsonPush').addEventListener('pointerup', e => {
   e.preventDefault(); e.stopPropagation();
   // Sync first so pushToGitHub sees the latest data
   if (!rawJsonMode) syncFromTabulator();
   localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+  // Also save a local copy automatically
+  saveJsonSilent();
   window.pushToGitHub();
 });
 document.getElementById('jsonDl').addEventListener('click', saveJson);
@@ -580,14 +612,19 @@ document.getElementById('jsonText').addEventListener('keydown', e => {
 });
 
 // ─── Save JSON ────────────────────────────────────────────────────────────────
-function saveJson() {
-  if (!rawJsonMode) syncFromTabulator();
-  localStorage.setItem('mlynx-links', JSON.stringify(linksData));
+// saveJsonSilent: download without showing file picker — used by Push button
+function saveJsonSilent() {
   const blob = new Blob([JSON.stringify(linksData, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = 'links.json';
   document.body.appendChild(a); a.click();
   document.body.removeChild(a); URL.revokeObjectURL(a.href);
+}
+
+function saveJson() {
+  if (!rawJsonMode) syncFromTabulator();
+  localStorage.setItem('mlynx-links', JSON.stringify(linksData));
+  saveJsonSilent();
 }
 
 window.triggerDownload = async function(filename, data) {
@@ -669,3 +706,11 @@ window.duplicateActiveRow = function() {
   document.getElementById('btn-duplicate-row-action').click();
 };
 window.lastActiveRowIdx = -1;
+
+// ─── MakeJsonFromTopic stub ───────────────────────────────────────────────────
+document.getElementById('btn-make-json-topic').addEventListener('click', function() {
+  const topic = prompt('Enter a topic to generate links.json entries for (stub):');
+  if (!topic) return;
+  setStatus('MakeJsonFromTopic: stub — topic="' + topic + '" (not yet implemented)', '#ff8');
+  // TODO: implement topic → JSON generation
+});
