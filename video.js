@@ -131,7 +131,8 @@ window.mountYouTubeClip = async function(hostEl, url, startSec, dur, isMuted, cu
     events: {
       onReady: function(e) {
         if (isMuted) e.target.mute(); else e.target.unMute();
-        e.target.seekTo(initSeek, true);
+        var allowSeek = !window.keyframeOnly;
+        e.target.seekTo(initSeek, allowSeek);
         e.target.playVideo();
         window.seeLearnVideoTimers[cellId] = setInterval(function() {
           try {
@@ -139,7 +140,7 @@ window.mountYouTubeClip = async function(hostEl, url, startSec, dur, isMuted, cu
             var seg = segs[segIdx];
             if (t >= seg.start + seg.dur || t < seg.start - 0.5) {
               segIdx = (segIdx + 1) % segs.length;
-              e.target.seekTo(segs[segIdx].start, true);
+              e.target.seekTo(segs[segIdx].start, allowSeek);
               e.target.playVideo();
             }
           } catch(err) {}
@@ -148,7 +149,7 @@ window.mountYouTubeClip = async function(hostEl, url, startSec, dur, isMuted, cu
       onStateChange: function(e) {
         if (e.data === YT.PlayerState.ENDED) {
           segIdx = (segIdx + 1) % segs.length;
-          e.target.seekTo(segs[segIdx].start, true);
+          e.target.seekTo(segs[segIdx].start, !window.keyframeOnly);
           e.target.playVideo();
         }
       }
@@ -386,8 +387,21 @@ window.openVideoEditor = function(it) {
         + 'display:flex;align-items:center;justify-content:center;'
         + 'font-size:10px;color:#fff;font-weight:bold;cursor:pointer;overflow:hidden;';
       band.textContent = (i + 1);
-      band.addEventListener('click', function(ev) {
-        if (!ev.ctrlKey) { ev.stopPropagation(); setActiveSeg(i); }
+      // Use pointerdown so it fires before the timeline's own pointerdown handler
+      band.addEventListener('pointerdown', function(ev) {
+        ev.stopPropagation(); // prevent timeline drag from starting
+        if (ev.ctrlKey) {
+          // Ctrl+click band = delete
+          ev.preventDefault();
+          if (segs.length <= 1) { alert('Need at least one segment.'); return; }
+          segs.splice(i, 1);
+          setActiveSeg(Math.min(activeSegIdx, segs.length - 1));
+        } else {
+          // Plain click band = switch to that segment and loop it
+          ev.preventDefault();
+          scrubClickedBand = true;
+          setActiveSeg(i); // this calls mountLoop which starts the loop
+        }
       });
       timeline.appendChild(band);
     });
@@ -506,10 +520,12 @@ window.openVideoEditor = function(it) {
   });
 
   // ── Timeline click + drag scrubbing ──────────────────────────────────────
-  // Drag scrubs through the video using the EXISTING player (no re-mount).
-  // The loop interval is suspended during the drag so the looper doesn't
-  // immediately snap back to segStart. On release the loop resumes.
+  // Plain drag: scrub through video, stay paused on release
+  // Band click (no ctrl): switch active segment and start looping it
+  // Ctrl+click empty area: add segment
+  // Ctrl+click band: delete segment
   var isDraggingScrub = false;
+  var scrubClickedBand = false; // true if pointerdown landed on a band
 
   function getEditorPlayer() {
     return window.seeLearnVideoPlayers['v2host'] || null;
@@ -574,11 +590,11 @@ window.openVideoEditor = function(it) {
 
   timeline.addEventListener('pointerdown', function(e) {
     if (e.ctrlKey) return;
+    if (scrubClickedBand) { scrubClickedBand = false; return; }
     e.preventDefault();
     isDraggingScrub = true;
     timeline.setPointerCapture(e.pointerId);
     clearTimeout(mountDebounce);
-    // Pause loop — keep player alive
     suspendLoop();
     var p = getEditorPlayer();
     if (p && typeof p.pauseVideo === 'function') try { p.pauseVideo(); } catch(ex) {}
@@ -594,42 +610,24 @@ window.openVideoEditor = function(it) {
   timeline.addEventListener('pointerup', function(e) {
     if (!isDraggingScrub) return;
     isDraggingScrub = false;
-    var sec = timelineSecFromEvent(e);
-    scrubToSec(sec);
-    // Resume loop from scrub position on the existing player
-    var seg = segs[activeSegIdx];
-    var p   = getEditorPlayer();
-    if (p) {
-      // Seek to exact scrub position first, then resume loop
-      if (typeof p.seekTo === 'function') try { p.seekTo(sec, true); } catch(ex) {}
-      else if (p.setCurrentTime) p.setCurrentTime(sec).catch(function(){});
-      setTimeout(function() { resumeLoop(p, seg.start, seg.dur); }, 200);
-    } else {
-      // Player not ready — fall back to full remount
-      scheduleMount('start');
-    }
+    scrubToSec(timelineSecFromEvent(e));
+    // Stay paused — user clicks a segment band or tab to resume looping
   });
 
   timeline.addEventListener('pointercancel', function() {
-    if (!isDraggingScrub) return;
     isDraggingScrub = false;
-    var seg = segs[activeSegIdx];
-    resumeLoop(getEditorPlayer(), seg.start, seg.dur);
   });
 
   timeline.addEventListener('click', function(e) {
     if (!e.ctrlKey) return;
     var W = timeline.offsetWidth || 600;
     var clickSec = (e.offsetX / W) * calcEnd();
+    // Empty area ctrl+click = add segment (band ctrl+click handled in band pointerdown)
     var hitIdx = -1;
     segs.forEach(function(s, i) {
       if (clickSec >= s.start && clickSec <= s.start + s.dur) hitIdx = i;
     });
-    if (hitIdx >= 0) {
-      if (segs.length <= 1) { alert('Need at least one segment.'); return; }
-      segs.splice(hitIdx, 1);
-      setActiveSeg(Math.min(activeSegIdx, segs.length - 1));
-    } else {
+    if (hitIdx < 0) {
       segs.push({ start: fmt(clickSec), dur: 5 });
       setActiveSeg(segs.length - 1);
     }

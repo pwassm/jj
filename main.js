@@ -29,6 +29,19 @@ async function init(){
     }
   });
   render();
+
+  // ── Deep-link: ?id=UNIQUEID opens VideoShow directly ─────────────────────
+  // Usage: pwassm.github.io/jj/?id=ABC123
+  // Match against UniqID field. Add a UniqID column to links.json to use this.
+  const urlId = new URLSearchParams(location.search).get('id');
+  if (urlId) {
+    const target = linksData.find(r => String(r.UniqID || '') === String(urlId));
+    if (target) {
+      setTimeout(function() { if (window.openFS) window.openFS(target); }, 500);
+    } else {
+      console.warn('SeeAndLearn: no row found for ?id=' + urlId);
+    }
+  }
 }
 
 init();

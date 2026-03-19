@@ -16,6 +16,9 @@ let fitMode = localStorage.getItem("mlynx-fit")||"fc";
 let showCellLbl=false, showCname=true;
 let linksData=[];
 
+// Keyframe-only seek — when true, YouTube seekTo uses allowSeekAhead=false (faster on slow machines)
+window.keyframeOnly = localStorage.getItem('seeandlearn-keyframeOnly') === '1';
+
 const canvas    = document.getElementById('gameCanvas');
 const ctx       = canvas.getContext('2d');
 const wrap      = document.getElementById('rotateWrap');
