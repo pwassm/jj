@@ -3,73 +3,125 @@
 // ─── VideoShow (fullscreen) ───────────────────────────────────────────────────
 window.openFS = function(it) {
   if (!it.link) return;
-  const fs = document.createElement('div');
-  fs.id = 'fs-overlay';
-  fs.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:#000;'
-    + 'z-index:99999;display:flex;flex-direction:column;';
 
   const isVidNode = window.parseVideoAsset && window.parseVideoAsset(it.VidRange) !== null;
   const parsed    = isVidNode ? window.parseVideoAsset(it.VidRange) : null;
 
-  // ── Audio state (persisted per-session) ──────────────────────────────────
-  // 0 = Mute (default), 1 = Original (unmuted), 2 = Site (unmuted + allow site audio)
-  let audioMode = parseInt(sessionStorage.getItem('fs-audio') || '0', 10);
+  // VidComment: comma-delimited labels, one per segment
+  const vidComments = (it.VidComment || '').split(',').map(s => s.trim());
+  function segLabel(i) { return vidComments[i] || (i + 1); }
+
+  // Durations
+  function selectedDurSec() {
+    return parsed ? parsed.reduce(function(s, seg) { return s + seg.dur; }, 0) : 0;
+  }
+  function toMMSS(sec) {
+    const s = Math.round(sec), m = Math.floor(s / 60);
+    return m + ':' + ('0' + (s % 60)).slice(-2);
+  }
+
+  // ── State ──────────────────────────────────────────────────────────────────
+  let audioMode   = parseInt(sessionStorage.getItem('fs-audio') || '0', 10); // 0=Mute 1=Original 2=Site
+  let viewMode    = sessionStorage.getItem('fs-view') || 'selected';   // 'selected' | 'full'
+  let playSpeed   = parseFloat(sessionStorage.getItem('fs-speed') || '1');
+  let totalVidDur = parsed ? Math.max.apply(null, parsed.map(s => s.start + s.dur)) + 10 : 0;
+  let abA = null, abB = null, abLoopTimer = null;
+  let isScrubbing = false;
+
   const isMuted = () => audioMode === 0;
-
-  // ── Video host ────────────────────────────────────────────────────────────
-  const vidHost = document.createElement('div');
-  vidHost.id = 'fs-vid-' + it.cell;
-  vidHost.style.cssText = 'flex:1;position:relative;overflow:hidden;pointer-events:none;min-height:0;';
-  fs.appendChild(vidHost);
-
-  // ── Bottom bar ────────────────────────────────────────────────────────────
-  const bar = document.createElement('div');
-  bar.style.cssText = 'flex-shrink:0;background:rgba(0,0,0,0.75);padding:6px 10px 8px;'
-    + 'display:flex;flex-direction:column;gap:4px;z-index:10;';
-
-  // Scrubber row
-  const scrubWrap = document.createElement('div');
-  scrubWrap.style.cssText = 'position:relative;height:28px;background:#222;'
-    + 'border-radius:4px;cursor:crosshair;overflow:hidden;user-select:none;';
-
-  // Segment bands (shown inside scrubber)
   const COLOURS = ['#2a6ef5','#e5732a','#2aa87a','#c03ec0','#c0c03e','#e53a3a'];
-  let totalVidDur = parsed
-    ? Math.max.apply(null, parsed.map(s => s.start + s.dur)) + 30
-    : 0;
 
-  function fsScrubWidth() { return scrubWrap.offsetWidth || 600; }
+  // ── Build DOM ──────────────────────────────────────────────────────────────
+  const fs = document.createElement('div');
+  fs.id = 'fs-overlay';
+  fs.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:#000;'
+    + 'z-index:99999;display:flex;flex-direction:column;font-family:sans-serif;';
 
-  function fsRenderScrub(curT, abA, abB) {
+  // ── Upper overlay bar (info + link) ────────────────────────────────────────
+  const topBar = document.createElement('div');
+  topBar.style.cssText = 'position:absolute;top:0;left:0;right:0;z-index:20;'
+    + 'display:flex;justify-content:space-between;align-items:flex-start;padding:8px 12px;'
+    + 'background:linear-gradient(to bottom,rgba(0,0,0,0.7) 0%,transparent 100%);pointer-events:none;';
+
+  // Upper-left: selected + full duration
+  const topLeft = document.createElement('div');
+  topLeft.style.cssText = 'color:#fff;font-size:13px;text-shadow:0 1px 3px #000;line-height:1.5;pointer-events:none;';
+  function updateTopLeft(fullDur) {
+    const sel = toMMSS(selectedDurSec());
+    const full = fullDur ? toMMSS(fullDur) : '…';
+    topLeft.innerHTML = '<span style="color:#8ef;">Selected: ' + sel + '</span>'
+      + '&nbsp;&nbsp;<span style="color:#8a8;">Full: ' + full + '</span>';
+  }
+  updateTopLeft(totalVidDur > 10 ? totalVidDur : null);
+
+  // Upper-right: link to source
+  const topRight = document.createElement('a');
+  topRight.href = it.link;
+  topRight.target = '_blank';
+  topRight.rel = 'noopener noreferrer';
+  topRight.style.cssText = 'color:#8ef;font-size:12px;text-decoration:underline;'
+    + 'text-shadow:0 1px 3px #000;pointer-events:auto;max-width:200px;overflow:hidden;'
+    + 'text-overflow:ellipsis;white-space:nowrap;display:block;';
+  topRight.textContent = '↗ ' + (it.cname || 'Open source');
+  topRight.addEventListener('click', e => e.stopPropagation());
+
+  topBar.appendChild(topLeft);
+  topBar.appendChild(topRight);
+
+  // ── Video host ─────────────────────────────────────────────────────────────
+  const vidHost = document.createElement('div');
+  vidHost.id = 'fs-vid-' + (it.cell || 'x');
+  vidHost.style.cssText = 'flex:1;position:relative;overflow:hidden;pointer-events:none;min-height:0;';
+
+  // ── Bottom bar ─────────────────────────────────────────────────────────────
+  const bar = document.createElement('div');
+  bar.style.cssText = 'flex-shrink:0;background:rgba(0,0,0,0.82);padding:6px 10px 10px;'
+    + 'display:flex;flex-direction:column;gap:5px;z-index:10;';
+
+  // Scrubber
+  const scrubWrap = document.createElement('div');
+  scrubWrap.style.cssText = 'position:relative;height:32px;background:#1a1a1a;'
+    + 'border-radius:5px;cursor:crosshair;overflow:hidden;user-select:none;border:1px solid #333;';
+
+  function fsScrubSec(e) {
+    const r = scrubWrap.getBoundingClientRect();
+    return (Math.max(0, Math.min(e.clientX - r.left, r.width)) / r.width) * totalVidDur;
+  }
+
+  function fsRenderScrub(curT) {
     scrubWrap.innerHTML = '';
-    if (!parsed || !totalVidDur) return;
-    const W = fsScrubWidth(), sc = W / totalVidDur;
+    if (!totalVidDur) return;
+    const W = scrubWrap.offsetWidth || 600, sc = W / totalVidDur;
 
-    // Segment bands
-    parsed.forEach(function(seg, i) {
-      const band = document.createElement('div');
-      band.style.cssText = 'position:absolute;top:2px;height:24px;'
-        + 'left:' + (seg.start * sc) + 'px;width:' + Math.max(seg.dur * sc, 3) + 'px;'
-        + 'background:' + COLOURS[i % COLOURS.length] + ';opacity:0.55;border-radius:2px;'
-        + 'display:flex;align-items:center;justify-content:center;'
-        + 'font-size:9px;color:#fff;font-weight:bold;pointer-events:none;';
-      band.textContent = i + 1;
-      scrubWrap.appendChild(band);
-    });
+    // Draw segment bands
+    if (parsed) {
+      parsed.forEach(function(seg, i) {
+        const band = document.createElement('div');
+        band.style.cssText = 'position:absolute;top:3px;height:26px;'
+          + 'left:' + (seg.start * sc) + 'px;width:' + Math.max(seg.dur * sc, 3) + 'px;'
+          + 'background:' + COLOURS[i % COLOURS.length] + ';opacity:0.6;border-radius:2px;'
+          + 'display:flex;align-items:center;justify-content:center;overflow:hidden;'
+          + 'font-size:9px;color:#fff;font-weight:bold;pointer-events:none;';
+        band.textContent = segLabel(i);
+        scrubWrap.appendChild(band);
+      });
+    }
 
     // A/B markers
-    [abA, abB].forEach(function(t, i) {
-      if (t === null) return;
-      const mark = document.createElement('div');
-      mark.style.cssText = 'position:absolute;top:0;bottom:0;left:' + (t * sc) + 'px;'
-        + 'width:3px;background:' + (i === 0 ? '#ff0' : '#f80') + ';pointer-events:none;';
-      const lbl = document.createElement('div');
-      lbl.style.cssText = 'position:absolute;top:0;font-size:9px;color:#000;font-weight:bold;'
-        + 'background:' + (i === 0 ? '#ff0' : '#f80') + ';padding:0 2px;';
-      lbl.textContent = i === 0 ? 'A' : 'B';
-      mark.appendChild(lbl);
-      scrubWrap.appendChild(mark);
-    });
+    if (abA !== null) {
+      const m = document.createElement('div');
+      m.style.cssText = 'position:absolute;top:0;bottom:0;left:' + (abA * sc) + 'px;'
+        + 'width:3px;background:#ff0;pointer-events:none;';
+      m.innerHTML = '<div style="position:absolute;top:0;font-size:8px;background:#ff0;color:#000;padding:0 2px;font-weight:bold;">A</div>';
+      scrubWrap.appendChild(m);
+    }
+    if (abB !== null) {
+      const m = document.createElement('div');
+      m.style.cssText = 'position:absolute;top:0;bottom:0;left:' + (abB * sc) + 'px;'
+        + 'width:3px;background:#f80;pointer-events:none;';
+      m.innerHTML = '<div style="position:absolute;top:0;font-size:8px;background:#f80;color:#000;padding:0 2px;font-weight:bold;">B</div>';
+      scrubWrap.appendChild(m);
+    }
 
     // Playhead
     if (curT !== undefined) {
@@ -81,219 +133,273 @@ window.openFS = function(it) {
     }
   }
 
-  // Controls row
+  // ── Controls row ───────────────────────────────────────────────────────────
   const ctrlRow = document.createElement('div');
-  ctrlRow.style.cssText = 'display:flex;align-items:center;gap:8px;';
+  ctrlRow.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;';
 
+  function mkBtn(label, title, style) {
+    const b = document.createElement('button');
+    b.innerHTML = label; b.title = title || '';
+    b.style.cssText = 'padding:4px 9px;font-size:13px;border-radius:4px;cursor:pointer;'
+      + 'border:1px solid #555;background:#222;color:#ccc;' + (style || '');
+    return b;
+  }
+
+  // Frame-step buttons
+  const btnStepL = mkBtn('◀', 'Step back ~1 frame');
+  const btnStepR = mkBtn('▶', 'Step forward ~1 frame');
+
+  // Time label
   const timeLbl = document.createElement('span');
-  timeLbl.style.cssText = 'font-size:11px;color:#8ef;font-family:monospace;min-width:48px;';
+  timeLbl.style.cssText = 'font-size:11px;color:#8ef;font-family:monospace;min-width:44px;';
   timeLbl.textContent = '0.0s';
 
-  // Audio cycle button: Mute → Original → Site → Mute
-  const audioBtn = document.createElement('button');
+  // Speed slider
+  const speedWrap = document.createElement('label');
+  speedWrap.style.cssText = 'display:flex;align-items:center;gap:4px;font-size:11px;color:#aaa;';
+  speedWrap.innerHTML = '<span>Speed</span>';
+  const speedSlider = document.createElement('input');
+  speedSlider.type = 'range'; speedSlider.min = '0.25'; speedSlider.max = '2';
+  speedSlider.step = '0.25'; speedSlider.value = String(playSpeed);
+  speedSlider.style.cssText = 'width:70px;accent-color:#8ef;cursor:pointer;';
+  const speedLbl = document.createElement('span');
+  speedLbl.style.cssText = 'min-width:30px;color:#8ef;font-size:11px;font-family:monospace;';
+  speedLbl.textContent = playSpeed + 'x';
+  speedWrap.appendChild(speedSlider);
+  speedWrap.appendChild(speedLbl);
+
+  // Selected / Full toggle
+  const viewBtn = mkBtn(viewMode === 'selected' ? '▶ Selected' : '▶ Full',
+    'Toggle Selected segments vs Full video');
+  viewBtn.style.borderColor = '#4af'; viewBtn.style.color = '#8ef';
+
+  // Audio button
   const audioLabels = ['🔇 Mute', '🔊 Original', '🎵 Site'];
-  function updateAudioBtn() {
-    audioBtn.textContent = audioLabels[audioMode];
-  }
-  audioBtn.style.cssText = 'padding:4px 10px;font-size:12px;border-radius:4px;'
-    + 'border:1px solid #555;background:#222;color:#ccc;cursor:pointer;';
-  updateAudioBtn();
-  audioBtn.addEventListener('click', function(e) {
-    e.stopPropagation();
-    audioMode = (audioMode + 1) % 3;
-    sessionStorage.setItem('fs-audio', audioMode);
-    updateAudioBtn();
-    // Remount with new audio mode
-    mountFSPlayer();
-  });
+  const audioBtn = mkBtn(audioLabels[audioMode], 'Cycle audio: Mute → Original → Site');
 
-  const closBtn = document.createElement('button');
-  closBtn.textContent = '✕ Close';
-  closBtn.style.cssText = 'margin-left:auto;padding:4px 12px;font-size:12px;border-radius:4px;'
-    + 'border:1px solid #f66;background:rgba(100,0,0,0.4);color:#f88;cursor:pointer;';
-  closBtn.addEventListener('click', function(e) { e.stopPropagation(); fsClose(); });
-
+  // A/B label
   const abLbl = document.createElement('span');
-  abLbl.style.cssText = 'font-size:11px;color:#fa0;font-family:monospace;min-width:80px;';
+  abLbl.style.cssText = 'font-size:11px;color:#fa0;font-family:monospace;';
+  abLbl.textContent = 'A/B:—';
 
+  // Close
+  const closBtn = mkBtn('✕', 'Close', 'margin-left:auto;border-color:#f66;color:#f88;background:rgba(80,0,0,0.4);');
+
+  ctrlRow.appendChild(btnStepL);
+  ctrlRow.appendChild(btnStepR);
   ctrlRow.appendChild(timeLbl);
+  ctrlRow.appendChild(speedWrap);
+  ctrlRow.appendChild(viewBtn);
   ctrlRow.appendChild(audioBtn);
   ctrlRow.appendChild(abLbl);
   ctrlRow.appendChild(closBtn);
 
   bar.appendChild(scrubWrap);
   bar.appendChild(ctrlRow);
+
+  fs.appendChild(topBar);
+  fs.appendChild(vidHost);
   fs.appendChild(bar);
   document.body.appendChild(fs);
 
-  // ── A/B marks & loop ─────────────────────────────────────────────────────
-  let abA = null, abB = null, abLoopTimer = null;
+  // Initial scrub render (with estimated totalVidDur so bands appear immediately)
+  fsRenderScrub(undefined);
 
+  // ── Player helpers ─────────────────────────────────────────────────────────
+  function getP() { return window.seeLearnVideoPlayers[vidHost.id] || null; }
+
+  function fsSeek(t) {
+    const p = getP(); if (!p) return;
+    const kf = !window.keyframeOnly;
+    if (typeof p.seekTo === 'function') try { p.seekTo(t, kf); } catch(ex) {}
+    else if (p.setCurrentTime) p.setCurrentTime(t).catch(function(){});
+    fsRenderScrub(t);
+  }
+
+  function fsSetSpeed(rate) {
+    const p = getP(); if (!p) return;
+    if (typeof p.setPlaybackRate === 'function') try { p.setPlaybackRate(rate); } catch(ex) {}
+    else if (p.setPlaybackRate) p.setPlaybackRate(rate).catch(function(){});
+  }
+
+  // ── Mount ──────────────────────────────────────────────────────────────────
+  function mountFSPlayer() {
+    window.stopCellVideoLoop(vidHost.id);
+    if (abLoopTimer) { clearInterval(abLoopTimer); abLoopTimer = null; }
+    vidHost.innerHTML = '';
+    if (!parsed) return;
+    const seg0 = parsed[0];
+    const muted = isMuted();
+    const segsToPlay = viewMode === 'selected' ? parsed : null; // null = let player do its own thing
+    if (window.isYouTubeLink(it.link) && window.mountYouTubeClip)
+      window.mountYouTubeClip(vidHost, it.link, seg0.start, seg0.dur, muted, undefined,
+        viewMode === 'selected' ? parsed : [{ start: 0, dur: totalVidDur || 9999 }]);
+    else if (window.isVimeoLink(it.link) && window.mountVimeoClip)
+      window.mountVimeoClip(vidHost, it.link, seg0.start, seg0.dur, muted, undefined,
+        viewMode === 'selected' ? parsed : [{ start: 0, dur: totalVidDur || 9999 }]);
+    // Apply speed after a short delay (player must be ready)
+    setTimeout(function() { if (playSpeed !== 1) fsSetSpeed(playSpeed); }, 1200);
+  }
+
+  // Image mode
+  if (!isVidNode) {
+    const img = document.createElement('img');
+    img.src = it.link;
+    img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;';
+    vidHost.appendChild(img);
+    vidHost.style.cursor = 'pointer';
+    vidHost.addEventListener('pointerup', () => fsClose());
+    return;
+  }
+
+  mountFSPlayer();
+
+  // ── Poll duration and playhead ─────────────────────────────────────────────
+  let durDone = false;
+  const durTimer = setInterval(function() {
+    const p = getP(); if (!p || durDone) return;
+    let d;
+    if (typeof p.getDuration === 'function') {
+      try { d = p.getDuration(); } catch(ex) {}
+      if (d > 0) { durDone = true; totalVidDur = d; updateTopLeft(d); fsRenderScrub(undefined); }
+    } else if (p.getDuration) {
+      p.getDuration().then(function(v) {
+        if (v > 0) { durDone = true; totalVidDur = v; updateTopLeft(v); fsRenderScrub(undefined); }
+      }).catch(function(){});
+    }
+  }, 400);
+
+  const playTimer = setInterval(function() {
+    const p = getP(); if (!p || isScrubbing) return;
+    if (typeof p.getCurrentTime === 'function') {
+      try { const t = p.getCurrentTime(); if (t >= 0) fsRenderScrub(t); } catch(ex) {}
+    } else if (p.getCurrentTime) {
+      p.getCurrentTime().then(function(t) { if (t >= 0) fsRenderScrub(t); }).catch(function(){});
+    }
+  }, 250);
+
+  // ── Scrubber interaction ───────────────────────────────────────────────────
+  scrubWrap.addEventListener('pointerdown', function(e) {
+    if (e.ctrlKey) {
+      e.preventDefault(); e.stopPropagation();
+      fsSetAbMark(fsScrubSec(e));
+      return;
+    }
+    e.preventDefault();
+    isScrubbing = true;
+    scrubWrap.setPointerCapture(e.pointerId);
+    fsSeek(fsScrubSec(e));
+  });
+  scrubWrap.addEventListener('pointermove', function(e) {
+    if (!isScrubbing) return; fsSeek(fsScrubSec(e));
+  });
+  scrubWrap.addEventListener('pointerup', function(e) {
+    if (!isScrubbing) return; isScrubbing = false; fsSeek(fsScrubSec(e));
+  });
+
+  // ── A/B ───────────────────────────────────────────────────────────────────
   function updateAbLbl() {
     abLbl.textContent = (abA !== null ? 'A:' + abA.toFixed(1) : 'A:—')
-      + '  ' + (abB !== null ? 'B:' + abB.toFixed(1) : 'B:—');
-  }
-  updateAbLbl();
-
-  function fsSetAbMark(t) {
-    if (abA === null || (abB !== null)) {
-      // Reset and set A
-      abA = t; abB = null;
-      if (abLoopTimer) { clearInterval(abLoopTimer); abLoopTimer = null; }
-    } else {
-      // Set B (must be after A)
-      abB = t > abA ? t : abA + 1;
-      // Start A/B loop
-      startAbLoop();
-    }
-    updateAbLbl();
-    fsRenderScrub(undefined, abA, abB);
+      + ' ' + (abB !== null ? 'B:' + abB.toFixed(1) : 'B:—');
   }
 
   function startAbLoop() {
     if (abLoopTimer) clearInterval(abLoopTimer);
-    const p = window.seeLearnVideoPlayers[vidHost.id];
-    if (!p || !abA || !abB) return;
-    const loopStart = abA, loopEnd = abB;
+    const p = getP(); if (!p || abA === null || abB === null) return;
+    const lo = abA, hi = abB;
     if (typeof p.seekTo === 'function') {
-      try { p.seekTo(loopStart, true); p.playVideo(); } catch(ex) {}
+      try { p.seekTo(lo, true); p.playVideo(); } catch(ex) {}
       abLoopTimer = setInterval(function() {
-        try {
-          const t = p.getCurrentTime();
-          if (t >= loopEnd || t < loopStart - 0.5) { p.seekTo(loopStart, true); p.playVideo(); }
+        try { const t = p.getCurrentTime();
+          if (t >= hi || t < lo - 0.5) { p.seekTo(lo, true); p.playVideo(); }
         } catch(ex) {}
       }, 100);
     } else if (p.setCurrentTime) {
-      p.setCurrentTime(loopStart); p.play();
+      p.setCurrentTime(lo); p.play();
       abLoopTimer = setInterval(function() {
         p.getCurrentTime().then(function(t) {
-          if (t >= loopEnd || t < loopStart - 0.5) { p.setCurrentTime(loopStart); p.play(); }
+          if (t >= hi || t < lo - 0.5) { p.setCurrentTime(lo); p.play(); }
         }).catch(function(){});
       }, 100);
     }
   }
 
-  // ── Scrubber interaction ──────────────────────────────────────────────────
-  let isScrubbing = false;
-
-  function fsScrubSec(e) {
-    const rect = scrubWrap.getBoundingClientRect();
-    const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
-    return (x / rect.width) * totalVidDur;
-  }
-
-  scrubWrap.addEventListener('pointerdown', function(e) {
-    if (e.ctrlKey) {
-      // Ctrl+click: place A/B mark
-      e.preventDefault(); e.stopPropagation();
-      fsSetAbMark(fsScrubSec(e));
-      return;
+  function fsSetAbMark(t) {
+    if (abA === null || abB !== null) {
+      abA = t; abB = null;
+      if (abLoopTimer) { clearInterval(abLoopTimer); abLoopTimer = null; }
+    } else {
+      abB = t > abA ? t : abA + 1;
+      startAbLoop();
     }
-    isScrubbing = true;
-    scrubWrap.setPointerCapture(e.pointerId);
-    e.preventDefault();
-    const t = fsScrubSec(e);
-    fsSeekPlayer(t);
-  });
-
-  scrubWrap.addEventListener('pointermove', function(e) {
-    if (!isScrubbing) return;
-    fsSeekPlayer(fsScrubSec(e));
-  });
-
-  scrubWrap.addEventListener('pointerup', function(e) {
-    if (!isScrubbing) return;
-    isScrubbing = false;
-    fsSeekPlayer(fsScrubSec(e));
-  });
-
-  function fsSeekPlayer(t) {
-    const p = window.seeLearnVideoPlayers[vidHost.id];
-    if (!p) return;
-    if (typeof p.seekTo === 'function') try { p.seekTo(t, false); } catch(ex) {}
-    else if (p.setCurrentTime) p.setCurrentTime(t).catch(function(){});
-    fsRenderScrub(t, abA, abB);
+    updateAbLbl();
+    fsRenderScrub(undefined);
   }
 
-  // ── Keyframe-only setting ─────────────────────────────────────────────────
-  const keyframeOnly = localStorage.getItem('seeandlearn-keyframeOnly') === '1';
+  // ── Button wiring ─────────────────────────────────────────────────────────
+  const FRAME = 1 / 30;
 
-  // ── Mount video ───────────────────────────────────────────────────────────
-  function mountFSPlayer() {
-    window.stopCellVideoLoop(vidHost.id);
-    vidHost.innerHTML = '';
-    if (!parsed) return;
-    const seg0 = parsed[0];
-    const muted = isMuted();
-    if (window.isYouTubeLink(it.link) && window.mountYouTubeClip)
-      window.mountYouTubeClip(vidHost, it.link, seg0.start, seg0.dur, muted, undefined, parsed);
-    else if (window.isVimeoLink(it.link) && window.mountVimeoClip)
-      window.mountVimeoClip(vidHost, it.link, seg0.start, seg0.dur, muted, undefined, parsed);
-  }
-
-  // ── Image mode ────────────────────────────────────────────────────────────
-  if (!isVidNode) {
-    const img = document.createElement('img');
-    img.src = it.link;
-    img.style.cssText = window.isPortrait
-      ? 'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;transform:rotate(90deg);'
-      : 'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;';
-    vidHost.appendChild(img);
-    // For images: just close on tap
-    fs.addEventListener('pointerup', function(e) {
-      e.preventDefault(); fsClose();
-    });
-    return;
-  }
-
-  // Mount and start polling scrubber
-  mountFSPlayer();
-
-  // Poll for total duration once player ready
-  let durPollTimer = setInterval(function() {
-    const p = window.seeLearnVideoPlayers[vidHost.id];
-    if (!p) return;
-    let d;
-    if (typeof p.getDuration === 'function') {
-      try { d = p.getDuration(); } catch(ex) {}
-      if (d > 0) { totalVidDur = d; clearInterval(durPollTimer); fsRenderScrub(undefined, abA, abB); }
-    } else if (p.getDuration) {
-      p.getDuration().then(function(v) {
-        if (v > 0) { totalVidDur = v; clearInterval(durPollTimer); fsRenderScrub(undefined, abA, abB); }
-      }).catch(function(){});
-    }
-  }, 500);
-
-  // Poll playhead
-  let playPollTimer = setInterval(function() {
-    const p = window.seeLearnVideoPlayers[vidHost.id];
-    if (!p || isScrubbing) return;
+  btnStepL.addEventListener('click', function(e) {
+    e.stopPropagation();
+    const p = getP(); if (!p) return;
+    let cur = 0;
     if (typeof p.getCurrentTime === 'function') {
-      try {
-        const t = p.getCurrentTime();
-        if (typeof t === 'number' && t > 0) fsRenderScrub(t, abA, abB);
-      } catch(ex) {}
+      try { cur = p.getCurrentTime(); } catch(ex) {}
+      fsSeek(Math.max(0, cur - FRAME));
     } else if (p.getCurrentTime) {
-      p.getCurrentTime().then(function(t) {
-        if (t > 0) fsRenderScrub(t, abA, abB);
-      }).catch(function(){});
+      p.getCurrentTime().then(function(t) { fsSeek(Math.max(0, t - FRAME)); }).catch(function(){});
     }
-  }, 300);
+  });
 
-  // Close tap on video area (not bar)
+  btnStepR.addEventListener('click', function(e) {
+    e.stopPropagation();
+    const p = getP(); if (!p) return;
+    if (typeof p.getCurrentTime === 'function') {
+      try { fsSeek(p.getCurrentTime() + FRAME); } catch(ex) {}
+    } else if (p.getCurrentTime) {
+      p.getCurrentTime().then(function(t) { fsSeek(t + FRAME); }).catch(function(){});
+    }
+  });
+
+  speedSlider.addEventListener('input', function(e) {
+    e.stopPropagation();
+    playSpeed = parseFloat(this.value);
+    speedLbl.textContent = playSpeed + 'x';
+    sessionStorage.setItem('fs-speed', playSpeed);
+    fsSetSpeed(playSpeed);
+  });
+
+  viewBtn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    viewMode = viewMode === 'selected' ? 'full' : 'selected';
+    sessionStorage.setItem('fs-view', viewMode);
+    this.textContent = viewMode === 'selected' ? '▶ Selected' : '▶ Full';
+    mountFSPlayer();
+  });
+
+  audioBtn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    audioMode = (audioMode + 1) % 3;
+    if (audioMode === 2) { alert('Site audio: stub — not yet implemented.'); audioMode = 0; }
+    sessionStorage.setItem('fs-audio', audioMode);
+    this.textContent = audioLabels[audioMode];
+    mountFSPlayer();
+  });
+
+  closBtn.addEventListener('click', function(e) { e.stopPropagation(); fsClose(); });
   vidHost.addEventListener('pointerup', function(e) {
     if (!isScrubbing) { e.stopPropagation(); fsClose(); }
   });
 
+  // ── Close ─────────────────────────────────────────────────────────────────
   function fsClose() {
-    clearInterval(durPollTimer);
-    clearInterval(playPollTimer);
+    clearInterval(durTimer);
+    clearInterval(playTimer);
     if (abLoopTimer) clearInterval(abLoopTimer);
     window.stopCellVideoLoop(vidHost.id);
     fs.remove();
   }
 };
-
 // ─── Menu ────────────────────────────────────────────────────────────────────
 function closeMenu() {
   menuPanel.classList.remove('open');

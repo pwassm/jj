@@ -215,8 +215,11 @@ window.cleanupAllVideos = function() {
 // ─── VIDEO EDITOR (multi-segment) ────────────────────────────────────────────
 window.openVideoEditor = function(it) {
   var rawSegs = window.parseVideoAsset(it.VidRange);
-  var segs = rawSegs ? rawSegs.map(function(s) { return { start: s.start, dur: s.dur }; })
-                     : [{ start: 0, dur: 1 }];
+  // Load VidComment labels (comma-delimited, one per segment)
+  var rawComments = (it.VidComment || '').split(',').map(function(s) { return s.trim(); });
+  var segs = rawSegs ? rawSegs.map(function(s, i) {
+    return { start: s.start, dur: s.dur, comment: rawComments[i] || '' };
+  }) : [{ start: 0, dur: 1, comment: '' }];
   var activeSegIdx = 0;
   var currentMute  = it.Mute !== '0';
   var totalVideoDur = null;   // filled once player reports duration
@@ -386,7 +389,7 @@ window.openVideoEditor = function(it) {
         + 'border:' + (isAct ? '2px solid #fff' : '1px solid rgba(255,255,255,0.25)') + ';'
         + 'display:flex;align-items:center;justify-content:center;'
         + 'font-size:10px;color:#fff;font-weight:bold;cursor:pointer;overflow:hidden;';
-      band.textContent = (i + 1);
+      band.textContent = (segs[i].comment ? segs[i].comment.slice(0, 8) : (i + 1));
       // Use pointerdown so it fires before the timeline's own pointerdown handler
       band.addEventListener('pointerdown', function(ev) {
         ev.stopPropagation(); // prevent timeline drag from starting
@@ -402,6 +405,12 @@ window.openVideoEditor = function(it) {
           scrubClickedBand = true;
           setActiveSeg(i); // this calls mountLoop which starts the loop
         }
+      });
+
+      // Right-click band = open VidComment mini-editor for this segment
+      band.addEventListener('contextmenu', function(ev) {
+        ev.preventDefault(); ev.stopPropagation();
+        openCommentEditor(i, band);
       });
       timeline.appendChild(band);
     });
@@ -422,8 +431,8 @@ window.openVideoEditor = function(it) {
     segs.forEach(function(seg, i) {
       var btn = document.createElement('button');
       btn.className = 'v2segbtn' + (i === activeSegIdx ? ' active' : '');
-      btn.textContent = 'Seg ' + (i + 1);
-      btn.title = seg.start + 's + ' + seg.dur + 's';
+      btn.textContent = segs[i].comment ? ('Seg ' + (i+1) + ': ' + segs[i].comment.slice(0,12)) : 'Seg ' + (i + 1);
+      btn.title = segs[i].comment || (seg.start + 's + ' + seg.dur + 's');
       btn.addEventListener('click', function() { setActiveSeg(i); });
       segTabs.appendChild(btn);
     });
@@ -439,6 +448,66 @@ window.openVideoEditor = function(it) {
     renderSegTabs();
     renderTimeline();
     mountLoop();    // switch loop to new active segment
+  }
+
+  // ── VidComment mini-editor (right-click on segment band) ─────────────────
+  function openCommentEditor(segIdx, anchorEl) {
+    var existing = document.getElementById('v2comment-popup');
+    if (existing) existing.remove();
+
+    var popup = document.createElement('div');
+    popup.id = 'v2comment-popup';
+    var rect = anchorEl ? anchorEl.getBoundingClientRect() : { left: 200, bottom: 200 };
+    popup.style.cssText = 'position:fixed;z-index:999999;'
+      + 'left:' + Math.min(rect.left, window.innerWidth - 320) + 'px;'
+      + 'top:' + (rect.bottom + 4) + 'px;'
+      + 'width:300px;background:#1a2a3a;border:1px solid #4af;border-radius:8px;'
+      + 'padding:12px;box-shadow:0 4px 20px rgba(0,0,0,0.8);font-family:sans-serif;color:#fff;';
+
+    popup.innerHTML = '<div style="font-size:13px;font-weight:bold;margin-bottom:8px;color:#8ef;">'
+      + 'Segment ' + (segIdx + 1) + ' Label (VidComment)</div>'
+      + '<textarea id="v2comment-inp" rows="2" style="width:100%;box-sizing:border-box;'
+      + 'background:#0d1a2a;color:#fff;border:1px solid #4af;border-radius:4px;padding:6px;'
+      + 'font-size:13px;resize:vertical;outline:none;">'
+      + (segs[segIdx].comment || '')
+      + '</textarea>'
+      + '<div style="font-size:10px;color:#666;margin:4px 0 8px;">One label per segment. Stored as comma-delimited VidComment.</div>'
+      + '<div style="display:flex;gap:8px;">'
+      + '<button id="v2comment-save" style="flex:1;padding:7px;border-radius:4px;border:1px solid #4af;'
+      + 'background:rgba(0,80,180,0.3);color:#8ef;cursor:pointer;font-size:13px;font-weight:bold;">Save</button>'
+      + '<button id="v2comment-cancel" style="padding:7px 14px;border-radius:4px;border:1px solid #555;'
+      + 'background:#222;color:#aaa;cursor:pointer;font-size:13px;">Cancel</button>'
+      + '</div>';
+
+    document.body.appendChild(popup);
+
+    var inp = document.getElementById('v2comment-inp');
+    setTimeout(function() { inp.focus(); inp.select(); }, 50);
+
+    document.getElementById('v2comment-save').addEventListener('click', function() {
+      segs[segIdx].comment = inp.value.trim();
+      popup.remove();
+      renderTimeline();
+      renderSegTabs();
+    });
+    document.getElementById('v2comment-cancel').addEventListener('click', function() {
+      popup.remove();
+    });
+    // Escape closes
+    inp.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') { e.stopPropagation(); popup.remove(); }
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault(); e.stopPropagation();
+        segs[segIdx].comment = inp.value.trim();
+        popup.remove(); renderTimeline(); renderSegTabs();
+      }
+    });
+    // Click outside closes
+    setTimeout(function() {
+      document.addEventListener('pointerdown', function closePopup(ev) {
+        if (!popup.contains(ev.target)) { popup.remove(); document.removeEventListener('pointerdown', closePopup); }
+      });
+    }, 100);
   }
 
   // ── Input / delta helpers ─────────────────────────────────────────────────
@@ -825,8 +894,9 @@ window.openVideoEditor = function(it) {
 
   function saveEditor() {
     readInputs();
-    it.VidRange = window.serializeSegments(segs);
-    it.Mute     = iMute.checked ? '1' : '0';
+    it.VidRange   = window.serializeSegments(segs);
+    it.VidComment = segs.map(function(s) { return s.comment || ''; }).join(', ');
+    it.Mute       = iMute.checked ? '1' : '0';
     localStorage.setItem('seeandlearn-links', JSON.stringify(window.linksData));
     closeEditor();
     if (window.renderTableEditor && document.getElementById('tableEditor'))
