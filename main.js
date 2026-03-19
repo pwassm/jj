@@ -35,78 +35,116 @@ init();
 window.addEventListener('resize',()=>{ setupLayout(); render(); });
 window.addEventListener('orientationchange',()=>setTimeout(()=>{ setupLayout(); render(); },350));
 
+// ─── FastLinkPaste ────────────────────────────────────────────────────────────
+var flPendingCell  = '';   // cell that was assigned when URL was validated
+var flPendingLink  = '';   // the URL just saved
+
+function flShowStep1() {
+  document.getElementById('flStep1').style.display = 'flex';
+  document.getElementById('flStep2').style.display = 'none';
+  document.getElementById('fastLinkInput').value  = '';
+  document.getElementById('fastLinkPreview').textContent = '';
+  document.getElementById('fastLinkStatus').textContent  = '';
+  flPendingCell = '';
+  flPendingLink = '';
+  setTimeout(() => document.getElementById('fastLinkInput').focus(), 80);
+}
+
+function flPopulateCnameList() {
+  const dl = document.getElementById('flCnameList');
+  dl.innerHTML = '';
+  // Collect all individual cname terms (split on comma)
+  const terms = new Set();
+  linksData.forEach(r => {
+    if (r.cname) r.cname.split(',').map(s=>s.trim()).filter(Boolean).forEach(t=>terms.add(t));
+  });
+  Array.from(terms).sort().forEach(t => {
+    const opt = document.createElement('option'); opt.value = t; dl.appendChild(opt);
+  });
+}
+
+function flSaveUrl(url) {
+  const occ = occupied();
+  let nextCell = '';
+  outer: for(let r=1;r<=ROWS;r++) for(let c=1;c<=COLS;c++) {
+    const cs=mkCell(r,c); if(!occ.has(cs)){nextCell=cs;break outer;}
+  }
+  if (!nextCell) {
+    document.getElementById('fastLinkStatus').textContent = 'No empty cells!';
+    return false;
+  }
+  const d=new Date();
+  const da=`${String(d.getFullYear()).slice(-2)}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}.${String(d.getHours()).padStart(2,'0')}.${String(d.getMinutes()).padStart(2,'0')}.${String(d.getSeconds()).padStart(2,'0')}`;
+  linksData.push({show:"1",VidRange:"i",cell:nextCell,fit:"fc",link:url,cname:"",sname:"",attribution:"",comment:"",DateAdded:da,Mute:"1"});
+  localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+  flPendingCell = nextCell;
+  flPendingLink = url;
+  return nextCell;
+}
+
 document.getElementById('miFastLinks').addEventListener('pointerup', e => {
   e.stopPropagation(); closeMenu();
-  if(typeof isAdmin === 'function' && !isAdmin()) { alert('Admin privileges required.'); return; }
-  document.getElementById('fastLinkInput').value = '';
-  document.getElementById('fastLinkStatus').textContent = 'Ready.';
-  document.getElementById('fastLinkStatus').style.color = '#888';
+  if(typeof isAdmin==='function'&&!isAdmin()){alert('Admin privileges required.');return;}
   document.getElementById('fastLinkModal').style.display = 'flex';
-  setTimeout(() => {
-    const inp = document.getElementById('fastLinkInput');
-    inp.focus();
-  }, 100);
+  flShowStep1();
 });
 
 document.getElementById('fastLinkPasteTop').addEventListener('click', async () => {
   try {
-    const text = await navigator.clipboard.readText();
+    const text = (await navigator.clipboard.readText()).trim();
     if (!text) return;
-    const inp = document.getElementById('fastLinkInput');
-    inp.value = text;
-    inp.dispatchEvent(new Event('input'));
-  } catch (err) {
-    document.getElementById('fastLinkStatus').textContent = 'Clipboard blocked. Tap the box to paste manually.';
-    document.getElementById('fastLinkStatus').style.color = '#f66';
+    document.getElementById('fastLinkInput').value = text;
+    document.getElementById('fastLinkInput').dispatchEvent(new Event('input'));
+  } catch(err) {
+    document.getElementById('fastLinkStatus').textContent = 'Clipboard blocked — paste manually.';
   }
+});
+
+document.getElementById('fastLinkInput').addEventListener('input', function() {
+  const val = this.value.trim();
+  document.getElementById('fastLinkPreview').textContent = val.length > 50 ? val.slice(0,50)+'…' : val;
+  if (!val) { document.getElementById('fastLinkStatus').textContent=''; return; }
+  if (!/^https?:\/\//i.test(val)) {
+    document.getElementById('fastLinkStatus').textContent = 'Waiting for valid URL…';
+    return;
+  }
+  // Valid URL → save it, advance to step 2
+  const cell = flSaveUrl(val);
+  if (!cell) return;
+  document.getElementById('flCellName').textContent = cell;
+  document.getElementById('fastLinkCname').value = '';
+  flPopulateCnameList();
+  document.getElementById('flStep1').style.display = 'none';
+  document.getElementById('flStep2').style.display = 'flex';
+  setTimeout(() => document.getElementById('fastLinkCname').focus(), 80);
+});
+
+// Next: save cname to the pending entry, reset for another URL
+document.getElementById('flNext').addEventListener('click', () => {
+  const cname = document.getElementById('fastLinkCname').value.trim();
+  if (cname && flPendingCell) {
+    const entry = linksData.find(r => r.cell === flPendingCell);
+    if (entry) entry.cname = cname;
+    localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+  }
+  render();
+  flShowStep1();   // ready for next URL
+});
+
+// Skip cname: just reset
+document.getElementById('flSkip').addEventListener('click', () => {
+  render();
+  flShowStep1();
+});
+
+// Ctrl+Enter in cname = Next
+document.getElementById('fastLinkCname').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); document.getElementById('flNext').click(); }
 });
 
 document.getElementById('fastLinkExit').addEventListener('pointerup', () => {
   document.getElementById('fastLinkModal').style.display = 'none';
   render();
-});
-
-document.getElementById('fastLinkInput').addEventListener('input', function() {
-  const val = this.value.trim();
-  if (!val) return;
-  if (!/^https?:\/\//i.test(val)) {
-    document.getElementById('fastLinkStatus').textContent = 'Waiting for valid URL...';
-    document.getElementById('fastLinkStatus').style.color = '#f66';
-    return;
-  }
-  const occ = occupied();
-  let nextCell = "";
-  outer: for(let r=1; r<=ROWS; r++) {
-    for(let c=1; c<=COLS; c++) {
-      const cs = mkCell(r, c);
-      if(!occ.has(cs)) { nextCell = cs; break outer; }
-    }
-  }
-
-  if (!nextCell) {
-    document.getElementById('fastLinkStatus').textContent = 'No empty cells available!';
-    document.getElementById('fastLinkStatus').style.color = '#f66';
-    return;
-  }
-
-  const d = new Date();
-  const yy = String(d.getFullYear()).slice(-2);
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  const hh = String(d.getHours()).padStart(2, '0');
-  const min = String(d.getMinutes()).padStart(2, '0');
-  const ss = String(d.getSeconds()).padStart(2, '0');
-  const dateAdded = `${yy}.${mm}.${dd}.${hh}.${min}.${ss}`;
-
-  linksData.push({
-    show: "1", VidRange: "i", cell: nextCell, fit: "fc", link: val,
-    cname: "", sname: "", attribution: "", comment: "", DateAdded: dateAdded, Mute: "1"
-  });
-  localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
-
-  document.getElementById('fastLinkStatus').textContent = `Saved to ${nextCell}: ${val.substring(0,25)}...`;
-  document.getElementById('fastLinkStatus').style.color = '#9f9';
-  this.value = '';
 });
 
 document.addEventListener('keydown', e => {

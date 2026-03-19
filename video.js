@@ -269,8 +269,9 @@ window.openVideoEditor = function(it) {
     + '<div id="v2host" style="flex:1;position:relative;pointer-events:auto;overflow:hidden;cursor:pointer;"></div>'
     + '<div style="flex-shrink:0;padding:8px 12px;background:#111;border-top:1px solid #333;">'
     + '<div style="font-size:11px;color:#555;margin-bottom:3px;">'
-    + 'Click timeline = scrub &amp; pause &nbsp;|&nbsp; '
-    + 'Ctrl+click empty = add segment &nbsp;|&nbsp; Ctrl+click band = delete</div>'
+    + 'Ctrl+click video = add segment here &nbsp;|&nbsp; '
+    + 'Click timeline = scrub &nbsp;|&nbsp; '
+    + 'Ctrl+click timeline band = delete</div>'
     + '<div id="v2timeline" style="position:relative;height:36px;background:#222;'
     + 'border-radius:4px;cursor:crosshair;border:1px solid #444;overflow:hidden;user-select:none;"></div>'
     + '<div style="display:flex;justify-content:space-between;margin-top:3px;">'
@@ -436,6 +437,7 @@ window.openVideoEditor = function(it) {
     renderSegTabs();
   }
 
+  // applyDelta: full remount (used by +/- buttons in panel)
   // applyDelta: type='start' restarts from beginning of segment
   //             type='dur'   seeks to 2s before new end
   function applyDelta(type, delta) {
@@ -452,6 +454,23 @@ window.openVideoEditor = function(it) {
       updateStats(); renderTimeline(); renderSegTabs();
       scheduleMount('end');
     }
+  }
+
+  // applyDeltaNoRemount: used by keyboard L/R/Up/Down keys.
+  // Updates segment data and seeks the existing player — no player recreation.
+  // The loop interval keeps running; its endT boundary is read from segs[] each tick.
+  function applyDeltaNoRemount(type, delta) {
+    if (type === 'start') {
+      segs[activeSegIdx].start = fmt(Math.max(0, segs[activeSegIdx].start + delta));
+      iStart.value = segs[activeSegIdx].start;
+    } else {
+      segs[activeSegIdx].dur = fmt(Math.max(0.1, segs[activeSegIdx].dur + delta));
+      iDur.value = segs[activeSegIdx].dur;
+    }
+    vrPrev.textContent = window.serializeSegments(segs);
+    updateStats(); renderTimeline(); renderSegTabs();
+    // Don't scheduleMount — just let the interval pick up the new boundary naturally.
+    // The interval already reads segs[activeSegIdx] each tick, so it self-corrects.
   }
 
   // Wire start buttons
@@ -715,8 +734,11 @@ window.openVideoEditor = function(it) {
         try {
           if (paused) return;
           var t = player.getCurrentTime();
-          if (t >= endT || t < segStart - 0.5) {
-            player.seekTo(segStart, true); player.playVideo();
+          // Read boundary from segs each tick so keyboard adjustments take effect immediately
+          var seg = segs[activeSegIdx];
+          var endT2 = seg.start + seg.dur;
+          if (t >= endT2 || t < seg.start - 0.5) {
+            player.seekTo(seg.start, true); player.playVideo();
           }
         } catch(ex) {}
       }, 100);
@@ -754,8 +776,10 @@ window.openVideoEditor = function(it) {
         window.seeLearnVideoTimers['v2host'] = setInterval(function() {
           if (paused) return;
           player.getCurrentTime().then(function(t) {
-            if (t >= endT || t < segStart - 0.5) {
-              player.setCurrentTime(segStart); player.play();
+            var seg = segs[activeSegIdx];
+            var endT2 = seg.start + seg.dur;
+            if (t >= endT2 || t < seg.start - 0.5) {
+              player.setCurrentTime(seg.start); player.play();
             }
           }).catch(function(){});
         }, 100);
@@ -815,6 +839,30 @@ window.openVideoEditor = function(it) {
   document.getElementById('v2save').addEventListener('click',  saveEditor);
   document.getElementById('v2close').addEventListener('click', closeEditor);
 
+  // ── Ctrl+click on video panel → insert new segment at current time ────────
+  host.addEventListener('click', function(e) {
+    if (!e.ctrlKey) return;
+    e.preventDefault(); e.stopPropagation();
+    var p = getEditorPlayer();
+    function insertAtTime(t) {
+      var insertSec = fmt(Math.max(0, t));
+      segs.push({ start: insertSec, dur: 5 });
+      setActiveSeg(segs.length - 1);
+      vrPrev.textContent = 'New seg at ' + insertSec + 's — ' + window.serializeSegments(segs);
+    }
+    if (p && typeof p.getCurrentTime === 'function') {
+      var t = p.getCurrentTime();
+      if (t && typeof t.then === 'function') t.then(function(v) { insertAtTime(v || 0); });
+      else insertAtTime(typeof t === 'number' ? t : 0);
+    } else if (p && p.getCurrentTime) {
+      p.getCurrentTime().then(function(v) { insertAtTime(v || 0); }).catch(function() { insertAtTime(0); });
+    } else {
+      // No player ready — insert after last segment
+      var last = segs[segs.length - 1];
+      insertAtTime(last.start + last.dur + 2);
+    }
+  });
+
   // ── Keyboard ──────────────────────────────────────────────────────────────
   function handleKey(e) {
     if (e.ctrlKey && e.key.toLowerCase() === 's') {
@@ -825,16 +873,21 @@ window.openVideoEditor = function(it) {
       e.preventDefault(); e.stopPropagation();
       setActiveSeg((activeSegIdx + 1) % segs.length); return;
     }
+
+    // L/R/ArrowLeft/Right adjust start; Up/Down adjust duration — no remount
     var isInp = document.activeElement &&
       (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA');
     var k = e.key, kl = k.toLowerCase();
+
     if (kl==='l'||kl==='r'||k==='ArrowLeft'||k==='ArrowRight'||k==='ArrowUp'||k==='ArrowDown') {
       if (isInp && (k==='ArrowLeft'||k==='ArrowRight')) return;
       e.preventDefault();
-      if (kl==='l'||k==='ArrowLeft')  applyDelta('start', -0.1);
-      if (kl==='r'||k==='ArrowRight') applyDelta('start',  0.1);
-      if (k==='ArrowDown')            applyDelta('dur',   -0.1);
-      if (k==='ArrowUp')              applyDelta('dur',    0.1);
+      // L/R adjust start time BUT don't trigger a full mountLoop (which resets video position).
+      // Instead: update data, seek existing player to new start, let loop interval handle the rest.
+      if (kl==='l'||k==='ArrowLeft')  applyDeltaNoRemount('start', -0.1);
+      if (kl==='r'||k==='ArrowRight') applyDeltaNoRemount('start',  0.1);
+      if (k==='ArrowDown')            applyDeltaNoRemount('dur',   -0.1);
+      if (k==='ArrowUp')              applyDeltaNoRemount('dur',    0.1);
     }
   }
   document.addEventListener('keydown', handleKey, true);
