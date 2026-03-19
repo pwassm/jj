@@ -163,10 +163,11 @@ function buildOverlays(){
     videoMountTasks.forEach(task => {
       const parsed = window.parseVideoAsset(task.VidRange);
       if(!parsed) return;
+      var segs0 = parsed[0];
       if (window.isYouTubeLink(task.link) && window.mountYouTubeClip) {
-        window.mountYouTubeClip(task.host, task.link, parsed.start, parsed.dur, task.mute);
+        window.mountYouTubeClip(task.host, task.link, segs0.start, segs0.dur, task.mute, undefined, parsed);
       } else if (window.isVimeoLink(task.link) && window.mountVimeoClip) {
-        window.mountVimeoClip(task.host, task.link, parsed.start, parsed.dur, task.mute);
+        window.mountVimeoClip(task.host, task.link, segs0.start, segs0.dur, task.mute, undefined, parsed);
       }
     });
   }

@@ -1,76 +1,85 @@
 'use strict';
 
 window.seeLearnVideoPlayers = {};
-window.seeLearnVideoTimers = {};
-window.seeLearnYTReady = false;
-window.seeLearnYTLoading = false;
-window.seeLearnVimeoReady = false;
+window.seeLearnVideoTimers  = {};
+window.seeLearnYTReady      = false;
+window.seeLearnYTLoading    = false;
+window.seeLearnVimeoReady   = false;
 window.seeLearnVimeoLoading = false;
 
 window.getYouTubeId = function(url) {
   if (!url) return '';
-  const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
-  const match = url.match(regExp);
-  return (match && match[7] && match[7].length === 11) ? match[7] : '';
+  var m = url.match(/^.*((youtu\.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/);
+  return (m && m[7] && m[7].length === 11) ? m[7] : '';
 };
 
+// ─── VidRange parsing ─────────────────────────────────────────────────────────
+// Format:  "986 20"          → [{start:986, dur:20}]
+// Format:  "986 20, 1200 15" → [{start:986,dur:20},{start:1200,dur:15}]
+// "i" or non-numeric         → null (image, not video)
 window.parseVideoAsset = function(v) {
-  const str = String(v).trim();
-  if (!str) return null;
-  const parts = str.split(/\s+/);
-  if (parts.length > 0 && !isNaN(Number(parts[0]))) {
-    const start = Number(parts[0]);
-    const dur = (parts.length > 1 && !isNaN(Number(parts[1]))) ? Number(parts[1]) : 1;
-    return { start, dur };
+  var str = String(v || '').trim();
+  if (!str || str === 'i') return null;
+  var segments = str.split(',');
+  var result = [];
+  for (var i = 0; i < segments.length; i++) {
+    var seg = segments[i].trim();
+    if (!seg) continue;
+    var parts = seg.split(/\s+/);
+    if (!parts.length || isNaN(Number(parts[0]))) return null;
+    result.push({
+      start: Number(parts[0]),
+      dur:   (parts.length > 1 && !isNaN(Number(parts[1]))) ? Number(parts[1]) : 1
+    });
   }
-  return null;
+  return result.length ? result : null;
 };
 
-// Retro-compatibility just in case
+// Serialize array of segments back to VidRange string
+window.serializeSegments = function(segs) {
+  return segs.map(function(s) {
+    var st = parseFloat(Number(s.start).toFixed(1));
+    var d  = parseFloat(Number(s.dur).toFixed(1));
+    return d === 1 ? String(st) : st + ' ' + d;
+  }).join(', ');
+};
+
 window.isNumericAsset = function(v) { return window.parseVideoAsset(v) !== null; };
+window.isYouTubeLink  = function(url) { return /youtu\.be|youtube\.com/i.test(url || ''); };
+window.isVimeoLink    = function(url) { return /vimeo\.com/i.test(url || ''); };
 
-window.isYouTubeLink = function(url) { return /youtu\.be|youtube\.com/i.test(url || ''); };
-window.isVimeoLink = function(url) { return /vimeo\.com/i.test(url || ''); };
-
+// ─── API loaders ──────────────────────────────────────────────────────────────
 window.loadYouTubeApiOnce = function() {
-  if (window.YT && window.YT.Player) {
-    window.seeLearnYTReady = true;
-    return Promise.resolve();
-  }
+  if (window.YT && window.YT.Player) { window.seeLearnYTReady = true; return Promise.resolve(); }
   if (window.seeLearnYTLoading) {
-    return new Promise(resolve => {
-      const t = setInterval(() => { if (window.seeLearnYTReady) { clearInterval(t); resolve(); } }, 100);
+    return new Promise(function(res) {
+      var t = setInterval(function() { if (window.seeLearnYTReady) { clearInterval(t); res(); } }, 100);
     });
   }
   window.seeLearnYTLoading = true;
-  return new Promise(resolve => {
-    const tag = document.createElement('script');
+  return new Promise(function(res) {
+    var tag = document.createElement('script');
     tag.src = 'https://www.youtube.com/iframe_api';
-    const firstScriptTag = document.getElementsByTagName('script')[0];
-    if (firstScriptTag && firstScriptTag.parentNode) firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+    var first = document.getElementsByTagName('script')[0];
+    if (first && first.parentNode) first.parentNode.insertBefore(tag, first);
     else document.head.appendChild(tag);
-    window.onYouTubeIframeAPIReady = function() { window.seeLearnYTReady = true; resolve(); };
+    window.onYouTubeIframeAPIReady = function() { window.seeLearnYTReady = true; res(); };
   });
 };
 
 window.loadVimeoApiOnce = function() {
-  if (window.Vimeo && window.Vimeo.Player) {
-    window.seeLearnVimeoReady = true;
-    return Promise.resolve();
-  }
+  if (window.Vimeo && window.Vimeo.Player) { window.seeLearnVimeoReady = true; return Promise.resolve(); }
   if (window.seeLearnVimeoLoading) {
-    return new Promise(resolve => {
-      const t = setInterval(() => { if (window.seeLearnVimeoReady) { clearInterval(t); resolve(); } }, 100);
+    return new Promise(function(res) {
+      var t = setInterval(function() { if (window.seeLearnVimeoReady) { clearInterval(t); res(); } }, 100);
     });
   }
   window.seeLearnVimeoLoading = true;
-  return new Promise(resolve => {
-    const tag = document.createElement('script');
+  return new Promise(function(res) {
+    var tag = document.createElement('script');
     tag.src = 'https://player.vimeo.com/api/player.js';
-    tag.onload = function() { window.seeLearnVimeoReady = true; resolve(); };
-    const firstScriptTag = document.getElementsByTagName('script')[0];
-    if (firstScriptTag && firstScriptTag.parentNode) firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-    else document.head.appendChild(tag);
+    tag.onload = function() { window.seeLearnVimeoReady = true; res(); };
+    document.head.appendChild(tag);
   });
 };
 
@@ -79,46 +88,58 @@ window.stopCellVideoLoop = function(cellId) {
     clearInterval(window.seeLearnVideoTimers[cellId]);
     delete window.seeLearnVideoTimers[cellId];
   }
-  if (window.seeLearnVideoPlayers[cellId] && typeof window.seeLearnVideoPlayers[cellId].destroy === 'function') {
-    try { window.seeLearnVideoPlayers[cellId].destroy(); } catch(e){}
+  if (window.seeLearnVideoPlayers[cellId] &&
+      typeof window.seeLearnVideoPlayers[cellId].destroy === 'function') {
+    try { window.seeLearnVideoPlayers[cellId].destroy(); } catch(e) {}
   }
+  delete window.seeLearnVideoPlayers[cellId];
 };
 
-window.mountYouTubeClip = async function(hostEl, url, startSec, dur, isMuted, customSeekTo) {
-  const vid = getYouTubeId(url);
+// ─── Multi-segment playback ───────────────────────────────────────────────────
+// segsArg: optional array of {start,dur}. If omitted, uses legacy startSec+dur.
+// Plays each segment in order then loops back to first.
+
+window.mountYouTubeClip = async function(hostEl, url, startSec, dur, isMuted, customSeekTo, segsArg) {
+  var vid = getYouTubeId(url);
   if (!vid || !hostEl) return;
   await loadYouTubeApiOnce();
-  const cellId = hostEl.id;
+  var cellId = hostEl.id;
   stopCellVideoLoop(cellId);
   hostEl.innerHTML = '';
-  const innerId = 'yt_' + cellId.replace(/[^a-zA-Z0-9_-]/g, '_');
-  const div = document.createElement('div');
+
+  var segs = Array.isArray(segsArg) ? segsArg
+    : [{ start: Number(startSec), dur: Number(dur) }];
+  var segIdx = 0;
+
+  var innerId = 'yt_' + cellId.replace(/[^a-zA-Z0-9_-]/g, '_');
+  var div = document.createElement('div');
   div.id = innerId;
-  div.style.width = '100%';
-  div.style.height = '100%';
-  div.style.pointerEvents = 'none';
+  div.style.cssText = 'width:100%;height:100%;pointer-events:none;';
   hostEl.appendChild(div);
 
-  const endSec = Number(startSec) + Number(dur);
+  var initSeek = customSeekTo !== undefined ? Number(customSeekTo) : segs[0].start;
 
-  const player = new YT.Player(innerId, {
+  var player = new YT.Player(innerId, {
     videoId: vid,
     host: 'https://www.youtube-nocookie.com',
     playerVars: {
       autoplay: 1, controls: 0, disablekb: 1, fs: 0, rel: 0,
-      modestbranding: 1, playsinline: 1, start: Number(startSec), end: endSec + 1, iv_load_policy: 3
+      modestbranding: 1, playsinline: 1,
+      start: Math.floor(initSeek),
+      iv_load_policy: 3
     },
     events: {
       onReady: function(e) {
         if (isMuted) e.target.mute(); else e.target.unMute();
-        e.target.seekTo(customSeekTo !== undefined ? Number(customSeekTo) : Number(startSec), true);
+        e.target.seekTo(initSeek, true);
         e.target.playVideo();
-
-        window.seeLearnVideoTimers[cellId] = setInterval(() => {
+        window.seeLearnVideoTimers[cellId] = setInterval(function() {
           try {
-            const t = e.target.getCurrentTime();
-            if (t >= endSec || t < Number(startSec)) {
-              e.target.seekTo(customSeekTo !== undefined ? Number(customSeekTo) : Number(startSec), true);
+            var t   = e.target.getCurrentTime();
+            var seg = segs[segIdx];
+            if (t >= seg.start + seg.dur || t < seg.start - 0.5) {
+              segIdx = (segIdx + 1) % segs.length;
+              e.target.seekTo(segs[segIdx].start, true);
               e.target.playVideo();
             }
           } catch(err) {}
@@ -126,7 +147,8 @@ window.mountYouTubeClip = async function(hostEl, url, startSec, dur, isMuted, cu
       },
       onStateChange: function(e) {
         if (e.data === YT.PlayerState.ENDED) {
-          e.target.seekTo(customSeekTo !== undefined ? Number(customSeekTo) : Number(startSec), true);
+          segIdx = (segIdx + 1) % segs.length;
+          e.target.seekTo(segs[segIdx].start, true);
           e.target.playVideo();
         }
       }
@@ -135,57 +157,48 @@ window.mountYouTubeClip = async function(hostEl, url, startSec, dur, isMuted, cu
   window.seeLearnVideoPlayers[cellId] = player;
 };
 
-window.mountVimeoClip = async function(hostEl, url, startSec, dur, isMuted, customSeekTo) {
+window.mountVimeoClip = async function(hostEl, url, startSec, dur, isMuted, customSeekTo, segsArg) {
   if (!hostEl) return;
   await loadVimeoApiOnce();
-  const cellId = hostEl.id;
+  var cellId = hostEl.id;
   stopCellVideoLoop(cellId);
   hostEl.innerHTML = '';
 
-  const div = document.createElement('div');
-  div.style.width = '100%';
-  div.style.height = '100%';
-  div.style.position = 'absolute';
-  div.style.top = '0';
-  div.style.left = '0';
-  div.style.pointerEvents = 'none'; 
+  var segs = Array.isArray(segsArg) ? segsArg
+    : [{ start: Number(startSec), dur: Number(dur) }];
+  var segIdx = 0;
+
+  var div = document.createElement('div');
+  div.style.cssText = 'width:100%;height:100%;position:absolute;top:0;left:0;pointer-events:none;';
   hostEl.appendChild(div);
 
-  const endSec = Number(startSec) + Number(dur);
-
-  const player = new Vimeo.Player(div, {
-    url: url,
-    autoplay: true,
-    muted: isMuted,
-    controls: false,
-    loop: false,
-    autopause: false,
-    transparent: false,
-    background: false // background=true forces mute, we want to allow unmuted
+  var player = new Vimeo.Player(div, {
+    url: url, autoplay: true, muted: isMuted, controls: false,
+    loop: false, autopause: false, transparent: false, background: false
   });
 
   player.ready().then(function() {
-    const iframe = div.querySelector('iframe');
-    if (iframe) {
-      iframe.style.width = '100%';
-      iframe.style.height = '100%';
-    }
+    var iframe = div.querySelector('iframe');
+    if (iframe) { iframe.style.width = '100%'; iframe.style.height = '100%'; }
     if (isMuted) player.setVolume(0); else player.setVolume(1);
-    player.setCurrentTime(customSeekTo !== undefined ? Number(customSeekTo) : Number(startSec));
+    var seekTo = customSeekTo !== undefined ? Number(customSeekTo) : segs[0].start;
+    player.setCurrentTime(seekTo);
     player.play();
-
-    window.seeLearnVideoTimers[cellId] = setInterval(() => {
+    window.seeLearnVideoTimers[cellId] = setInterval(function() {
       player.getCurrentTime().then(function(t) {
-        if (t >= endSec || t < Number(startSec)) {
-          player.setCurrentTime(customSeekTo !== undefined ? Number(customSeekTo) : Number(startSec));
+        var seg = segs[segIdx];
+        if (t >= seg.start + seg.dur || t < seg.start - 0.5) {
+          segIdx = (segIdx + 1) % segs.length;
+          player.setCurrentTime(segs[segIdx].start);
           player.play();
         }
-      }).catch(function(){});
+      }).catch(function() {});
     }, 100);
   });
 
   player.on('ended', function() {
-    player.setCurrentTime(customSeekTo !== undefined ? Number(customSeekTo) : Number(startSec));
+    segIdx = (segIdx + 1) % segs.length;
+    player.setCurrentTime(segs[segIdx].start);
     player.play();
   });
 
@@ -193,184 +206,351 @@ window.mountVimeoClip = async function(hostEl, url, startSec, dur, isMuted, cust
 };
 
 window.cleanupAllVideos = function() {
-  for (const cid in window.seeLearnVideoTimers) clearInterval(window.seeLearnVideoTimers[cid]);
-  window.seeLearnVideoTimers = {};
+  for (var cid in window.seeLearnVideoTimers) clearInterval(window.seeLearnVideoTimers[cid]);
+  window.seeLearnVideoTimers  = {};
   window.seeLearnVideoPlayers = {};
 };
 
-
+// ─── VIDEO EDITOR (multi-segment) ────────────────────────────────────────────
 window.openVideoEditor = function(it) {
-  const parsed = window.parseVideoAsset(it.VidRange) || {start: 0, dur: 1};
-  let currentStart = parsed.start;
-  let currentDur = parsed.dur;
-  let currentMute = it.Mute !== "0";
+  var rawSegs = window.parseVideoAsset(it.VidRange);
+  var segs = rawSegs ? rawSegs.map(function(s) { return { start: s.start, dur: s.dur }; })
+                     : [{ start: 0, dur: 1 }];
+  var activeSegIdx = 0;
+  var currentMute  = it.Mute !== '0';
 
-  const overlay = document.createElement('div');
-  overlay.id = 'video-editor-overlay';
-  overlay.style.cssText = 'position:fixed; z-index:99999; left:10%; top:10%; width:80%; height:80%; background:#222; border:2px solid #8ef; display:flex; flex-direction:column; box-shadow: 0 10px 30px rgba(0,0,0,0.8); font-family:sans-serif; color:#fff; border-radius:8px; overflow:hidden;';
+  var overlay = document.createElement('div');
+  overlay.id  = 'video-editor-overlay';
+  overlay.style.cssText = 'position:fixed;z-index:99999;left:5%;top:5%;width:90%;height:90%;'
+    + 'background:#1a1a1a;border:2px solid #8ef;display:flex;flex-direction:column;'
+    + 'box-shadow:0 10px 40px rgba(0,0,0,0.9);font-family:sans-serif;color:#fff;'
+    + 'border-radius:10px;overflow:hidden;';
 
-  overlay.innerHTML = `
-    <style>
-      .ved-num-input::-webkit-inner-spin-button, .ved-num-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-      .ved-num-input { -moz-appearance: textfield; text-align: center; font-size: 16px; font-weight: bold; }
-      .ved-btn { width: 44px; height: 44px; font-size: 24px; font-weight: bold; background: #444; border: 1px solid #666; color: #fff; cursor: pointer; border-radius: 4px; display: flex; align-items: center; justify-content: center; user-select: none; }
-      .ved-btn:hover { background: #5a5a5a; }
-      .ved-btn:active { background: #8ef; color:#000; }
-    </style>
-    <div style="display:flex; justify-content:space-between; padding:10px 15px; background:#111; border-bottom:1px solid #444;">
-      <h3 style="margin:0; font-size:16px;">Video Editor - Cell ${it.cell || 'Unassigned'}</h3>
-      <button id="ved-close" style="background:none; border:none; color:#f66; font-size:18px; cursor:pointer;" title="Close without saving">&#10006;</button>
-    </div>
-    <div style="display:flex; flex:1; overflow:hidden;">
-      <div style="flex:1; background:#000; position:relative; display:flex; flex-direction:column;">
-        <div id="editor-vid-host" style="flex:1; width:100%; position:relative; pointer-events:none;"></div>
-      </div>
-      <div style="width:300px; padding:20px; background:#1a1a1a; display:flex; flex-direction:column; gap:24px; border-left:1px solid #444; overflow-y:auto;">
-         <div>
-           <label style="display:block; margin-bottom:8px; font-size:13px; color:#ccc;">Start Time (sec) [L / R]</label>
-           <div style="display:flex; gap:6px;">
-             <input type="number" id="ved-start" class="ved-num-input" value="${currentStart}" min="0" step="0.1" style="flex:1; width:100%; padding:8px; box-sizing:border-box; background:#333; color:#fff; border:1px solid #555; border-radius:4px;">
-             <div class="ved-btn" id="ved-start-dec">-</div>
-             <div class="ved-btn" id="ved-start-inc">+</div>
-           </div>
-         </div>
-         <div>
-           <label style="display:block; margin-bottom:8px; font-size:13px; color:#ccc;">Duration (sec) [Down / Up]</label>
-           <div style="display:flex; gap:6px;">
-             <input type="number" id="ved-dur" class="ved-num-input" value="${currentDur}" min="0.1" step="0.1" style="flex:1; width:100%; padding:8px; box-sizing:border-box; background:#333; color:#fff; border:1px solid #555; border-radius:4px;">
-             <div class="ved-btn" id="ved-dur-dec">-</div>
-             <div class="ved-btn" id="ved-dur-inc">+</div>
-           </div>
-         </div>
-         <div>
-           <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:14px; user-select:none; padding:8px 0;">
-             <input type="checkbox" id="ved-mute" ${currentMute ? 'checked' : ''} style="width:18px; height:18px;">
-             Muted Preview
-           </label>
-         </div>
-         <button id="ved-save" style="margin-top:auto; padding:14px; background:#8ef; color:#000; border:none; border-radius:6px; font-weight:bold; cursor:pointer; font-size:15px; text-transform:uppercase; box-shadow:0 2px 5px rgba(0,0,0,0.5);">Save (^S)</button>
-      </div>
-    </div>
-  `;
+  overlay.innerHTML = '<style>'
+    + '.v2btn{min-width:38px;height:34px;font-size:12px;font-weight:bold;'
+    + 'background:#2a2a2a;border:1px solid #555;color:#ddd;cursor:pointer;'
+    + 'border-radius:4px;display:inline-flex;align-items:center;justify-content:center;'
+    + 'user-select:none;padding:0 6px;}'
+    + '.v2btn:hover{background:#3a3a3a;border-color:#8ef;color:#fff;}'
+    + '.v2btn:active{background:#8ef;color:#000;}'
+    + '.v2num{width:72px;text-align:center;font-size:15px;font-weight:bold;'
+    + 'background:#111;color:#fff;border:1px solid #555;border-radius:4px;padding:5px;}'
+    + '.v2num::-webkit-inner-spin-button,.v2num::-webkit-outer-spin-button{-webkit-appearance:none;}'
+    + '.v2num{-moz-appearance:textfield;}'
+    + '.v2segbtn{padding:5px 12px;border-radius:4px;border:1px solid #555;'
+    + 'background:#2a2a2a;color:#ccc;cursor:pointer;font-size:13px;}'
+    + '.v2segbtn.active{border-color:#8ef;background:#0a1a2a;color:#8ef;font-weight:bold;}'
+    + '</style>'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;'
+    + 'padding:10px 16px;background:#111;border-bottom:1px solid #333;flex-shrink:0;">'
+    + '<span style="font-size:15px;font-weight:bold;">&#9658; Video Editor &mdash; Cell '
+    + (it.cell||'?') + ' &nbsp;<span id="v2segcount" style="font-size:12px;color:#888;"></span></span>'
+    + '<div style="display:flex;gap:10px;align-items:center;">'
+    + '<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">'
+    + '<input type="checkbox" id="v2mute" style="width:15px;height:15px;"'
+    + (currentMute?' checked':'') + '> Muted</label>'
+    + '<button id="v2save" style="padding:8px 20px;background:#8ef;color:#000;border:none;'
+    + 'border-radius:5px;font-weight:bold;cursor:pointer;font-size:14px;">Save (^S)</button>'
+    + '<button id="v2close" style="padding:8px 14px;background:none;border:1px solid #f66;'
+    + 'color:#f66;border-radius:5px;cursor:pointer;font-size:14px;">&#10005; Close</button>'
+    + '</div></div>'
+    + '<div style="display:flex;flex:1;overflow:hidden;">'
+    // Video column
+    + '<div style="flex:1;display:flex;flex-direction:column;background:#000;min-width:0;">'
+    + '<div id="v2host" style="flex:1;position:relative;pointer-events:none;overflow:hidden;"></div>'
+    // Timeline
+    + '<div style="flex-shrink:0;padding:8px 12px;background:#111;border-top:1px solid #333;">'
+    + '<div style="font-size:11px;color:#666;margin-bottom:3px;">'
+    + 'Timeline &mdash; Ctrl+click empty area = add segment &middot; Ctrl+click band = delete</div>'
+    + '<div id="v2timeline" style="position:relative;height:36px;background:#222;'
+    + 'border-radius:4px;cursor:crosshair;border:1px solid #444;overflow:hidden;user-select:none;"></div>'
+    + '<div style="display:flex;justify-content:space-between;margin-top:3px;">'
+    + '<span id="v2tstart" style="font-size:11px;color:#555;">0s</span>'
+    + '<span id="v2tcur"   style="font-size:12px;color:#8ef;font-weight:bold;">0.0s</span>'
+    + '<span id="v2tend"   style="font-size:11px;color:#555;"></span></div>'
+    + '</div></div>'
+    // Right panel
+    + '<div style="width:260px;flex-shrink:0;padding:14px;background:#1e1e1e;'
+    + 'border-left:1px solid #333;display:flex;flex-direction:column;gap:14px;overflow-y:auto;">'
+    + '<div><div style="font-size:11px;color:#888;margin-bottom:5px;">Segment (Tab to cycle)</div>'
+    + '<div id="v2segtabs" style="display:flex;gap:5px;flex-wrap:wrap;"></div></div>'
+    + '<div><div style="font-size:11px;color:#888;margin-bottom:5px;">Start time (sec)</div>'
+    + '<div style="display:flex;align-items:center;gap:4px;margin-bottom:5px;">'
+    + '<input type="number" id="v2start" class="v2num" min="0" step="0.1"></div>'
+    + '<div style="display:flex;gap:3px;">'
+    + '<button class="v2btn" id="vs---">&#8722;&#8722;&#8722;</button>'
+    + '<button class="v2btn" id="vs--">&#8722;&#8722;</button>'
+    + '<button class="v2btn" id="vs-">&#8722;</button>'
+    + '<div style="flex:1"></div>'
+    + '<button class="v2btn" id="vs+">+</button>'
+    + '<button class="v2btn" id="vs++">++</button>'
+    + '<button class="v2btn" id="vs+++">+++</button>'
+    + '</div></div>'
+    + '<div><div style="font-size:11px;color:#888;margin-bottom:5px;">Duration (sec)</div>'
+    + '<div style="display:flex;align-items:center;gap:4px;margin-bottom:5px;">'
+    + '<input type="number" id="v2dur" class="v2num" min="0.1" step="0.1"></div>'
+    + '<div style="display:flex;gap:3px;">'
+    + '<button class="v2btn" id="vd---">&#8722;&#8722;&#8722;</button>'
+    + '<button class="v2btn" id="vd--">&#8722;&#8722;</button>'
+    + '<button class="v2btn" id="vd-">&#8722;</button>'
+    + '<div style="flex:1"></div>'
+    + '<button class="v2btn" id="vd+">+</button>'
+    + '<button class="v2btn" id="vd++">++</button>'
+    + '<button class="v2btn" id="vd+++">+++</button>'
+    + '</div></div>'
+    + '<button id="v2addseg" style="padding:7px;border-radius:4px;border:1px solid #4af;'
+    + 'background:rgba(0,80,180,0.2);color:#8ef;cursor:pointer;font-size:13px;">+ Add segment</button>'
+    + '<button id="v2delseg" style="padding:7px;border-radius:4px;border:1px solid #f66;'
+    + 'background:rgba(180,0,0,0.2);color:#f88;cursor:pointer;font-size:13px;">&#10005; Delete this segment</button>'
+    + '<div><div style="font-size:11px;color:#888;margin-bottom:4px;">VidRange value</div>'
+    + '<div id="v2vrprev" style="font-size:12px;color:#8ef;word-break:break-all;'
+    + 'background:#111;padding:5px;border-radius:4px;border:1px solid #333;'
+    + 'font-family:monospace;min-height:20px;"></div></div>'
+    + '</div></div>';
+
   document.body.appendChild(overlay);
 
-  const host = document.getElementById('editor-vid-host');
-  const iStart = document.getElementById('ved-start');
-  const iDur = document.getElementById('ved-dur');
-  const iMute = document.getElementById('ved-mute');
+  // Element refs
+  var host      = document.getElementById('v2host');
+  var iStart    = document.getElementById('v2start');
+  var iDur      = document.getElementById('v2dur');
+  var iMute     = document.getElementById('v2mute');
+  var timeline  = document.getElementById('v2timeline');
+  var tCur      = document.getElementById('v2tcur');
+  var tEnd      = document.getElementById('v2tend');
+  var segTabs   = document.getElementById('v2segtabs');
+  var vrPrev    = document.getElementById('v2vrprev');
+  var segCount  = document.getElementById('v2segcount');
 
-  const formatDec = (val) => parseFloat(Number(val).toFixed(1));
+  var fmt = function(v) { return parseFloat(Number(v).toFixed(1)); };
 
-  const applyUI = () => {
-    iStart.value = currentStart;
-    iDur.value = currentDur;
-  };
+  // Visible timeline window: end of last segment + buffer
+  function calcEnd() {
+    return Math.max.apply(null, segs.map(function(s) { return s.start + s.dur; })) + 30;
+  }
 
-  const mountPreview = (customSeekTo) => {
-     currentStart = formatDec(iStart.value) || 0;
-     currentDur = formatDec(iDur.value) || 0.1;
-     currentMute = iMute.checked;
+  // ── Timeline ────────────────────────────────────────────────────────────
+  var COLOURS = ['#2a6ef5','#e5732a','#2aa87a','#c03ec0','#c0c03e','#e53a3a'];
 
-     if (window.isYouTubeLink(it.link)) {
-       window.mountYouTubeClip(host, it.link, currentStart, currentDur, currentMute, customSeekTo);
-     } else if (window.isVimeoLink(it.link)) {
-       window.mountVimeoClip(host, it.link, currentStart, currentDur, currentMute, customSeekTo);
-     }
-  };
+  function renderTimeline(curT) {
+    timeline.innerHTML = '';
+    var W   = timeline.offsetWidth || 600;
+    var end = calcEnd();
+    var sc  = W / end;
+    tEnd.textContent = end.toFixed(0) + 's';
 
-  const updatePreviewNormal = () => mountPreview();
+    segs.forEach(function(seg, i) {
+      var x = seg.start * sc;
+      var w = Math.max(seg.dur * sc, 4);
+      var band = document.createElement('div');
+      var isActive = i === activeSegIdx;
+      band.style.cssText = 'position:absolute;top:3px;height:30px;'
+        + 'left:' + x + 'px;width:' + w + 'px;'
+        + 'background:' + COLOURS[i % COLOURS.length] + ';'
+        + 'opacity:' + (isActive ? 0.9 : 0.4) + ';'
+        + 'border-radius:3px;'
+        + 'border:' + (isActive ? '2px solid #fff' : '1px solid rgba(255,255,255,0.25)') + ';'
+        + 'display:flex;align-items:center;justify-content:center;'
+        + 'font-size:10px;color:#fff;font-weight:bold;cursor:pointer;overflow:hidden;';
+      band.textContent = (i + 1);
+      band.addEventListener('click', function(e) {
+        if (!e.ctrlKey) setActiveSeg(i);
+      });
+      timeline.appendChild(band);
+    });
 
-  const previewEndIfChanged = () => {
-    let startPreview = Math.max(0, currentStart + currentDur - 2);
-    if (startPreview < currentStart) startPreview = currentStart;
-    mountPreview(startPreview);
-  };
-
-  let debounce;
-  const onChangeStart = () => {
-    clearTimeout(debounce);
-    debounce = setTimeout(updatePreviewNormal, 500);
-  };
-
-  let debounceDur;
-  const onChangeDur = () => {
-    clearTimeout(debounceDur);
-    debounceDur = setTimeout(previewEndIfChanged, 500);
-  };
-
-  const changeVal = (type, delta) => {
-    if (type === 'start') {
-      currentStart = formatDec(Math.max(0, currentStart + delta));
-      applyUI();
-      onChangeStart();
-    } else {
-      currentDur = formatDec(Math.max(0.1, currentDur + delta));
-      applyUI();
-      onChangeDur();
+    if (curT !== undefined) {
+      var sx = curT * sc;
+      var scrub = document.createElement('div');
+      scrub.style.cssText = 'position:absolute;top:0;bottom:0;left:' + sx + 'px;'
+        + 'width:2px;background:#fff;opacity:0.85;pointer-events:none;';
+      timeline.appendChild(scrub);
+      tCur.textContent = curT.toFixed(1) + 's';
     }
-  };
+  }
 
-  document.getElementById('ved-start-dec').addEventListener('pointerdown', (e) => { e.preventDefault(); changeVal('start', -0.1); });
-  document.getElementById('ved-start-inc').addEventListener('pointerdown', (e) => { e.preventDefault(); changeVal('start', 0.1); });
-  document.getElementById('ved-dur-dec').addEventListener('pointerdown', (e) => { e.preventDefault(); changeVal('dur', -0.1); });
-  document.getElementById('ved-dur-inc').addEventListener('pointerdown', (e) => { e.preventDefault(); changeVal('dur', 0.1); });
+  // ── Segment tabs ─────────────────────────────────────────────────────────
+  function renderSegTabs() {
+    segTabs.innerHTML = '';
+    segs.forEach(function(seg, i) {
+      var btn = document.createElement('button');
+      btn.className = 'v2segbtn' + (i === activeSegIdx ? ' active' : '');
+      btn.textContent = 'Seg ' + (i + 1);
+      btn.title = seg.start + 's + ' + seg.dur + 's';
+      btn.addEventListener('click', function() { setActiveSeg(i); });
+      segTabs.appendChild(btn);
+    });
+    segCount.textContent = '(' + segs.length + ' segment' + (segs.length > 1 ? 's' : '') + ')';
+    vrPrev.textContent   = window.serializeSegments(segs);
+  }
 
-  iStart.addEventListener('input', onChangeStart);
-  iDur.addEventListener('input', onChangeDur);
-  iStart.addEventListener('change', updatePreviewNormal);
-  iDur.addEventListener('change', previewEndIfChanged);
-  iMute.addEventListener('change', updatePreviewNormal);
+  function setActiveSeg(i) {
+    activeSegIdx = ((i % segs.length) + segs.length) % segs.length;
+    iStart.value = segs[activeSegIdx].start;
+    iDur.value   = segs[activeSegIdx].dur;
+    renderSegTabs();
+    renderTimeline();
+    scheduleMount();
+  }
 
-  const closeEditor = () => {
-    window.stopCellVideoLoop('editor-vid-host');
+  // ── Input/delta helpers ───────────────────────────────────────────────────
+  function readInputs() {
+    segs[activeSegIdx].start = fmt(Math.max(0,   parseFloat(iStart.value) || 0));
+    segs[activeSegIdx].dur   = fmt(Math.max(0.1, parseFloat(iDur.value)   || 0.1));
+    vrPrev.textContent = window.serializeSegments(segs);
+    renderTimeline();
+    renderSegTabs();
+  }
+
+  function applyDelta(type, delta) {
+    if (type === 'start') {
+      segs[activeSegIdx].start = fmt(Math.max(0, segs[activeSegIdx].start + delta));
+      iStart.value = segs[activeSegIdx].start;
+    } else {
+      segs[activeSegIdx].dur = fmt(Math.max(0.1, segs[activeSegIdx].dur + delta));
+      iDur.value = segs[activeSegIdx].dur;
+    }
+    vrPrev.textContent = window.serializeSegments(segs);
+    renderTimeline();
+    renderSegTabs();
+    scheduleMount();
+  }
+
+  // Wire adjustment buttons: start
+  var startDeltas = { 'vs---': -5, 'vs--': -1, 'vs-': -0.1, 'vs+': 0.1, 'vs++': 1, 'vs+++': 5 };
+  Object.keys(startDeltas).forEach(function(id) {
+    document.getElementById(id).addEventListener('pointerdown', function(e) {
+      e.preventDefault(); applyDelta('start', startDeltas[id]);
+    });
+  });
+  // Wire adjustment buttons: dur
+  var durDeltas = { 'vd---': -5, 'vd--': -1, 'vd-': -0.1, 'vd+': 0.1, 'vd++': 1, 'vd+++': 5 };
+  Object.keys(durDeltas).forEach(function(id) {
+    document.getElementById(id).addEventListener('pointerdown', function(e) {
+      e.preventDefault(); applyDelta('dur', durDeltas[id]);
+    });
+  });
+
+  iStart.addEventListener('change', function() { readInputs(); scheduleMount(); });
+  iDur.addEventListener('change',   function() { readInputs(); scheduleMount(); });
+  iMute.addEventListener('change',  function() { currentMute = iMute.checked; mountPreview(); });
+
+  // ── Add / delete segment ──────────────────────────────────────────────────
+  document.getElementById('v2addseg').addEventListener('click', function() {
+    var lastSeg = segs[segs.length - 1];
+    segs.push({ start: fmt(lastSeg.start + lastSeg.dur + 2), dur: 5 });
+    setActiveSeg(segs.length - 1);
+  });
+
+  document.getElementById('v2delseg').addEventListener('click', function() {
+    if (segs.length <= 1) { alert('Need at least one segment.'); return; }
+    segs.splice(activeSegIdx, 1);
+    setActiveSeg(Math.min(activeSegIdx, segs.length - 1));
+  });
+
+  // ── Timeline ctrl+click ───────────────────────────────────────────────────
+  timeline.addEventListener('click', function(e) {
+    if (!e.ctrlKey) return;
+    var W = timeline.offsetWidth || 600;
+    var clickSec = (e.offsetX / W) * calcEnd();
+    var hitIdx = -1;
+    segs.forEach(function(s, i) {
+      if (clickSec >= s.start && clickSec <= s.start + s.dur) hitIdx = i;
+    });
+    if (hitIdx >= 0) {
+      if (segs.length <= 1) { alert('Need at least one segment.'); return; }
+      segs.splice(hitIdx, 1);
+      setActiveSeg(Math.min(activeSegIdx, segs.length - 1));
+    } else {
+      segs.push({ start: fmt(clickSec), dur: 5 });
+      setActiveSeg(segs.length - 1);
+    }
+  });
+
+  // ── Video preview ─────────────────────────────────────────────────────────
+  var mountDebounce;
+  function scheduleMount() {
+    clearTimeout(mountDebounce);
+    mountDebounce = setTimeout(mountPreview, 600);
+  }
+
+  function mountPreview() {
+    currentMute = iMute.checked;
+    readInputs();
+    var segsCopy = segs.map(function(s) { return { start: s.start, dur: s.dur }; });
+    var seekSec  = segs[activeSegIdx].start;
+    if (window.isYouTubeLink(it.link)) {
+      window.mountYouTubeClip(host, it.link, segs[0].start, segs[0].dur,
+        currentMute, seekSec, segsCopy);
+    } else if (window.isVimeoLink(it.link)) {
+      window.mountVimeoClip(host, it.link, segs[0].start, segs[0].dur,
+        currentMute, seekSec, segsCopy);
+    }
+  }
+
+  // Scrubber polling
+  var scrubTimer = setInterval(function() {
+    var p = window.seeLearnVideoPlayers['v2host'];
+    if (!p) return;
+    if (typeof p.getCurrentTime === 'function') {
+      var t = p.getCurrentTime();
+      if (t && typeof t.then === 'function') t.then(function(v) { renderTimeline(v); });
+      else if (typeof t === 'number') renderTimeline(t);
+    }
+  }, 300);
+
+  // ── Save / Close ──────────────────────────────────────────────────────────
+  function closeEditor() {
+    clearInterval(scrubTimer);
+    clearTimeout(mountDebounce);
+    window.stopCellVideoLoop('v2host');
     overlay.remove();
     document.removeEventListener('keydown', handleKey, true);
-  };
+  }
 
-  const saveEditor = () => {
-    it.VidRange = currentStart + (currentDur !== 1 ? ' ' + currentDur : '');
-    it.Mute = currentMute ? "1" : "0";
+  function saveEditor() {
+    readInputs();
+    it.VidRange = window.serializeSegments(segs);
+    it.Mute     = iMute.checked ? '1' : '0';
     localStorage.setItem('seeandlearn-links', JSON.stringify(window.linksData));
     closeEditor();
-    if (window.renderTableEditor && document.getElementById('tableEditor')) {
+    if (window.renderTableEditor && document.getElementById('tableEditor'))
       window.renderTableEditor();
+    if (window.renderGrid) window.renderGrid();
+  }
+
+  document.getElementById('v2save').addEventListener('click',  saveEditor);
+  document.getElementById('v2close').addEventListener('click', closeEditor);
+
+  // ── Keyboard ──────────────────────────────────────────────────────────────
+  function handleKey(e) {
+    if (e.ctrlKey && e.key.toLowerCase() === 's') {
+      e.preventDefault(); e.stopPropagation(); saveEditor(); return;
     }
-    if (window.renderGrid) {
-      window.renderGrid();
+    if (e.key === 'Escape') { closeEditor(); return; }
+    if (e.key === 'Tab') {
+      e.preventDefault(); e.stopPropagation();
+      setActiveSeg((activeSegIdx + 1) % segs.length);
+      return;
     }
-  };
-
-  document.getElementById('ved-close').addEventListener('click', closeEditor);
-  document.getElementById('ved-save').addEventListener('click', saveEditor);
-
-  const handleKey = (e) => {
-    const k = e.key;
-    const kl = k.toLowerCase();
-
-    if (e.ctrlKey && kl === 's') {
+    var isInput = document.activeElement &&
+      (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA');
+    var k = e.key, kl = k.toLowerCase();
+    if (kl==='l'||kl==='r'||k==='ArrowLeft'||k==='ArrowRight'||k==='ArrowUp'||k==='ArrowDown') {
+      if (isInput && (k==='ArrowLeft'||k==='ArrowRight')) return;
       e.preventDefault();
-      e.stopPropagation();
-      saveEditor();
-      return;
+      if (kl==='l'||k==='ArrowLeft')  applyDelta('start', -0.1);
+      if (kl==='r'||k==='ArrowRight') applyDelta('start',  0.1);
+      if (k==='ArrowDown')            applyDelta('dur',   -0.1);
+      if (k==='ArrowUp')              applyDelta('dur',    0.1);
     }
-
-    if (k === 'Escape') {
-      closeEditor();
-      return;
-    }
-
-    const isInput = document.activeElement && document.activeElement.tagName === 'INPUT';
-
-    if (kl === 'l' || kl === 'r' || k === 'ArrowLeft' || k === 'ArrowRight' || k === 'ArrowUp' || k === 'ArrowDown') {
-      if (isInput && (k === 'ArrowLeft' || k === 'ArrowRight')) return; 
-      e.preventDefault(); 
-      if (kl === 'l' || k === 'ArrowLeft') changeVal('start', -0.1);
-      if (kl === 'r' || k === 'ArrowRight') changeVal('start', 0.1);
-      if (k === 'ArrowDown') changeVal('dur', -0.1);
-      if (k === 'ArrowUp') changeVal('dur', 0.1);
-    }
-  };
-
+  }
   document.addEventListener('keydown', handleKey, true);
-  updatePreviewNormal();
+
+  // ── Initial render ────────────────────────────────────────────────────────
+  iStart.value = segs[0].start;
+  iDur.value   = segs[0].dur;
+  renderSegTabs();
+  renderTimeline();
+  mountPreview();
 };

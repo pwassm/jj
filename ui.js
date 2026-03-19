@@ -14,10 +14,11 @@ window.openFS = function(it) {
     fs.appendChild(vidHost);
     const parsed = window.parseVideoAsset(it.VidRange);
     if (parsed) {
+      const seg0 = parsed[0];
       if (window.isYouTubeLink(it.link) && window.mountYouTubeClip)
-        window.mountYouTubeClip(vidHost, it.link, parsed.start, parsed.dur, it.Mute !== '0');
+        window.mountYouTubeClip(vidHost, it.link, seg0.start, seg0.dur, it.Mute !== '0', undefined, parsed);
       else if (window.isVimeoLink(it.link) && window.mountVimeoClip)
-        window.mountVimeoClip(vidHost, it.link, parsed.start, parsed.dur, it.Mute !== '0');
+        window.mountVimeoClip(vidHost, it.link, seg0.start, seg0.dur, it.Mute !== '0', undefined, parsed);
     }
   } else {
     const img = document.createElement('img');
