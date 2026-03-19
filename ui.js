@@ -363,82 +363,118 @@ window.renderTableEditor = function() {
     }
 
     // ── makeCommaListEditor: comma-separated multi-entry for cname ───────────
-    // Typing a comma polls the dictionary for the next token.
-    // The full cell value is stored as "Entry1, Entry2, Entry3".
-    // The dictionary shows completions for the LAST (in-progress) token.
+    // After each comma, shows a dropdown filtered to the last token.
+    // Uses a custom dropdown div (not native datalist) so it filters by
+    // last token rather than the whole input value.
     function makeCommaListEditor(valsList) {
       return function(cell, onRendered, success, cancel) {
-        // Build a flat deduplicated list from all comma-separated values in data
-        const allVals = new Set(valsList);
-        // Also expand comma-separated values already in the data
+        // Expand any comma-separated values in valsList into individual terms
+        const termSet = new Set();
         valsList.forEach(v => {
-          v.split(',').map(s => s.trim()).filter(Boolean).forEach(t => allVals.add(t));
+          v.split(',').map(s => s.trim()).filter(Boolean).forEach(t => termSet.add(t));
         });
-        const terms = Array.from(allVals).sort();
-
-        const dlId = 'dl_' + Math.random().toString(36).slice(2);
-        const dl   = document.createElement('datalist');
-        dl.id = dlId;
-
-        function rebuildList(prefix) {
-          dl.innerHTML = '';
-          const p = prefix.toLowerCase();
-          terms.filter(t => !p || t.toLowerCase().startsWith(p)).forEach(t => {
-            const opt = document.createElement('option'); opt.value = t; dl.appendChild(opt);
-          });
-        }
+        const terms = Array.from(termSet).sort();
 
         const inp = document.createElement('input');
         inp.type = 'text';
-        inp.setAttribute('list', dlId);
         inp.value = cell.getValue() || '';
         inp.style.cssText = 'width:100%;height:100%;border:none;padding:2px 4px;'
-          + 'background:#0d1a2a;color:#fff;font-size:13px;outline:none;box-sizing:border-box;';
+          + 'background:#0d1a2a;color:#fff;font-size:13px;outline:none;box-sizing:border-box;position:relative;z-index:1;';
+
+        // Custom dropdown — appended to document.body to escape any overflow:hidden parents
+        const dd = document.createElement('div');
+        dd.style.cssText = 'position:fixed;z-index:99999;background:#1a2a3a;border:1px solid #4af;'
+          + 'border-radius:0 0 6px 6px;max-height:160px;overflow-y:auto;display:none;'
+          + 'font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,0.6);';
+        document.body.appendChild(dd);
+
+        function positionDropdown() {
+          const r = inp.getBoundingClientRect();
+          dd.style.left  = r.left + 'px';
+          dd.style.top   = (r.bottom) + 'px';
+          dd.style.width = r.width + 'px';
+        }
+
+        function getLastToken() {
+          const parts = inp.value.split(',');
+          return parts[parts.length - 1].trimStart();
+        }
+
+        function showDropdown() {
+          const token    = getLastToken();
+          const filtered = token
+            ? terms.filter(t => t.toLowerCase().startsWith(token.toLowerCase()))
+            : terms;
+          dd.innerHTML = '';
+          if (!filtered.length) { dd.style.display = 'none'; return; }
+          filtered.forEach(t => {
+            const item = document.createElement('div');
+            item.textContent = t;
+            item.style.cssText = 'padding:7px 10px;cursor:pointer;color:#cef;border-bottom:1px solid #244;';
+            item.addEventListener('mouseenter', () => item.style.background = '#1a3a5a');
+            item.addEventListener('mouseleave', () => item.style.background = '');
+            item.addEventListener('mousedown', e => {
+              e.preventDefault();
+              const parts = inp.value.split(',');
+              parts[parts.length - 1] = ' ' + t;
+              inp.value = parts.join(',') + ', ';
+              dd.style.display = 'none';
+              inp.focus();
+              showDropdown();
+            });
+            dd.appendChild(item);
+          });
+          positionDropdown();
+          dd.style.display = 'block';
+        }
+
+        function hideDropdown() {
+          dd.style.display = 'none';
+        }
+
+        function cleanup() {
+          hideDropdown();
+          if (dd.parentNode) dd.parentNode.removeChild(dd);
+        }
 
         const wrap = document.createElement('div');
-        wrap.style.cssText = 'width:100%;height:100%;display:flex;align-items:center;';
-        wrap.appendChild(dl); wrap.appendChild(inp);
+        wrap.style.cssText = 'width:100%;height:100%;display:flex;align-items:center;position:relative;';
+        wrap.appendChild(inp);
 
-        // Rebuild datalist showing completions for the last token
-        function updateList() {
-          const parts = inp.value.split(',');
-          const lastToken = parts[parts.length - 1].trimStart();
-          rebuildList(lastToken);
-        }
+        onRendered(() => { inp.focus(); inp.select(); showDropdown(); });
 
-        // When user picks from datalist or types a comma, splice in the completion
-        function onCommaOrPick() {
-          const raw   = inp.value;
-          const parts = raw.split(',');
-          const last  = parts[parts.length - 1].trim();
-          // Check if last token matches a dictionary entry exactly (case-insensitive)
-          const match = terms.find(t => t.toLowerCase() === last.toLowerCase());
-          if (match) parts[parts.length - 1] = ' ' + match;
-          inp.value = parts.join(',');
-          updateList();
-        }
+        inp.addEventListener('input', showDropdown);
+        inp.addEventListener('focus', showDropdown);
+        inp.addEventListener('blur', () => setTimeout(hideDropdown, 150));
 
-        onRendered(() => { inp.focus(); inp.select(); updateList(); });
-
-        inp.addEventListener('input', () => {
-          const val = inp.value;
-          // Comma typed → complete current token
-          if (val.endsWith(',')) {
-            onCommaOrPick();
-            // Move cursor to end so user types next entry
-            setTimeout(() => { inp.value = inp.value; inp.selectionStart = inp.selectionEnd = inp.value.length; }, 0);
-          }
-          updateList();
-        });
-
-        inp.addEventListener('change',  () => { onCommaOrPick(); success(inp.value.trim()); });
-        inp.addEventListener('blur',    () => { onCommaOrPick(); success(inp.value.trim()); });
         inp.addEventListener('keydown', e => {
           e.stopPropagation();
-          if (e.key === 'Enter')  { e.preventDefault(); onCommaOrPick(); success(inp.value.trim()); }
-          if (e.key === 'Escape') { e.preventDefault(); cancel(); }
-          if (e.key === 'Tab')    { onCommaOrPick(); success(inp.value.trim()); }
+          if (e.key === 'Enter')  { e.preventDefault(); cleanup(); success(inp.value.trim()); }
+          if (e.key === 'Escape') { e.preventDefault(); cleanup(); cancel(); }
+          if (e.key === 'Tab')    { cleanup(); success(inp.value.trim()); }
+          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            // Navigate dropdown with arrows
+            const items = dd.querySelectorAll('div');
+            if (!items.length) return;
+            e.preventDefault();
+            const focused = dd.querySelector('.dd-focus');
+            let idx = focused ? Array.from(items).indexOf(focused) : -1;
+            if (focused) focused.classList.remove('dd-focus');
+            idx = e.key === 'ArrowDown' ? Math.min(idx + 1, items.length - 1)
+                                        : Math.max(idx - 1, 0);
+            items[idx].classList.add('dd-focus');
+            items[idx].style.background = '#2a4a6a';
+            items[idx].scrollIntoView({ block: 'nearest' });
+          }
+          // Enter on a focused dropdown item
+          if (e.key === 'Enter') {
+            const focused = dd.querySelector('.dd-focus');
+            if (focused) { focused.dispatchEvent(new MouseEvent('mousedown')); }
+          }
         });
+
+        cell.getElement().addEventListener('keydown', () => cleanup());
+
         return wrap;
       };
     }
