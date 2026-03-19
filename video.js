@@ -487,22 +487,63 @@ window.openVideoEditor = function(it) {
   });
 
   // ── Timeline click + drag scrubbing ──────────────────────────────────────
-  // Plain click/drag: scrub to position — uses approximate seek (fast, nearest keyframe)
-  // Ctrl+click: add or delete segment
+  // Drag scrubs through the video using the EXISTING player (no re-mount).
+  // The loop interval is suspended during the drag so the looper doesn't
+  // immediately snap back to segStart. On release the loop resumes.
   var isDraggingScrub = false;
+
+  function getEditorPlayer() {
+    return window.seeLearnVideoPlayers['v2host'] || null;
+  }
+
+  // Suspend the loop interval (don't destroy player)
+  function suspendLoop() {
+    if (window.seeLearnVideoTimers['v2host']) {
+      clearInterval(window.seeLearnVideoTimers['v2host']);
+      delete window.seeLearnVideoTimers['v2host'];
+    }
+  }
+
+  // Resume loop for the active segment on the existing player
+  function resumeLoop(p, segStart, segDur) {
+    suspendLoop();
+    var endT = segStart + segDur;
+    if (!p) return;
+    // YT player
+    if (typeof p.playVideo === 'function') {
+      try { p.playVideo(); } catch(ex) {}
+      window.seeLearnVideoTimers['v2host'] = setInterval(function() {
+        try {
+          var t = p.getCurrentTime();
+          if (t >= endT || t < segStart - 0.5) {
+            p.seekTo(segStart, true); p.playVideo();
+          }
+        } catch(ex) {}
+      }, 100);
+    // Vimeo player
+    } else if (typeof p.play === 'function') {
+      p.play().catch(function(){});
+      window.seeLearnVideoTimers['v2host'] = setInterval(function() {
+        p.getCurrentTime().then(function(t) {
+          if (t >= endT || t < segStart - 0.5) {
+            p.setCurrentTime(segStart); p.play();
+          }
+        }).catch(function(){});
+      }, 100);
+    }
+  }
 
   function scrubToSec(sec) {
     var clamped = Math.max(0, Math.min(sec, calcEnd()));
     renderTimeline(clamped);
     tCur.textContent = clamped.toFixed(1) + 's';
-    // Approximate seek = fast (false = nearest keyframe, no decode wait)
-    var p = window.seeLearnVideoPlayers['v2host'];
-    if (p) {
-      if (typeof p.seekTo === 'function') {
-        try { p.seekTo(clamped, false); } catch(ex) {}
-      } else if (p.setCurrentTime) {
-        p.setCurrentTime(clamped).catch(function(){});
-      }
+    var p = getEditorPlayer();
+    if (!p) return;
+    // Approximate seek — fast, nearest keyframe
+    if (typeof p.seekTo === 'function') {
+      try { p.seekTo(clamped, false); } catch(ex) {}
+    } else if (p.setCurrentTime) {
+      p.setCurrentTime(clamped).catch(function(){});
     }
   }
 
@@ -513,13 +554,14 @@ window.openVideoEditor = function(it) {
   }
 
   timeline.addEventListener('pointerdown', function(e) {
-    if (e.ctrlKey) return;  // ctrl handled in click
+    if (e.ctrlKey) return;
     e.preventDefault();
     isDraggingScrub = true;
     timeline.setPointerCapture(e.pointerId);
-    // Stop loop so scrub is visible
     clearTimeout(mountDebounce);
-    var p = window.seeLearnVideoPlayers['v2host'];
+    // Pause loop — keep player alive
+    suspendLoop();
+    var p = getEditorPlayer();
     if (p && typeof p.pauseVideo === 'function') try { p.pauseVideo(); } catch(ex) {}
     else if (p && p.pause) p.pause().catch(function(){});
     scrubToSec(timelineSecFromEvent(e));
@@ -535,17 +577,30 @@ window.openVideoEditor = function(it) {
     isDraggingScrub = false;
     var sec = timelineSecFromEvent(e);
     scrubToSec(sec);
-    // After releasing, resume looping from dragged position
-    scheduleMount('scrub_' + sec);
+    // Resume loop from scrub position on the existing player
+    var seg = segs[activeSegIdx];
+    var p   = getEditorPlayer();
+    if (p) {
+      // Seek to exact scrub position first, then resume loop
+      if (typeof p.seekTo === 'function') try { p.seekTo(sec, true); } catch(ex) {}
+      else if (p.setCurrentTime) p.setCurrentTime(sec).catch(function(){});
+      setTimeout(function() { resumeLoop(p, seg.start, seg.dur); }, 200);
+    } else {
+      // Player not ready — fall back to full remount
+      scheduleMount('start');
+    }
   });
 
   timeline.addEventListener('pointercancel', function() {
+    if (!isDraggingScrub) return;
     isDraggingScrub = false;
+    var seg = segs[activeSegIdx];
+    resumeLoop(getEditorPlayer(), seg.start, seg.dur);
   });
 
   timeline.addEventListener('click', function(e) {
-    if (!e.ctrlKey) return;  // plain click/drag handled by pointer events above
-    var W       = timeline.offsetWidth || 600;
+    if (!e.ctrlKey) return;
+    var W = timeline.offsetWidth || 600;
     var clickSec = (e.offsetX / W) * calcEnd();
     var hitIdx = -1;
     segs.forEach(function(s, i) {
@@ -721,19 +776,9 @@ window.openVideoEditor = function(it) {
     pendingMountType = type || 'start';
     clearTimeout(mountDebounce);
     mountDebounce = setTimeout(function() {
-      if (pendingMountType === 'end') {
-        mountEndPreview();
-      } else if (String(pendingMountType).startsWith('scrub_')) {
-        // Resume loop from wherever user scrubbed to
-        var seekSec = parseFloat(String(pendingMountType).replace('scrub_', '')) || segs[activeSegIdx].start;
-        currentMute = iMute.checked;
-        readInputs();
-        var seg = segs[activeSegIdx];
-        _mountEditorPlayer(seg.start, seg.dur, seekSec, true, null);
-      } else {
-        mountLoop();
-      }
-    }, 600);
+      if (pendingMountType === 'end') mountEndPreview();
+      else mountLoop();
+    }, 500);
   }
 
   // ── Scrubber position polling ─────────────────────────────────────────────

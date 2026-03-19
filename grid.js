@@ -105,7 +105,7 @@ function buildOverlays(){
       div.appendChild(lbl);
     }
 
-    const isVidNode = window.parseVideoAsset && window.parseVideoAsset(assetVal) !== null;
+    const isVidNode = !isIg && window.parseVideoAsset && window.parseVideoAsset(assetVal) !== null;
 
     let startX = 0, startY = 0, isDragging = false;
 
@@ -122,10 +122,11 @@ function buildOverlays(){
     div.addEventListener('pointerup', e => {
       if (!isDragging) return;
       isDragging = false;
+      if (isIg) return;  // Instagram card handles its own clicks
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
 
-      // Swipe Right -> Full Screen (made more tolerant for mobile)
+      // Swipe Right -> Full Screen
       if (dx > 25 && Math.abs(dy) < Math.abs(dx) * 1.5) {
          e.stopPropagation();
          window.openFS(it);

@@ -93,7 +93,15 @@ function getDistinctVals(field) {
   const s = new Set();
   linksData.forEach(r => {
     const v = r[field];
-    if (v !== undefined && v !== null && String(v).trim()) s.add(String(v));
+    if (v === undefined || v === null) return;
+    const str = String(v).trim();
+    if (!str) return;
+    if (field === 'cname') {
+      // Split comma-separated cname values into individual terms
+      str.split(',').map(t => t.trim()).filter(Boolean).forEach(t => s.add(t));
+    } else {
+      s.add(str);
+    }
   });
   return Array.from(s).sort();
 }
@@ -323,18 +331,14 @@ window.renderTableEditor = function() {
       }
     };
 
-    // Build a custom editor using native <datalist> for cname, sname, v.author.
-    // Tabulator's built-in 'list' editor with autocomplete is unreliable in 6.2.1 —
-    // it shows nothing while typing. Native <datalist> works in every browser.
+    // ── makeDatalistEditor: plain autocomplete (sname, v.author) ────────────
     function makeDatalistEditor(valsList) {
       return function(cell, onRendered, success, cancel) {
         const dlId = 'dl_' + Math.random().toString(36).slice(2);
-        const dl = document.createElement('datalist');
+        const dl   = document.createElement('datalist');
         dl.id = dlId;
         valsList.forEach(v => {
-          const opt = document.createElement('option');
-          opt.value = v;
-          dl.appendChild(opt);
+          const opt = document.createElement('option'); opt.value = v; dl.appendChild(opt);
         });
         const inp = document.createElement('input');
         inp.type = 'text';
@@ -344,28 +348,103 @@ window.renderTableEditor = function() {
           + 'background:#0d1a2a;color:#fff;font-size:13px;outline:none;box-sizing:border-box;';
         const wrap = document.createElement('div');
         wrap.style.cssText = 'width:100%;height:100%;display:flex;align-items:center;';
-        wrap.appendChild(dl);
-        wrap.appendChild(inp);
+        wrap.appendChild(dl); wrap.appendChild(inp);
         onRendered(() => { inp.focus(); inp.select(); });
-        inp.addEventListener('change',  () => success(inp.value));
-        inp.addEventListener('blur',    () => success(inp.value));
+        inp.addEventListener('change', () => success(inp.value));
+        inp.addEventListener('blur',   () => success(inp.value));
         inp.addEventListener('keydown', e => {
-          // Stop ALL key events from bubbling to Tabulator while this editor is open.
-          // ArrowDown/Up must go to the datalist dropdown, not move table rows.
-          // Enter/Escape/Tab commit or cancel the edit.
           e.stopPropagation();
           if (e.key === 'Enter')  { e.preventDefault(); success(inp.value); }
           if (e.key === 'Escape') { e.preventDefault(); cancel(); }
-          // Tab: commit and let default tab behaviour move focus naturally
           if (e.key === 'Tab')    { success(inp.value); }
-          // ArrowDown/Up: let browser show/navigate datalist — do nothing extra
+        });
+        return wrap;
+      };
+    }
+
+    // ── makeCommaListEditor: comma-separated multi-entry for cname ───────────
+    // Typing a comma polls the dictionary for the next token.
+    // The full cell value is stored as "Entry1, Entry2, Entry3".
+    // The dictionary shows completions for the LAST (in-progress) token.
+    function makeCommaListEditor(valsList) {
+      return function(cell, onRendered, success, cancel) {
+        // Build a flat deduplicated list from all comma-separated values in data
+        const allVals = new Set(valsList);
+        // Also expand comma-separated values already in the data
+        valsList.forEach(v => {
+          v.split(',').map(s => s.trim()).filter(Boolean).forEach(t => allVals.add(t));
+        });
+        const terms = Array.from(allVals).sort();
+
+        const dlId = 'dl_' + Math.random().toString(36).slice(2);
+        const dl   = document.createElement('datalist');
+        dl.id = dlId;
+
+        function rebuildList(prefix) {
+          dl.innerHTML = '';
+          const p = prefix.toLowerCase();
+          terms.filter(t => !p || t.toLowerCase().startsWith(p)).forEach(t => {
+            const opt = document.createElement('option'); opt.value = t; dl.appendChild(opt);
+          });
+        }
+
+        const inp = document.createElement('input');
+        inp.type = 'text';
+        inp.setAttribute('list', dlId);
+        inp.value = cell.getValue() || '';
+        inp.style.cssText = 'width:100%;height:100%;border:none;padding:2px 4px;'
+          + 'background:#0d1a2a;color:#fff;font-size:13px;outline:none;box-sizing:border-box;';
+
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'width:100%;height:100%;display:flex;align-items:center;';
+        wrap.appendChild(dl); wrap.appendChild(inp);
+
+        // Rebuild datalist showing completions for the last token
+        function updateList() {
+          const parts = inp.value.split(',');
+          const lastToken = parts[parts.length - 1].trimStart();
+          rebuildList(lastToken);
+        }
+
+        // When user picks from datalist or types a comma, splice in the completion
+        function onCommaOrPick() {
+          const raw   = inp.value;
+          const parts = raw.split(',');
+          const last  = parts[parts.length - 1].trim();
+          // Check if last token matches a dictionary entry exactly (case-insensitive)
+          const match = terms.find(t => t.toLowerCase() === last.toLowerCase());
+          if (match) parts[parts.length - 1] = ' ' + match;
+          inp.value = parts.join(',');
+          updateList();
+        }
+
+        onRendered(() => { inp.focus(); inp.select(); updateList(); });
+
+        inp.addEventListener('input', () => {
+          const val = inp.value;
+          // Comma typed → complete current token
+          if (val.endsWith(',')) {
+            onCommaOrPick();
+            // Move cursor to end so user types next entry
+            setTimeout(() => { inp.value = inp.value; inp.selectionStart = inp.selectionEnd = inp.value.length; }, 0);
+          }
+          updateList();
+        });
+
+        inp.addEventListener('change',  () => { onCommaOrPick(); success(inp.value.trim()); });
+        inp.addEventListener('blur',    () => { onCommaOrPick(); success(inp.value.trim()); });
+        inp.addEventListener('keydown', e => {
+          e.stopPropagation();
+          if (e.key === 'Enter')  { e.preventDefault(); onCommaOrPick(); success(inp.value.trim()); }
+          if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+          if (e.key === 'Tab')    { onCommaOrPick(); success(inp.value.trim()); }
         });
         return wrap;
       };
     }
 
     if (k === 'cname') {
-      colDef.editor = makeDatalistEditor(cnameVals);
+      colDef.editor = makeCommaListEditor(cnameVals);
     } else if (k === 'sname') {
       colDef.editor = makeDatalistEditor(snameVals);
     } else if (k === 'v.author') {
