@@ -303,41 +303,29 @@ window.renderTableEditor = function() {
     if (k === 'cname') {
       colDef.editor = 'list';
       colDef.editorParams = {
-        values: cnameVals.length ? cnameVals : undefined,
-        valuesLookup: cnameVals.length ? false : 'active',
+        values: cnameVals,
         autocomplete: true,
         freetext: true,
         allowEmpty: true,
-        listOnEmpty: true,
-        filterFunc: function(term, label, value) {
-          return String(label).toLowerCase().includes(String(term).toLowerCase());
-        }
+        listOnEmpty: true
       };
     } else if (k === 'sname') {
       colDef.editor = 'list';
       colDef.editorParams = {
-        values: snameVals.length ? snameVals : undefined,
-        valuesLookup: snameVals.length ? false : 'active',
+        values: snameVals,
         autocomplete: true,
         freetext: true,
         allowEmpty: true,
-        listOnEmpty: true,
-        filterFunc: function(term, label, value) {
-          return String(label).toLowerCase().includes(String(term).toLowerCase());
-        }
+        listOnEmpty: true
       };
     } else if (k === 'v.author') {
       colDef.editor = 'list';
       colDef.editorParams = {
-        values: vAuthorVals.length ? vAuthorVals : undefined,
-        valuesLookup: vAuthorVals.length ? false : 'active',
+        values: vAuthorVals,
         autocomplete: true,
         freetext: true,
         allowEmpty: true,
-        listOnEmpty: true,
-        filterFunc: function(term, label, value) {
-          return String(label).toLowerCase().includes(String(term).toLowerCase());
-        }
+        listOnEmpty: true
       };
     }
 
@@ -392,6 +380,9 @@ window.renderTableEditor = function() {
       updateFocusIndicator();
     }
   });
+
+  // Update the column name strip above the toolbar
+  updateColHeaderStrip();
 };
 
 // ─── Toolbar button listeners ─────────────────────────────────────────────────
@@ -612,19 +603,21 @@ document.getElementById('jsonText').addEventListener('keydown', e => {
 });
 
 // ─── Save JSON ────────────────────────────────────────────────────────────────
-// saveJsonSilent: download without showing file picker — used by Push button
+// saveJsonSilent: save to localStorage only — NO file download, no browser notification
 function saveJsonSilent() {
+  localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+  localStorage.setItem('mlynx-links', JSON.stringify(linksData));
+}
+
+// saveJson: explicit download (only called by Download button / Ctrl+Alt+S)
+function saveJson() {
+  if (!rawJsonMode) syncFromTabulator();
+  saveJsonSilent();
   const blob = new Blob([JSON.stringify(linksData, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = 'links.json';
   document.body.appendChild(a); a.click();
   document.body.removeChild(a); URL.revokeObjectURL(a.href);
-}
-
-function saveJson() {
-  if (!rawJsonMode) syncFromTabulator();
-  localStorage.setItem('mlynx-links', JSON.stringify(linksData));
-  saveJsonSilent();
 }
 
 window.triggerDownload = async function(filename, data) {
@@ -712,5 +705,30 @@ document.getElementById('btn-make-json-topic').addEventListener('click', functio
   const topic = prompt('Enter a topic to generate links.json entries for (stub):');
   if (!topic) return;
   setStatus('MakeJsonFromTopic: stub — topic="' + topic + '" (not yet implemented)', '#ff8');
-  // TODO: implement topic → JSON generation
 });
+
+// ─── VideoEdit button ─────────────────────────────────────────────────────────
+document.getElementById('btn-video-edit').addEventListener('click', function() {
+  const row = activeRow;
+  if (!row) { setStatus('Click a row first to open VideoEdit', '#f88'); return; }
+  const data = row.getData();
+  if (!data.link) { setStatus('Active row has no link', '#f88'); return; }
+  const isVid = data.asset && window.parseVideoAsset && window.parseVideoAsset(String(data.asset)) !== null;
+  if (!isVid) { setStatus('Active row is not a video (asset must be numeric)', '#f88'); return; }
+  // Find the matching linksData entry by syncing first
+  syncFromTabulator();
+  const entry = linksData.find(r => r.link === data.link && r.cell === data.cell);
+  if (entry && window.openVideoEditor) {
+    window.openVideoEditor(entry);
+  } else {
+    setStatus('Could not open VideoEdit for this row', '#f88');
+  }
+});
+
+// ─── Column header strip ──────────────────────────────────────────────────────
+function updateColHeaderStrip() {
+  const el = document.getElementById('colHeaderStrip');
+  if (!el) return;
+  if (!tableKeys || !tableKeys.length) { el.textContent = ''; return; }
+  el.textContent = tableKeys.join(' | ');
+}
