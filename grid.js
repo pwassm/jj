@@ -76,7 +76,7 @@ function buildOverlays(){
     div.className='cell-overlay';
     div.style.cssText='left:'+x+'px;top:'+y+'px;width:'+cellW+'px;height:'+cellH+'px; touch-action: none;';
 
-    const assetVal = String(it.asset || '').trim();
+    const assetVal = String(it.VidRange || '').trim();
 
     if(assetVal==='i' && it.link){
       const img=document.createElement('img');
@@ -88,7 +88,7 @@ function buildOverlays(){
       vidHost.id = 'vid-' + it.cell;
       vidHost.style.cssText = 'position:absolute; inset:0; overflow:hidden; background:#000; display:flex; justify-content:center; align-items:center;';
       div.appendChild(vidHost);
-      videoMountTasks.push({ host: vidHost, link: it.link, asset: assetVal, mute: it.Mute !== '0' });
+      videoMountTasks.push({ host: vidHost, link: it.link, VidRange: assetVal, mute: it.Mute !== '0' });
     }
 
     if(it.cname && showCname){
@@ -161,7 +161,7 @@ function buildOverlays(){
   // Mount players after DOM insertion
   if (videoMountTasks.length > 0) {
     videoMountTasks.forEach(task => {
-      const parsed = window.parseVideoAsset(task.asset);
+      const parsed = window.parseVideoAsset(task.VidRange);
       if(!parsed) return;
       if (window.isYouTubeLink(task.link) && window.mountYouTubeClip) {
         window.mountYouTubeClip(task.host, task.link, parsed.start, parsed.dur, task.mute);

@@ -6,13 +6,13 @@ window.openFS = function(it) {
   const fs = document.createElement('div');
   fs.id = 'fs-overlay';
   fs.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:99999;display:flex;align-items:center;justify-content:center;cursor:pointer;';
-  const isVidNode = window.parseVideoAsset && window.parseVideoAsset(it.asset) !== null;
+  const isVidNode = window.parseVideoAsset && window.parseVideoAsset(it.VidRange) !== null;
   if (isVidNode) {
     const vidHost = document.createElement('div');
     vidHost.id = 'fs-vid-' + it.cell;
     vidHost.style.cssText = 'width:100%; height:100%; pointer-events:none;';
     fs.appendChild(vidHost);
-    const parsed = window.parseVideoAsset(it.asset);
+    const parsed = window.parseVideoAsset(it.VidRange);
     if (parsed) {
       if (window.isYouTubeLink(it.link) && window.mountYouTubeClip)
         window.mountYouTubeClip(vidHost, it.link, parsed.start, parsed.dur, it.Mute !== '0');
@@ -75,11 +75,17 @@ let activeCol = null;   // field name string
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function initTableKeys() {
-  const keys = new Set();
-  linksData.forEach(r => Object.keys(r).forEach(k => keys.add(k)));
-  tableKeys = Array.from(keys);
-  if (!tableKeys.length)
-    tableKeys = ['show','asset','cell','fit','link','cname','sname','v.title','v.author','attribution','comment','Mute','Portrait'];
+  // Build ordered key list: use the union of all keys, ordered by first appearance
+  // across rows. This preserves the key insertion order that was saved to JSON.
+  const seen = new Set();
+  const ordered = [];
+  linksData.forEach(r => {
+    Object.keys(r).forEach(k => {
+      if (!seen.has(k)) { seen.add(k); ordered.push(k); }
+    });
+  });
+  tableKeys = ordered.length ? ordered
+    : ['show','VidRange','cell','fit','link','cname','sname','v.title','v.author','attribution','comment','Mute','Portrait'];
 }
 
 function getDistinctVals(field) {
@@ -97,6 +103,20 @@ function getDistinctVals(field) {
 // We NEVER manually push to linksData alongside addRow() — getData() is truth.
 function getDataCopy() {
   return JSON.parse(JSON.stringify(linksData));
+}
+
+// Reorder every row's keys to match tableKeys order.
+// This is what makes column order sticky through push→reload:
+// JSON.parse preserves insertion order, so if rows are saved with keys in
+// tableKeys order, initTableKeys() recovers that order on next load.
+function reorderLinksDataKeys() {
+  linksData = linksData.map(row => {
+    const out = {};
+    tableKeys.forEach(k => { if (k in row) out[k] = row[k]; });
+    // preserve any keys not yet in tableKeys (shouldn't happen, but be safe)
+    Object.keys(row).forEach(k => { if (!(k in out)) out[k] = row[k]; });
+    return out;
+  });
 }
 
 // Pull current state from Tabulator back into linksData (single call before save/push)
@@ -158,7 +178,8 @@ function dupColumn(srcField) {
   const idx = tableKeys.indexOf(srcField);
   tableKeys.splice(idx + 1, 0, newK);
   linksData.forEach(row => { row[newK] = row[srcField] !== undefined ? String(row[srcField]) : ''; });
-  localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+  reorderLinksDataKeys();
+  saveJsonSilent();
   activeCol = newK;
   window.renderTableEditor();
   setStatus('Duplicated "' + srcField + '" → "' + newK + '"');
@@ -181,7 +202,8 @@ function addColAfter(afterField) {
   const idx = afterField ? tableKeys.indexOf(afterField) : tableKeys.length - 1;
   tableKeys.splice(idx + 1, 0, newK);
   linksData.forEach(row => { if (row[newK] === undefined) row[newK] = ''; });
-  localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+  reorderLinksDataKeys();  // persist column position in key order
+  saveJsonSilent();
   activeCol = newK;
   window.renderTableEditor();
 }
@@ -300,33 +322,47 @@ window.renderTableEditor = function() {
       }
     };
 
+    // Build a custom editor using native <datalist> for cname, sname, v.author.
+    // Tabulator's built-in 'list' editor with autocomplete is unreliable in 6.2.1 —
+    // it shows nothing while typing. Native <datalist> works in every browser.
+    function makeDatalistEditor(valsList) {
+      return function(cell, onRendered, success, cancel) {
+        const dlId = 'dl_' + Math.random().toString(36).slice(2);
+        const dl = document.createElement('datalist');
+        dl.id = dlId;
+        valsList.forEach(v => {
+          const opt = document.createElement('option');
+          opt.value = v;
+          dl.appendChild(opt);
+        });
+        const inp = document.createElement('input');
+        inp.type = 'text';
+        inp.setAttribute('list', dlId);
+        inp.value = cell.getValue() || '';
+        inp.style.cssText = 'width:100%;height:100%;border:none;padding:2px 4px;'
+          + 'background:#0d1a2a;color:#fff;font-size:13px;outline:none;box-sizing:border-box;';
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'width:100%;height:100%;display:flex;align-items:center;';
+        wrap.appendChild(dl);
+        wrap.appendChild(inp);
+        onRendered(() => { inp.focus(); inp.select(); });
+        inp.addEventListener('change',  () => success(inp.value));
+        inp.addEventListener('blur',    () => success(inp.value));
+        inp.addEventListener('keydown', e => {
+          if (e.key === 'Enter')  { e.stopPropagation(); success(inp.value); }
+          if (e.key === 'Escape') { e.stopPropagation(); cancel(); }
+          if (e.key === 'Tab')    { success(inp.value); }
+        });
+        return wrap;
+      };
+    }
+
     if (k === 'cname') {
-      colDef.editor = 'list';
-      colDef.editorParams = {
-        values: cnameVals,
-        autocomplete: true,
-        freetext: true,
-        allowEmpty: true,
-        listOnEmpty: true
-      };
+      colDef.editor = makeDatalistEditor(cnameVals);
     } else if (k === 'sname') {
-      colDef.editor = 'list';
-      colDef.editorParams = {
-        values: snameVals,
-        autocomplete: true,
-        freetext: true,
-        allowEmpty: true,
-        listOnEmpty: true
-      };
+      colDef.editor = makeDatalistEditor(snameVals);
     } else if (k === 'v.author') {
-      colDef.editor = 'list';
-      colDef.editorParams = {
-        values: vAuthorVals,
-        autocomplete: true,
-        freetext: true,
-        allowEmpty: true,
-        listOnEmpty: true
-      };
+      colDef.editor = makeDatalistEditor(vAuthorVals);
     }
 
     cols.push(colDef);
@@ -352,22 +388,14 @@ window.renderTableEditor = function() {
       localStorage.setItem('seeandlearn-colWidths', JSON.stringify(colWidths));
     },
 
-    // When user drags columns to reorder, update tableKeys to match
+    // When user drags columns to reorder, update tableKeys and persist key order
     columnMoved(column, columns) {
-      // Rebuild tableKeys from new column order, skipping internal _ columns
       const newOrder = columns
         .map(c => c.getField())
         .filter(f => f && !f.startsWith('_'));
       tableKeys = newOrder;
-      // Reorder each row's keys to match (cosmetic but useful for JSON export)
-      linksData = linksData.map(row => {
-        const reordered = {};
-        newOrder.forEach(k => { if (k in row) reordered[k] = row[k]; });
-        // preserve any keys not in tableKeys
-        Object.keys(row).forEach(k => { if (!(k in reordered)) reordered[k] = row[k]; });
-        return reordered;
-      });
-      localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+      reorderLinksDataKeys();
+      saveJsonSilent();
     },
 
     rowSelectionChanged(data, rows) {
@@ -673,7 +701,7 @@ window.fillEmptyVideoInfo = async function() {
   if (!tableKeys.includes('Portrait')) tableKeys.push('Portrait');
 
   await Promise.all(linksData.map(async row => {
-    const isVid = row.asset && window.parseVideoAsset && window.parseVideoAsset(row.asset) !== null;
+    const isVid = row.VidRange && window.parseVideoAsset && window.parseVideoAsset(row.VidRange) !== null;
     if (!isVid || !row.link || !row.link.match(/^https?:/i)) return;
     if (row['v.title'] && row['v.author'] && row.Portrait) return;
     try {
@@ -713,8 +741,8 @@ document.getElementById('btn-video-edit').addEventListener('click', function() {
   if (!row) { setStatus('Click a row first to open VideoEdit', '#f88'); return; }
   const data = row.getData();
   if (!data.link) { setStatus('Active row has no link', '#f88'); return; }
-  const isVid = data.asset && window.parseVideoAsset && window.parseVideoAsset(String(data.asset)) !== null;
-  if (!isVid) { setStatus('Active row is not a video (asset must be numeric)', '#f88'); return; }
+  const isVid = data.VidRange && window.parseVideoAsset && window.parseVideoAsset(String(data.VidRange)) !== null;
+  if (!isVid) { setStatus('Active row is not a video (VidRange must be numeric start time)', '#f88'); return; }
   // Find the matching linksData entry by syncing first
   syncFromTabulator();
   const entry = linksData.find(r => r.link === data.link && r.cell === data.cell);

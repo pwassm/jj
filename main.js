@@ -6,6 +6,13 @@ async function init(){
   }catch(e){
     try{ const ls=(localStorage.getItem('seeandlearn-links') || localStorage.getItem('mlynx-links')); linksData=ls?JSON.parse(ls):[]; }catch(e2){ linksData=[]; }
   }
+  // Migrate legacy field names so old links.json always works
+  linksData.forEach(row => {
+    if ('asset' in row && !('VidRange' in row)) {
+      row.VidRange = row.asset;
+      delete row.asset;
+    }
+  });
   render();
 }
 
@@ -77,7 +84,7 @@ document.getElementById('fastLinkInput').addEventListener('input', function() {
   const dateAdded = `${yy}.${mm}.${dd}.${hh}.${min}.${ss}`;
 
   linksData.push({
-    show: "1", asset: "i", cell: nextCell, fit: "fc", link: val,
+    show: "1", VidRange: "i", cell: nextCell, fit: "fc", link: val,
     cname: "", sname: "", attribution: "", comment: "", DateAdded: dateAdded, Mute: "1"
   });
   localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));

@@ -12,7 +12,7 @@ async function openQF(cs){
     document.getElementById('qfSname').value  =ex?(ex.sname||''):'';
     document.getElementById('qfAttrib').value =ex?(ex.attribution||''):'';
     document.getElementById('qfComment').value=ex?(ex.comment||''):'';
-    document.getElementById('qfAsset').value  =ex?(ex.asset||'i'):'i';
+    document.getElementById('qfAsset').value  =ex?(ex.VidRange||'i'):'i';
     document.getElementById('qfFit').value    =ex?(ex.fit||''):'';
   }
   document.getElementById('qfTitle').textContent='Pin '+cs;
@@ -28,11 +28,11 @@ function qfSave(){
   const sname  =ISMOBILE?'':document.getElementById('qfSname').value.trim();
   const attrib =ISMOBILE?'':document.getElementById('qfAttrib').value.trim();
   const comment=ISMOBILE?'':document.getElementById('qfComment').value.trim();
-  const asset  =ISMOBILE?'i':document.getElementById('qfAsset').value;
+  const VidRange=ISMOBILE?'i':document.getElementById('qfAsset').value;
   const fit    =ISMOBILE?'':document.getElementById('qfFit').value;
   let e=linksData.find(it=>it.cell===qfCell);
-  if(e) Object.assign(e,{show:'1',asset,fit,link,cname,sname,attribution:attrib,comment});
-  else  linksData.push({show:'1',asset,cell:qfCell,fit,link,cname,sname,attribution:attrib,comment,Mute:"1"});
+  if(e) Object.assign(e,{show:'1',VidRange,fit,link,cname,sname,attribution:attrib,comment});
+  else  linksData.push({show:'1',VidRange,cell:qfCell,fit,link,cname,sname,attribution:attrib,comment,Mute:"1"});
   localStorage.setItem('mlynx-links',JSON.stringify(linksData));
   document.getElementById('qfModal').classList.remove('open');
   render();

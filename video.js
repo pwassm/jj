@@ -200,7 +200,7 @@ window.cleanupAllVideos = function() {
 
 
 window.openVideoEditor = function(it) {
-  const parsed = window.parseVideoAsset(it.asset) || {start: 0, dur: 1};
+  const parsed = window.parseVideoAsset(it.VidRange) || {start: 0, dur: 1};
   let currentStart = parsed.start;
   let currentDur = parsed.dur;
   let currentMute = it.Mute !== "0";
@@ -328,7 +328,7 @@ window.openVideoEditor = function(it) {
   };
 
   const saveEditor = () => {
-    it.asset = currentStart + (currentDur !== 1 ? ' ' + currentDur : '');
+    it.VidRange = currentStart + (currentDur !== 1 ? ' ' + currentDur : '');
     it.Mute = currentMute ? "1" : "0";
     localStorage.setItem('seeandlearn-links', JSON.stringify(window.linksData));
     closeEditor();
