@@ -239,13 +239,14 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
 
 <div id="menuWrap">
   <div id="menuPanel">
-    <div id="menuDateStamp">zip63 · Mar 19, 2026 05:39 AM PDT</div>
+    <div id="menuDateStamp">zip64 · Mar 19, 2026 05:39 AM PDT</div>
     <div class="menu-item" id="miAdmin" style="opacity:0.45; color:#aaa; pointer-events:none; cursor:default; border-bottom:1px solid rgba(255,255,255,0.08);">&#128274; Admin</div>
     <div class="menu-item" id="miFastLinks">Links (Fast Paste)</div>
     <div class="menu-item" id="miTables">Tables (JSON editor)</div>
     <div class="menu-divider"></div>
     <div class="menu-item" id="miSaveJson">&#x1F4BE; Save JSON &nbsp;<small style="opacity:.5;font-size:11px">Ctrl+Alt+S</small></div>
     <div class="menu-item" id="miPushGithub">&#x2601; Push to GitHub</div>
+    <div class="menu-item" id="miLoadGithub">&#x2B07; Load from GitHub</div>
     <div class="menu-divider"></div>
     <div class="menu-item" id="miSettings">Settings &#x25B8;</div>
     <div id="settingsPanel">
@@ -354,22 +355,23 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
       <textarea id="jsonText" style="display:none; flex:1; background:#0a0a1a; border:1px solid #444; color:#cfc; padding:12px; font-size:13px; font-family:monospace; line-height:1.4; border-radius:6px; resize:none; overflow:auto;"></textarea>
     </div>
     <div id="jsonBtns">
-      <button id="jsonCancel">Exit table (Esc)</button>
-      <button class="save" id="jsonApply">Apply</button>
-      <button class="save" id="jsonPush" style="border-color:#4af; color:#8ef;">Push to GitHub</button>
-      <button id="jsonDl">Download links.json</button>
+      <button id="jsonCancel" title="Close editor without saving to grid">Exit (Esc)</button>
+      <button class="save" id="jsonApply" title="Save edits and close — grid updates immediately">Close &amp; Apply</button>
+      <button class="save" id="jsonPush" style="border-color:#4af; color:#8ef;" title="Save edits, push to GitHub, and download local copy">Push to GitHub</button>
+      <button id="jsonDl" title="Download links.json to local disk">Download</button>
     </div>
     <div id="jsonStatus"></div>
   </div>
 </div>
 
-<script src="globals.js?v=41"></script>
-<script src="grid.js?v=41"></script>
-<script src="ui.js?v=41"></script>
-<script src="editor.js?v=41"></script>
-<script src="github.js?v=41"></script>
-<script src="video.js?v=41"></script>
-<script src="main.js?v=41"></script>
+<script src="globals.js?v=42"></script>
+<script src="grid.js?v=42"></script>
+<script src="ui.js?v=42"></script>
+<script src="editor.js?v=42"></script>
+<script src="github.js?v=42"></script>
+<script src="video.js?v=42"></script>
+<script src="instagram.js?v=42"></script>
+<script src="main.js?v=42"></script>
 
 </body>
 </html>

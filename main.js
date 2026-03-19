@@ -1,12 +1,27 @@
 async function init(){
   setupLayout(); syncFit(); syncAdminUI();
-  try{
-    const r=await fetch('links.json?v='+Date.now());
-    linksData=await r.json();
-  }catch(e){
-    try{ const ls=(localStorage.getItem('seeandlearn-links') || localStorage.getItem('mlynx-links')); linksData=ls?JSON.parse(ls):[]; }catch(e2){ linksData=[]; }
+
+  // Data loading priority:
+  //   1. localStorage (seeandlearn-links or mlynx-links) — your saved edits
+  //   2. links.json on disk — only used if localStorage is empty
+  //
+  // This means deploying a new zip NEVER overwrites your saved data.
+  // To reset to the bundled links.json, use "Load from file" (Import button)
+  // or clear localStorage in DevTools.
+  const lsSaved = localStorage.getItem('seeandlearn-links') || localStorage.getItem('mlynx-links');
+  if (lsSaved) {
+    try {
+      linksData = JSON.parse(lsSaved);
+    } catch(e) { linksData = []; }
+  } else {
+    // First run — no localStorage yet — load from links.json
+    try {
+      const r = await fetch('links.json?v=' + Date.now());
+      linksData = await r.json();
+    } catch(e) { linksData = []; }
   }
-  // Migrate legacy field names so old links.json always works
+
+  // Migrate legacy field names
   linksData.forEach(row => {
     if ('asset' in row && !('VidRange' in row)) {
       row.VidRange = row.asset;

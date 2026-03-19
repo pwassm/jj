@@ -78,7 +78,15 @@ function buildOverlays(){
 
     const assetVal = String(it.VidRange || '').trim();
 
-    if(assetVal==='i' && it.link){
+    // Instagram: VidRange="3" is the legacy signal; also detect by URL
+    const isIg = window.isInstagramLink && window.isInstagramLink(it.link);
+
+    if (isIg && window.buildInstagramCell) {
+      window.buildInstagramCell(it, cellW, cellH, function(igDiv) {
+        igDiv.style.cssText += 'position:absolute;inset:0;';
+        div.appendChild(igDiv);
+      });
+    } else if(assetVal==='i' && it.link){
       const img=document.createElement('img');
       img.src=it.link; img.alt=it.cname||'';
       img.className=(it.fit||fitMode)==='ei'?'ei':'fc';

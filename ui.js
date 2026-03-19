@@ -739,6 +739,34 @@ window.duplicateActiveRow = function() {
 };
 window.lastActiveRowIdx = -1;
 
+// ─── Load from GitHub (hamburger menu) ───────────────────────────────────────
+document.getElementById('miLoadGithub').addEventListener('pointerup', async e => {
+  e.stopPropagation(); closeMenu();
+  const owner = localStorage.getItem('github-owner');
+  const repo  = localStorage.getItem('github-repo');
+  const token = localStorage.getItem('github-token');
+  if (!owner || !repo) {
+    alert('GitHub owner/repo not set.\nOpen Settings → GitHub Sync to configure, or do a Push first.');
+    return;
+  }
+  if (!confirm('Load links.json from GitHub?\n\nThis REPLACES your current data.\nMake sure you have pushed unsaved changes first.')) return;
+  try {
+    const headers = token ? { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json' } : {};
+    const rawUrl = 'https://raw.githubusercontent.com/' + owner + '/' + repo + '/main/links.json?v=' + Date.now();
+    const res = await fetch(rawUrl, { headers });
+    if (!res.ok) throw new Error('HTTP ' + res.status + ': ' + res.statusText);
+    const data = await res.json();
+    if (!Array.isArray(data)) throw new Error('Expected JSON array');
+    linksData = data;
+    linksData.forEach(row => {
+      if ('asset' in row && !('VidRange' in row)) { row.VidRange = row.asset; delete row.asset; }
+    });
+    localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+    render();
+    alert('Loaded ' + linksData.length + ' rows from GitHub.');
+  } catch(err) { alert('Load from GitHub failed:\n' + err.message); }
+});
+
 // ─── MakeJsonFromTopic stub ───────────────────────────────────────────────────
 document.getElementById('btn-make-json-topic').addEventListener('click', function() {
   const topic = prompt('Enter a topic to generate links.json entries for (stub):');

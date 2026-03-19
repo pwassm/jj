@@ -486,33 +486,78 @@ window.openVideoEditor = function(it) {
     setActiveSeg(Math.min(activeSegIdx, segs.length - 1));
   });
 
-  // ── Timeline click handling ───────────────────────────────────────────────
-  // Plain click  → scrub to that time and PAUSE (no loop)
-  // Ctrl+click empty → add segment
-  // Ctrl+click band  → delete segment
+  // ── Timeline click + drag scrubbing ──────────────────────────────────────
+  // Plain click/drag: scrub to position — uses approximate seek (fast, nearest keyframe)
+  // Ctrl+click: add or delete segment
+  var isDraggingScrub = false;
+
+  function scrubToSec(sec) {
+    var clamped = Math.max(0, Math.min(sec, calcEnd()));
+    renderTimeline(clamped);
+    tCur.textContent = clamped.toFixed(1) + 's';
+    // Approximate seek = fast (false = nearest keyframe, no decode wait)
+    var p = window.seeLearnVideoPlayers['v2host'];
+    if (p) {
+      if (typeof p.seekTo === 'function') {
+        try { p.seekTo(clamped, false); } catch(ex) {}
+      } else if (p.setCurrentTime) {
+        p.setCurrentTime(clamped).catch(function(){});
+      }
+    }
+  }
+
+  function timelineSecFromEvent(e) {
+    var rect = timeline.getBoundingClientRect();
+    var x    = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+    return (x / rect.width) * calcEnd();
+  }
+
+  timeline.addEventListener('pointerdown', function(e) {
+    if (e.ctrlKey) return;  // ctrl handled in click
+    e.preventDefault();
+    isDraggingScrub = true;
+    timeline.setPointerCapture(e.pointerId);
+    // Stop loop so scrub is visible
+    clearTimeout(mountDebounce);
+    var p = window.seeLearnVideoPlayers['v2host'];
+    if (p && typeof p.pauseVideo === 'function') try { p.pauseVideo(); } catch(ex) {}
+    else if (p && p.pause) p.pause().catch(function(){});
+    scrubToSec(timelineSecFromEvent(e));
+  });
+
+  timeline.addEventListener('pointermove', function(e) {
+    if (!isDraggingScrub) return;
+    scrubToSec(timelineSecFromEvent(e));
+  });
+
+  timeline.addEventListener('pointerup', function(e) {
+    if (!isDraggingScrub) return;
+    isDraggingScrub = false;
+    var sec = timelineSecFromEvent(e);
+    scrubToSec(sec);
+    // After releasing, resume looping from dragged position
+    scheduleMount('scrub_' + sec);
+  });
+
+  timeline.addEventListener('pointercancel', function() {
+    isDraggingScrub = false;
+  });
+
   timeline.addEventListener('click', function(e) {
+    if (!e.ctrlKey) return;  // plain click/drag handled by pointer events above
     var W       = timeline.offsetWidth || 600;
     var clickSec = (e.offsetX / W) * calcEnd();
-
-    if (e.ctrlKey) {
-      // Ctrl+click: add or delete
-      var hitIdx = -1;
-      segs.forEach(function(s, i) {
-        if (clickSec >= s.start && clickSec <= s.start + s.dur) hitIdx = i;
-      });
-      if (hitIdx >= 0) {
-        if (segs.length <= 1) { alert('Need at least one segment.'); return; }
-        segs.splice(hitIdx, 1);
-        setActiveSeg(Math.min(activeSegIdx, segs.length - 1));
-      } else {
-        segs.push({ start: fmt(clickSec), dur: 5 });
-        setActiveSeg(segs.length - 1);
-      }
+    var hitIdx = -1;
+    segs.forEach(function(s, i) {
+      if (clickSec >= s.start && clickSec <= s.start + s.dur) hitIdx = i;
+    });
+    if (hitIdx >= 0) {
+      if (segs.length <= 1) { alert('Need at least one segment.'); return; }
+      segs.splice(hitIdx, 1);
+      setActiveSeg(Math.min(activeSegIdx, segs.length - 1));
     } else {
-      // Plain click: scrub to position and pause
-      renderTimeline(clickSec);
-      tCur.textContent = clickSec.toFixed(1) + 's';
-      seekAndPause(clickSec);
+      segs.push({ start: fmt(clickSec), dur: 5 });
+      setActiveSeg(segs.length - 1);
     }
   });
 
@@ -670,17 +715,25 @@ window.openVideoEditor = function(it) {
   }
 
   // ── Debounced mount ───────────────────────────────────────────────────────
-  // 'start' → restart from beginning after 500ms debounce
-  // 'end'   → preview 2s before new end after 500ms debounce
   var mountDebounce;
   var pendingMountType = 'start';
   function scheduleMount(type) {
     pendingMountType = type || 'start';
     clearTimeout(mountDebounce);
     mountDebounce = setTimeout(function() {
-      if (pendingMountType === 'end') mountEndPreview();
-      else mountLoop();
-    }, 500);
+      if (pendingMountType === 'end') {
+        mountEndPreview();
+      } else if (String(pendingMountType).startsWith('scrub_')) {
+        // Resume loop from wherever user scrubbed to
+        var seekSec = parseFloat(String(pendingMountType).replace('scrub_', '')) || segs[activeSegIdx].start;
+        currentMute = iMute.checked;
+        readInputs();
+        var seg = segs[activeSegIdx];
+        _mountEditorPlayer(seg.start, seg.dur, seekSec, true, null);
+      } else {
+        mountLoop();
+      }
+    }, 600);
   }
 
   // ── Scrubber position polling ─────────────────────────────────────────────
