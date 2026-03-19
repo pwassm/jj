@@ -349,9 +349,15 @@ window.renderTableEditor = function() {
         inp.addEventListener('change',  () => success(inp.value));
         inp.addEventListener('blur',    () => success(inp.value));
         inp.addEventListener('keydown', e => {
-          if (e.key === 'Enter')  { e.stopPropagation(); success(inp.value); }
-          if (e.key === 'Escape') { e.stopPropagation(); cancel(); }
+          // Stop ALL key events from bubbling to Tabulator while this editor is open.
+          // ArrowDown/Up must go to the datalist dropdown, not move table rows.
+          // Enter/Escape/Tab commit or cancel the edit.
+          e.stopPropagation();
+          if (e.key === 'Enter')  { e.preventDefault(); success(inp.value); }
+          if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+          // Tab: commit and let default tab behaviour move focus naturally
           if (e.key === 'Tab')    { success(inp.value); }
+          // ArrowDown/Up: let browser show/navigate datalist — do nothing extra
         });
         return wrap;
       };
@@ -390,12 +396,16 @@ window.renderTableEditor = function() {
 
     // When user drags columns to reorder, update tableKeys and persist key order
     columnMoved(column, columns) {
+      // Sync first — get Tabulator's current data (which reflects the new column order)
+      syncFromTabulator();
       const newOrder = columns
         .map(c => c.getField())
         .filter(f => f && !f.startsWith('_'));
       tableKeys = newOrder;
       reorderLinksDataKeys();
       saveJsonSilent();
+      // Update the column strip to reflect new order
+      updateColHeaderStrip();
     },
 
     rowSelectionChanged(data, rows) {
