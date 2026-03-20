@@ -154,7 +154,8 @@ function buildOverlays(){
     });
 
     div.addEventListener('pointercancel', () => { isDragging = false; });
-    div.addEventListener('pointerleave', () => { isDragging = false; });
+    // Note: pointerleave is NOT used here — setPointerCapture ensures pointerup
+    // fires even when finger moves off the element (critical for fast mobile swipes)
 
     div.addEventListener('contextmenu', e => {
       if (isVidNode && e.ctrlKey) {

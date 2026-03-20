@@ -302,8 +302,8 @@ document.addEventListener('keydown', e => {
     }
     const jsonMod = document.getElementById('jsonModal');
     if (jsonMod && jsonMod.classList.contains('open')) {
-      jsonMod.classList.remove('open');
-      render();
+      if (window.closeTableEditor) window.closeTableEditor();
+      else { jsonMod.classList.remove('open'); render(); }
     }
     const fastMod = document.getElementById('fastLinkModal');
     if (fastMod && fastMod.style.display === 'flex') {

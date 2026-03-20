@@ -16,8 +16,8 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
 /* Hamburger */
 #menuWrap { position: fixed; z-index: 999; width: 48px; height: 48px; }
 #menuWrap.portrait-mode { transform: rotate(90deg); transform-origin: 24px 24px; }
-/* In portrait mode the panel must not exceed the (rotated) screen height */
-#menuWrap.portrait-mode #menuPanel { max-height: calc(100vw - 70px); }
+#menuPanel::-webkit-scrollbar { width: 6px; }
+#menuPanel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.3); border-radius: 3px; }
 #menuBtn {
   position: absolute; top: 0; left: 0; width: 100%; height: 100%;
   background: rgba(30,30,30,0.82); border: none; border-radius: 10px;
@@ -28,17 +28,23 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
 #menuBtn.open { background: rgba(30,30,30,0.97); }
 #menuBtn span { display: block; width: 100%; height: 3px; background: #fff; border-radius: 2px; }
 #menuPanel {
-  position: absolute; bottom: 54px; right: 0; z-index: 998;
-  background: rgba(25,25,25,0.96); border-radius: 10px;
-  overflow-y: auto; max-height: calc(100vh - 70px);
-  display: none; flex-direction: column; min-width: 200px;
-  box-shadow: 0 4px 24px rgba(0,0,0,0.5);
-  scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.3) transparent;
+  position: fixed;
+  z-index: 998;
+  background: rgba(25,25,25,0.97);
+  border-radius: 10px;
+  overflow-y: scroll;
+  max-height: calc(100vh - 80px);
+  max-height: calc(100dvh - 80px);
+  display: none;
+  flex-direction: column;
+  min-width: 210px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.6);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.3) transparent;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
+  /* Position: above and to the right of the button — computed by JS */
 }
-#menuPanel::-webkit-scrollbar { width: 6px; }
-#menuPanel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.3); border-radius: 3px; }
 #menuPanel.open { display: flex; }
 #menuDateStamp {
   padding: 13px 18px; color: #8ef; font: 15px Arial,sans-serif;
@@ -243,7 +249,7 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
 
 <div id="menuWrap">
   <div id="menuPanel">
-    <div id="menuDateStamp">zip73 · Mar 19, 2026 06:42 PM PDT</div>
+    <div id="menuDateStamp">zip74 · Mar 19, 2026 07:26 PM PDT</div>
     <div class="menu-item" id="miAdmin" style="opacity:0.45; color:#aaa; pointer-events:none; cursor:default; border-bottom:1px solid rgba(255,255,255,0.08);">&#128274; Admin</div>
     <div class="menu-item" id="miFastLinks">Links (Fast Paste)</div>
     <div class="menu-item" id="miTables">Tables (JSON editor)</div>
@@ -387,23 +393,24 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
       <textarea id="jsonText" style="display:none; flex:1; background:#0a0a1a; border:1px solid #444; color:#cfc; padding:12px; font-size:13px; font-family:monospace; line-height:1.4; border-radius:6px; resize:none; overflow:auto;"></textarea>
     </div>
     <div id="jsonBtns">
-      <button id="jsonCancel" title="Close editor without saving to grid">Exit (Esc)</button>
-      <button class="save" id="jsonApply" title="Save edits and close — grid updates immediately">Close &amp; Apply</button>
-      <button class="save" id="jsonPush" style="border-color:#4af; color:#8ef;" title="Save edits, push to GitHub, and download local copy">Push to GitHub</button>
+      <button id="jsonCancel" title="Close table editor (Esc) — all changes already auto-saved">Exit (Esc)</button>
+      <button class="save" id="jsonPush" style="border-color:#4af; color:#8ef;" title="Push current data to GitHub">Push to GitHub</button>
       <button id="jsonDl" title="Download links.json to local disk">Download</button>
+      <!-- jsonApply kept as hidden for keyboard Ctrl+S compatibility -->
+      <button id="jsonApply" style="display:none;">Apply</button>
     </div>
     <div id="jsonStatus"></div>
   </div>
 </div>
 
-<script src="globals.js?v=50"></script>
-<script src="grid.js?v=50"></script>
-<script src="ui.js?v=50"></script>
-<script src="editor.js?v=50"></script>
-<script src="github.js?v=50"></script>
-<script src="video.js?v=50"></script>
-<script src="instagram.js?v=50"></script>
-<script src="main.js?v=50"></script>
+<script src="globals.js?v=51"></script>
+<script src="grid.js?v=51"></script>
+<script src="ui.js?v=51"></script>
+<script src="editor.js?v=51"></script>
+<script src="github.js?v=51"></script>
+<script src="video.js?v=51"></script>
+<script src="instagram.js?v=51"></script>
+<script src="main.js?v=51"></script>
 
 </body>
 </html>

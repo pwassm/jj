@@ -603,11 +603,38 @@ function closeMenu() {
   document.getElementById('settingsPanel').classList.remove('open');
   document.getElementById('miSettings').textContent = 'Settings \u25b8';
 }
+
+function positionMenuPanel() {
+  const btnRect = menuBtn.getBoundingClientRect();
+  const panelW  = 220;
+  const margin  = 8;
+  const viewH   = window.innerHeight;
+  const viewW   = window.innerWidth;
+
+  // Anchor right edge to button right, or clamp to screen
+  let right = viewW - btnRect.right;
+  let left  = btnRect.right - panelW;
+  if (left < margin) { left = margin; right = 'auto'; }
+
+  // Show above the button; if not enough space above, show below
+  const spaceAbove = btnRect.top - margin;
+  const maxH       = Math.min(spaceAbove, viewH - 80);
+
+  menuPanel.style.cssText = [
+    'bottom:' + (viewH - btnRect.top + 6) + 'px',
+    'right:'  + (viewW - btnRect.right) + 'px',
+    'left:auto',
+    'max-height:' + Math.max(maxH, 120) + 'px',
+    'min-width:210px',
+  ].join(';');
+}
+
 menuBtn.addEventListener('pointerup', e => {
   e.stopPropagation();
   const o = menuPanel.classList.toggle('open');
   menuBtn.classList.toggle('open', o);
-  if (!o) document.getElementById('settingsPanel').classList.remove('open');
+  if (o) positionMenuPanel();
+  else document.getElementById('settingsPanel').classList.remove('open');
 });
 menuPanel.addEventListener('pointerup', e => e.stopPropagation());
 document.addEventListener('pointerup', () => { if (menuPanel.classList.contains('open')) closeMenu(); });
@@ -696,10 +723,15 @@ function reorderLinksDataKeys() {
 function syncFromTabulator() {
   if (!window.tabulatorTable) return;
   const rows = window.tabulatorTable.getData();
-  // Strip ALL internal fields: Tabulator adds _del, _sel, _move, _tab* etc.
+  // Rebuild each row in tableKeys order so column order is preserved in localStorage.
+  // Object.keys(row) from Tabulator returns INSERTION order, not visual order,
+  // so we must manually reorder using tableKeys.
   linksData = rows.map(r => {
     const clean = {};
-    Object.keys(r).forEach(k => { if (!k.startsWith('_')) clean[k] = r[k]; });
+    // First: add fields in tableKeys order
+    tableKeys.forEach(k => { if (k in r && !k.startsWith('_')) clean[k] = r[k]; });
+    // Then: add any fields not in tableKeys (shouldn't happen, but be safe)
+    Object.keys(r).forEach(k => { if (!k.startsWith('_') && !(k in clean)) clean[k] = r[k]; });
     return clean;
   });
 }
@@ -893,9 +925,9 @@ window.renderTableEditor = function() {
         updateFocusIndicator();
       },
       cellEdited(cell) {
-        // Immediately persist the edit
+        // Auto-save every cell edit immediately with correct column order
         syncFromTabulator();
-        localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+        saveJsonSilent();
       }
     };
 
@@ -1289,16 +1321,30 @@ document.getElementById('miTables').addEventListener('pointerup', e => {
 //   Apply  → syncs Tabulator→linksData, closes editor, re-renders grid
 //   Push   → same as Apply, then pushes linksData JSON to GitHub
 //   Column widths → saved to localStorage on every drag, survive everything
+// ─── Table auto-save on close ─────────────────────────────────────────────────
+// All cell edits, column moves, and row ops already auto-save to localStorage.
+// On close (Exit/Esc), we do a final sync to catch any in-progress edits.
+function closeTableEditor() {
+  if (!rawJsonMode && window.tabulatorTable) {
+    syncFromTabulator();
+    saveJsonSilent();
+  }
+  document.getElementById('jsonModal').classList.remove('open');
+  render();
+}
+window.closeTableEditor = closeTableEditor;
+
 window.applyJsonChanges = function() {
   try {
     if (rawJsonMode) {
       const d = JSON.parse(document.getElementById('jsonText').value);
       if (!Array.isArray(d)) throw new Error('Expected array');
       linksData = d;
+      saveJsonSilent();
     } else {
       syncFromTabulator();
+      saveJsonSilent();
     }
-    localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
     document.getElementById('jsonModal').classList.remove('open');
     render(); return true;
   } catch(e) {
@@ -1310,17 +1356,12 @@ window.applyJsonChanges = function() {
 document.getElementById('jsonApply').addEventListener('click', window.applyJsonChanges);
 document.getElementById('jsonPush').addEventListener('pointerup', e => {
   e.preventDefault(); e.stopPropagation();
-  // Sync first so pushToGitHub sees the latest data
   if (!rawJsonMode) syncFromTabulator();
-  localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
-  // Also save a local copy automatically
   saveJsonSilent();
   window.pushToGitHub();
 });
 document.getElementById('jsonDl').addEventListener('click', saveJson);
-document.getElementById('jsonCancel').addEventListener('click', () => {
-  document.getElementById('jsonModal').classList.remove('open');
-});
+document.getElementById('jsonCancel').addEventListener('click', closeTableEditor);
 document.getElementById('jsonModal').addEventListener('pointerup', e => e.stopPropagation());
 document.getElementById('jsonText').addEventListener('keydown', e => {
   if (e.ctrlKey && e.key.toLowerCase() === 's') { e.preventDefault(); window.applyJsonChanges(); }
