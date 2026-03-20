@@ -20,13 +20,15 @@ window.openFS = function(it) {
   // ── State ─────────────────────────────────────────────────────────────────
   let audioMode  = parseInt(sessionStorage.getItem('fs-audio') || '0', 10);
   let playMode   = sessionStorage.getItem('fs-play')  || 'selected'; // 'selected'|'full'
-  let timelineExpanded = sessionStorage.getItem('fs-tl') === '1';    // false=collapsed bands, true=full timeline
   let playSpeed  = parseFloat(sessionStorage.getItem('fs-speed') || '1');
+  // timelineExpanded mirrors playMode: selected=collapsed bands, full=real timescale
+  let timelineExpanded = playMode === 'full';
   // Estimate total duration from segments; updated once player reports actual duration
   let totalVidDur = parsed ? Math.max.apply(null, parsed.map(s => s.start + s.dur)) + 15 : 60;
   let lastCurT = undefined;   // last known playback time for playhead
   let abA = null, abB = null, abLoopTimer = null;
   let isScrubbing = false;
+  let isPlaying   = true;  // assume playing on open
 
   const isMuted  = () => audioMode === 0;
   const COLOURS  = ['#2a6ef5','#e5732a','#2aa87a','#c03ec0','#c0c03e','#e53a3a'];
@@ -79,7 +81,29 @@ window.openFS = function(it) {
 
   function tlScrubSec(e) {
     const r = tl.getBoundingClientRect();
-    return (Math.max(0, Math.min(e.clientX - r.left, r.width)) / r.width) * totalVidDur;
+    const xFrac = Math.max(0, Math.min(e.clientX - r.left, r.width)) / r.width;
+    if (!timelineExpanded) {
+      // Selected mode: bar represents only the selected clips in order
+      // Map xFrac → actual video time within the segments
+      const totalSel = selectedDurSec() || 1;
+      const targetSel = xFrac * totalSel; // seconds into selected content
+      let acc = 0;
+      if (parsed) {
+        for (let i = 0; i < parsed.length; i++) {
+          const seg = parsed[i];
+          if (targetSel <= acc + seg.dur) {
+            return seg.start + (targetSel - acc);
+          }
+          acc += seg.dur;
+        }
+        // Past end — return end of last segment
+        const last = parsed[parsed.length - 1];
+        return last.start + last.dur;
+      }
+      return 0;
+    } else {
+      return xFrac * totalVidDur;
+    }
   }
 
   // Render the timeline bar.
@@ -109,17 +133,29 @@ window.openFS = function(it) {
           tl.appendChild(band);
           xPx += wPx + 1;
         });
-        // Playhead: map curT onto the selected-only timeline
+        // Playhead in selected mode: map video time → position within compressed bar
         if (curT !== undefined) {
-          // Find which segment curT falls in and compute proportional position
-          let pxPos = 0, xAcc = 0;
-          parsed.forEach(function(seg, i) {
-            const wPx = Math.max(Math.round((seg.dur / totalSel) * W), 3);
-            if (curT >= seg.start && curT <= seg.start + seg.dur) {
-              pxPos = xAcc + Math.round(((curT - seg.start) / seg.dur) * wPx);
-            }
-            xAcc += wPx + 1;
-          });
+          const totalSel = selectedDurSec() || 1;
+          let pxPos = 0, xAcc = 0, selAcc = 0, placed = false;
+          if (parsed) {
+            parsed.forEach(function(seg, i) {
+              const wPx = Math.max(Math.round((seg.dur / totalSel) * W), 3);
+              if (!placed) {
+                if (curT >= seg.start && curT < seg.start + seg.dur) {
+                  // Inside this segment
+                  pxPos = xAcc + Math.round(((curT - seg.start) / seg.dur) * wPx);
+                  placed = true;
+                } else if (curT < seg.start) {
+                  // Between previous segment and this one — snap to start of this band
+                  pxPos = xAcc;
+                  placed = true;
+                }
+              }
+              xAcc += wPx + 1;
+              selAcc += seg.dur;
+            });
+            if (!placed) pxPos = xAcc; // past all segments — right edge
+          }
           addPlayhead(pxPos);
           timeLbl.textContent = curT.toFixed(1) + 's';
         }
@@ -198,11 +234,34 @@ window.openFS = function(it) {
   speedLbl.textContent = playSpeed + 'x';
   speedWrap.appendChild(speedSlider); speedWrap.appendChild(speedLbl);
 
-  // Selected/Full PLAYBACK + timeline mode toggle (one button controls both)
-  const playModeBtn = mkBtn(
-    playMode === 'selected' ? '◎ Sel' : '◉ Full',
-    'Selected: play only clipped segments\nFull: play entire video',
-    'border-color:#4af;color:#8ef;');
+  // Selected/Full: two-line toggle button, active state on top
+  function makePlayModeBtn() {
+    const b = document.createElement('button');
+    b.style.cssText = 'padding:2px 7px;font-size:11px;border-radius:4px;cursor:pointer;'
+      + 'border:1px solid #4af;background:#222;color:#8ef;flex-shrink:0;white-space:nowrap;'
+      + 'line-height:1.3;text-align:left;';
+    function update() {
+      if (playMode === 'selected') {
+        b.innerHTML = '<span style="color:#8ef;font-weight:bold;">● Selected</span><br>'
+          + '<span style="color:#555;">○ Full</span>';
+      } else {
+        b.innerHTML = '<span style="color:#8ef;font-weight:bold;">● Full</span><br>'
+          + '<span style="color:#555;">○ Selected</span>';
+      }
+    }
+    update();
+    b.addEventListener('click', function(e) {
+      e.stopPropagation();
+      playMode = playMode === 'selected' ? 'full' : 'selected';
+      timelineExpanded = playMode === 'full';
+      sessionStorage.setItem('fs-play', playMode);
+      update();
+      renderTL(lastCurT);
+      mountFSPlayer();
+    });
+    return b;
+  }
+  const playModeBtn = makePlayModeBtn();
 
   const audioLabels = ['🔇', '🔊', '🎵'];
   const audioBtn = mkBtn(audioLabels[audioMode], 'Audio: Mute / Original / Site');
@@ -315,7 +374,7 @@ window.openFS = function(it) {
     }
   }, 250);
 
-  // ── Timeline interaction ──────────────────────────────────────────────────
+  // ── Timeline interaction — scrub only, no tap-toggle ─────────────────────
   tl.addEventListener('pointerdown', function(e) {
     if (e.ctrlKey) {
       e.preventDefault(); e.stopPropagation();
@@ -324,32 +383,19 @@ window.openFS = function(it) {
     }
     e.preventDefault(); isScrubbing = true;
     tl.setPointerCapture(e.pointerId);
-    // Single tap without drag: toggle expand/collapse
-    const startX = e.clientX;
-    tl._tapStartX = startX;
     fsSeek(tlScrubSec(e));
   });
   tl.addEventListener('pointermove', function(e) {
     if (!isScrubbing) return;
-    // Once moved more than 8px it's a scrub, not a tap
-    if (Math.abs(e.clientX - (tl._tapStartX || e.clientX)) > 8) {
-      tl._isScrubDrag = true;
-    }
     fsSeek(tlScrubSec(e));
   });
   tl.addEventListener('pointerup', function(e) {
     if (!isScrubbing) return;
     isScrubbing = false;
-    const wasDrag = tl._isScrubDrag;
-    tl._isScrubDrag = false;
-    if (!wasDrag) {
-      // It was a tap — toggle expand
-      timelineExpanded = !timelineExpanded;
-      sessionStorage.setItem('fs-tl', timelineExpanded ? '1' : '0');
-    }
     fsSeek(tlScrubSec(e));
+    // Playhead stays at scrubbed position; polling resumes naturally
   });
-  tl.addEventListener('pointercancel', function() { isScrubbing = false; tl._isScrubDrag = false; });
+  tl.addEventListener('pointercancel', function() { isScrubbing = false; });
 
   // ── A/B ───────────────────────────────────────────────────────────────────
   function updateAbLbl() {
@@ -410,17 +456,6 @@ window.openFS = function(it) {
     sessionStorage.setItem('fs-speed', playSpeed);
     fsSetSpeed(playSpeed);
   });
-  playModeBtn.addEventListener('click', function(e) {
-    e.stopPropagation();
-    playMode = playMode === 'selected' ? 'full' : 'selected';
-    // Also sync timeline expand state
-    timelineExpanded = playMode === 'full';
-    sessionStorage.setItem('fs-play', playMode);
-    sessionStorage.setItem('fs-tl',   timelineExpanded ? '1' : '0');
-    this.textContent = playMode === 'selected' ? '◎ Sel' : '◉ Full';
-    renderTL(lastCurT);
-    mountFSPlayer();
-  });
   audioBtn.addEventListener('click', function(e) {
     e.stopPropagation();
     audioMode = (audioMode + 1) % 3;
@@ -430,9 +465,26 @@ window.openFS = function(it) {
     mountFSPlayer();
   });
   closBtn.addEventListener('click', function(e) { e.stopPropagation(); fsClose(); });
-  // Tap video area to close
+
+  // Tap video area = play/pause toggle (not close)
   vidHost.addEventListener('pointerup', function(e) {
-    if (!isScrubbing) { e.stopPropagation(); fsClose(); }
+    if (isScrubbing) return;
+    e.stopPropagation();
+    const p = getP(); if (!p) return;
+    // YT player
+    if (typeof p.getPlayerState === 'function') {
+      try {
+        const state = p.getPlayerState();
+        if (state === 1 /* PLAYING */) { p.pauseVideo(); isPlaying = false; }
+        else { p.playVideo(); isPlaying = true; }
+      } catch(ex) {}
+    // Vimeo player
+    } else if (typeof p.getPaused === 'function') {
+      p.getPaused().then(function(paused) {
+        if (paused) { p.play(); isPlaying = true; }
+        else { p.pause(); isPlaying = false; }
+      }).catch(function(){});
+    }
   });
 
   function fsClose() {
