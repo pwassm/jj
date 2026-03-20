@@ -1112,11 +1112,25 @@ window.renderTableEditor = function() {
     history: false,
     height: '100%',
 
+    // Re-apply persisted widths AFTER Tabulator's layout pass (fitDataNoStretch
+    // runs post-init and silently overwrites the width values in column defs).
+    tableBuilt() {
+      const _saved = JSON.parse(localStorage.getItem('seeandlearn-colWidths') || '{}');
+      if (!Object.keys(_saved).length) return;
+      this.getColumns().forEach(col => {
+        const _f = col.getField();
+        if (!_f || _f.startsWith('_')) return;
+        if (_saved[_f] !== undefined && _saved[_f] > 8) col.setWidth(_saved[_f]);
+      });
+    },
+
     // Save column width immediately on every resize drag
     columnResized(column) {
       const f = column.getField();
       if (!f || f.startsWith('_')) return;
-      colWidths[f] = column.getWidth();
+      const w = column.getWidth();
+      if (!w || w < 8) return; // guard: never persist a zero/corrupt width
+      colWidths[f] = w;
       localStorage.setItem('seeandlearn-colWidths', JSON.stringify(colWidths));
     },
 
@@ -1129,6 +1143,13 @@ window.renderTableEditor = function() {
       tableKeys = newOrder;
       reorderLinksDataKeys();
       saveJsonSilent(); // saves both linksData AND tableKeys
+      // Re-apply saved widths — Tabulator re-layouts on column drag and may reset widths
+      const _savedW = JSON.parse(localStorage.getItem('seeandlearn-colWidths') || '{}');
+      columns.forEach(col => {
+        const _f = col.getField();
+        if (!_f || _f.startsWith('_')) return;
+        if (_savedW[_f] !== undefined && _savedW[_f] > 8) col.setWidth(_savedW[_f]);
+      });
       updateColHeaderStrip();
     },
 
