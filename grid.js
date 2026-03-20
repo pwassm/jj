@@ -128,8 +128,14 @@ function buildOverlays(){
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
 
-      // Swipe Right -> Full Screen
-      if (dx > 25 && Math.abs(dy) < Math.abs(dx) * 1.5) {
+      // In portrait mode the canvas is rotated 90deg. A physical rightward swipe
+      // on screen appears as a downward swipe in rotated grid coordinates (dy > 0).
+      // In landscape, a rightward swipe is dx > 0 as expected.
+      const swipeDist = isPortrait ? dy : dx;
+      const swipePerp = isPortrait ? dx : dy;
+
+      // Swipe to open fullscreen
+      if (swipeDist > 25 && Math.abs(swipePerp) < Math.abs(swipeDist) * 1.5) {
          e.stopPropagation();
          window.openFS(it);
          return;

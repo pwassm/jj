@@ -606,27 +606,25 @@ function closeMenu() {
 
 function positionMenuPanel() {
   const btnRect = menuBtn.getBoundingClientRect();
-  const panelW  = 220;
-  const margin  = 8;
   const viewH   = window.innerHeight;
   const viewW   = window.innerWidth;
+  const margin  = 6;
 
-  // Anchor right edge to button right, or clamp to screen
-  let right = viewW - btnRect.right;
-  let left  = btnRect.right - panelW;
-  if (left < margin) { left = margin; right = 'auto'; }
-
-  // Show above the button; if not enough space above, show below
+  // Right-align to button's right edge, clamped to screen
+  const rightEdge = viewW - btnRect.right;
+  // How much space is above the button?
   const spaceAbove = btnRect.top - margin;
-  const maxH       = Math.min(spaceAbove, viewH - 80);
+  // Cap panel height to available space above (min 150px)
+  const maxH = Math.max(spaceAbove, 150);
 
-  menuPanel.style.cssText = [
-    'bottom:' + (viewH - btnRect.top + 6) + 'px',
-    'right:'  + (viewW - btnRect.right) + 'px',
-    'left:auto',
-    'max-height:' + Math.max(maxH, 120) + 'px',
-    'min-width:210px',
-  ].join(';');
+  // Set position using individual properties so display:flex isn't wiped
+  menuPanel.style.position   = 'fixed';
+  menuPanel.style.bottom     = (viewH - btnRect.top + 4) + 'px';
+  menuPanel.style.right      = Math.max(0, rightEdge) + 'px';
+  menuPanel.style.left       = 'auto';
+  menuPanel.style.maxHeight  = maxH + 'px';
+  menuPanel.style.minWidth   = '200px';
+  menuPanel.style.overflowY  = 'scroll';
 }
 
 menuBtn.addEventListener('pointerup', e => {
@@ -1311,7 +1309,11 @@ document.getElementById('miTables').addEventListener('pointerup', e => {
   document.getElementById('deleteSelectedRows').style.display  = 'none';
   document.getElementById('jsonStatus').textContent            = '';
   document.getElementById('jsonModal').classList.add('open');
-  initTableKeys();
+  // Only rebuild tableKeys if we don't already have a valid order.
+  // Calling initTableKeys() every open resets the user's column ordering.
+  // tableKeys is preserved in memory across opens; it's only stale after a page reload,
+  // in which case it will be empty and initTableKeys() runs correctly below.
+  if (!tableKeys.length) initTableKeys();
   window.renderTableEditor();
 });
 
