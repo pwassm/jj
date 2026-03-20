@@ -433,19 +433,28 @@ window.openFS = function(it) {
   if (!isVidNode) {
     const img = document.createElement('img');
     img.src = it.link;
-    // Portrait: the grid canvas is rotated 90°; fullscreen images need the same treatment
-    img.style.cssText = window.isPortrait
-      ? 'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;transform:rotate(90deg);'
-      : 'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;';
+    // openFS overlay is position:fixed covering the whole physical screen — always landscape.
+    // Do NOT rotate: the image should fill the screen normally.
+    img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;';
     vidHost.appendChild(img);
     vidHost.style.cursor = 'pointer';
-    // Remove bottom bar for images — just tap to close
     bar.style.display = 'none';
-    vidHost.addEventListener('pointerup', () => fsClose());
+    // Tap anywhere to close
+    fs.addEventListener('pointerup', e => { e.stopPropagation(); fsClose(); });
     return;
   }
 
   mountFSPlayer();
+
+  // Transparent tap-to-close layer over video — sits above the iframe (pointer-events:none)
+  // but below the bottom bar so controls still work
+  const tapClose = document.createElement('div');
+  tapClose.style.cssText = 'position:absolute;inset:0;z-index:5;cursor:pointer;';
+  tapClose.title = 'Tap to close';
+  tapClose.addEventListener('pointerup', function(e) {
+    e.stopPropagation(); fsClose();
+  });
+  vidHost.appendChild(tapClose);
 
   // ── Duration + playhead polling ───────────────────────────────────────────
   let durDone = false;
@@ -568,27 +577,6 @@ window.openFS = function(it) {
   });
   closBtn.addEventListener('click', function(e) { e.stopPropagation(); fsClose(); });
 
-  // Tap video area = play/pause toggle (not close)
-  vidHost.addEventListener('pointerup', function(e) {
-    if (isScrubbing) return;
-    e.stopPropagation();
-    const p = getP(); if (!p) return;
-    // YT player
-    if (typeof p.getPlayerState === 'function') {
-      try {
-        const state = p.getPlayerState();
-        if (state === 1 /* PLAYING */) { p.pauseVideo(); isPlaying = false; }
-        else { p.playVideo(); isPlaying = true; }
-      } catch(ex) {}
-    // Vimeo player
-    } else if (typeof p.getPaused === 'function') {
-      p.getPaused().then(function(paused) {
-        if (paused) { p.play(); isPlaying = true; }
-        else { p.pause(); isPlaying = false; }
-      }).catch(function(){});
-    }
-  });
-
   function fsClose() {
     clearInterval(durTimer); clearInterval(playTimer);
     if (abLoopTimer) clearInterval(abLoopTimer);
@@ -605,26 +593,26 @@ function closeMenu() {
 }
 
 function positionMenuPanel() {
-  const btnRect = menuBtn.getBoundingClientRect();
-  const viewH   = window.innerHeight;
-  const viewW   = window.innerWidth;
-  const margin  = 6;
-
-  // Right-align to button's right edge, clamped to screen
-  const rightEdge = viewW - btnRect.right;
-  // How much space is above the button?
-  const spaceAbove = btnRect.top - margin;
-  // Cap panel height to available space above (min 150px)
-  const maxH = Math.max(spaceAbove, 150);
-
-  // Set position using individual properties so display:flex isn't wiped
-  menuPanel.style.position   = 'fixed';
-  menuPanel.style.bottom     = (viewH - btnRect.top + 4) + 'px';
-  menuPanel.style.right      = Math.max(0, rightEdge) + 'px';
-  menuPanel.style.left       = 'auto';
-  menuPanel.style.maxHeight  = maxH + 'px';
-  menuPanel.style.minWidth   = '200px';
-  menuPanel.style.overflowY  = 'scroll';
+  const PAD   = 14;
+  const viewH = window.innerHeight;
+  const viewW = window.innerWidth;
+  // menuWrap is 48×48px. In portrait: bottom:PAD left:PAD. In landscape: bottom:PAD right:PAD.
+  // Panel opens above the button. Set via individual style props (cssText would wipe display:flex).
+  const maxH = viewH - 48 - PAD * 2 - 10; // full height minus button and margins
+  menuPanel.style.position  = 'fixed';
+  menuPanel.style.maxHeight = Math.max(maxH, 150) + 'px';
+  menuPanel.style.minWidth  = '200px';
+  menuPanel.style.overflowY = 'scroll';
+  menuPanel.style.bottom    = (PAD + 48 + 6) + 'px'; // just above the button
+  if (isPortrait) {
+    // Button is at bottom-left in portrait
+    menuPanel.style.left  = PAD + 'px';
+    menuPanel.style.right = 'auto';
+  } else {
+    // Button is at bottom-right in landscape
+    menuPanel.style.right = PAD + 'px';
+    menuPanel.style.left  = 'auto';
+  }
 }
 
 menuBtn.addEventListener('pointerup', e => {
@@ -658,8 +646,31 @@ let activeCol = null;   // field name string
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function initTableKeys() {
-  // Build ordered key list, skipping any _ prefixed internal fields that
-  // may have leaked from Tabulator (e.g. _del, _sel, _move).
+  // Try to restore saved column order from localStorage first
+  const saved = localStorage.getItem('seeandlearn-tableKeys');
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length) {
+        // Merge: keep saved order, append any new keys not in saved order
+        const savedSet = new Set(parsed);
+        const allKeys = new Set();
+        linksData.forEach(r => Object.keys(r).forEach(k => {
+          if (!k.startsWith('_')) allKeys.add(k);
+        }));
+        const extra = [...allKeys].filter(k => !savedSet.has(k));
+        tableKeys = [...parsed.filter(k => allKeys.has(k)), ...extra];
+        // Scrub linksData of _ keys
+        linksData = linksData.map(r => {
+          const clean = {};
+          Object.keys(r).forEach(k => { if (!k.startsWith('_')) clean[k] = r[k]; });
+          return clean;
+        });
+        return;
+      }
+    } catch(e) {}
+  }
+  // No saved order — build from linksData key order
   const seen = new Set();
   const ordered = [];
   linksData.forEach(r => {
@@ -669,8 +680,7 @@ function initTableKeys() {
   });
   tableKeys = ordered.length ? ordered
     : ['show','VidRange','cell','fit','link','cname','sname','v.title','v.author','attribution','comment','Mute','Portrait'];
-
-  // Also scrub linksData itself of any leaked _ keys
+  // Scrub linksData of _ keys
   linksData = linksData.map(r => {
     const clean = {};
     Object.keys(r).forEach(k => { if (!k.startsWith('_')) clean[k] = r[k]; });
@@ -1112,15 +1122,13 @@ window.renderTableEditor = function() {
 
     // When user drags columns to reorder, update tableKeys and persist key order
     columnMoved(column, columns) {
-      // Sync first — get Tabulator's current data (which reflects the new column order)
       syncFromTabulator();
       const newOrder = columns
         .map(c => c.getField())
         .filter(f => f && !f.startsWith('_'));
       tableKeys = newOrder;
       reorderLinksDataKeys();
-      saveJsonSilent();
-      // Update the column strip to reflect new order
+      saveJsonSilent(); // saves both linksData AND tableKeys
       updateColHeaderStrip();
     },
 
@@ -1374,6 +1382,8 @@ document.getElementById('jsonText').addEventListener('keydown', e => {
 function saveJsonSilent() {
   localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
   localStorage.setItem('mlynx-links', JSON.stringify(linksData));
+  // Persist column order so it survives page reload
+  localStorage.setItem('seeandlearn-tableKeys', JSON.stringify(tableKeys));
 }
 
 // saveJson: explicit download (only called by Download button / Ctrl+Alt+S)

@@ -114,7 +114,8 @@ window.mountYouTubeClip = async function(hostEl, url, startSec, dur, isMuted, cu
   var innerId = 'yt_' + cellId.replace(/[^a-zA-Z0-9_-]/g, '_');
   var div = document.createElement('div');
   div.id = innerId;
-  div.style.cssText = 'width:100%;height:100%;pointer-events:none;';
+  // pointer-events:auto allows clicking the YouTube "More videos" X button if it appears
+  div.style.cssText = 'width:100%;height:100%;pointer-events:auto;';
   hostEl.appendChild(div);
 
   var initSeek = customSeekTo !== undefined ? Number(customSeekTo) : segs[0].start;
@@ -126,7 +127,9 @@ window.mountYouTubeClip = async function(hostEl, url, startSec, dur, isMuted, cu
       autoplay: 1, controls: 0, disablekb: 1, fs: 0, rel: 0,
       modestbranding: 1, playsinline: 1,
       start: Math.floor(initSeek),
-      iv_load_policy: 3
+      iv_load_policy: 3,
+      endscreen: 0,
+      cc_load_policy: 0
     },
     events: {
       onReady: function(e) {
@@ -769,7 +772,8 @@ window.openVideoEditor = function(it) {
     host.innerHTML = '';
     var div = document.createElement('div');
     div.id = 'v2host_yt';
-    div.style.cssText = 'width:100%;height:100%;pointer-events:none;';
+    // Allow pointer-events so YouTube overlay X button is clickable
+    div.style.cssText = 'width:100%;height:100%;pointer-events:auto;';
     host.appendChild(div);
     var endT  = segStart + segDur;
     var paused = false;
@@ -779,7 +783,8 @@ window.openVideoEditor = function(it) {
       host: 'https://www.youtube-nocookie.com',
       playerVars: {
         autoplay: 1, controls: 0, disablekb: 1, fs: 0, rel: 0,
-        modestbranding: 1, playsinline: 1, start: Math.floor(seekSec), iv_load_policy: 3
+        modestbranding: 1, playsinline: 1, start: Math.floor(seekSec),
+        iv_load_policy: 3, endscreen: 0, cc_load_policy: 0
       },
       events: {
         onReady: function(ev) {
