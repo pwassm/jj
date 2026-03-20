@@ -113,6 +113,8 @@ function buildOverlays(){
       if (e.button !== undefined && e.button !== 0 && e.pointerType !== 'touch') return;
       startX = e.clientX; startY = e.clientY;
       isDragging = true;
+      // Capture pointer so pointermove/pointerup fire even if pointer leaves the div
+      try { div.setPointerCapture(e.pointerId); } catch(ex) {}
     });
 
     div.addEventListener('pointermove', e => {

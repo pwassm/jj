@@ -253,11 +253,8 @@ window.openFS = function(it) {
     b.addEventListener('click', function(e) {
       e.stopPropagation();
       playMode = playMode === 'selected' ? 'full' : 'selected';
-      timelineExpanded = playMode === 'full';
-      sessionStorage.setItem('fs-play', playMode);
       update();
-      renderTL(lastCurT);
-      mountFSPlayer();
+      switchPlayMode();
     });
     return b;
   }
@@ -270,6 +267,49 @@ window.openFS = function(it) {
   abLbl.style.cssText='font-size:10px;color:#fa0;font-family:monospace;flex-shrink:0;';
   abLbl.textContent = '';
 
+  // A/B buttons: tap A to set mark A, tap B to set mark B (loops), tap either to clear
+  const btnA = mkBtn('A', 'Set A loop start (Ctrl+click timeline in Full mode)',
+    'border-color:#ff0;color:#ff0;background:rgba(80,80,0,0.3);font-weight:bold;');
+  const btnB = mkBtn('B', 'Set B loop end — loops between A and B',
+    'border-color:#f80;color:#f80;background:rgba(80,40,0,0.3);font-weight:bold;');
+
+  btnA.addEventListener('click', function(e) {
+    e.stopPropagation();
+    if (abA !== null && abB !== null) {
+      // Clear loop
+      abA = null; abB = null;
+      if (abLoopTimer) { clearInterval(abLoopTimer); abLoopTimer = null; }
+      btnA.style.background = 'rgba(80,80,0,0.3)';
+      btnB.style.background = 'rgba(80,40,0,0.3)';
+    } else {
+      // Set A at current position
+      const t = lastCurT !== undefined ? lastCurT : 0;
+      abA = t; abB = null;
+      if (abLoopTimer) { clearInterval(abLoopTimer); abLoopTimer = null; }
+      btnA.style.background = 'rgba(180,180,0,0.5)';
+      btnB.style.background = 'rgba(80,40,0,0.3)';
+    }
+    updateAbLbl(); renderTL(lastCurT);
+  });
+
+  btnB.addEventListener('click', function(e) {
+    e.stopPropagation();
+    if (abA === null) { alert('Set A first'); return; }
+    if (abA !== null && abB !== null) {
+      // Clear
+      abA = null; abB = null;
+      if (abLoopTimer) { clearInterval(abLoopTimer); abLoopTimer = null; }
+      btnA.style.background = 'rgba(80,80,0,0.3)';
+      btnB.style.background = 'rgba(80,40,0,0.3)';
+      updateAbLbl(); renderTL(lastCurT); return;
+    }
+    const t = lastCurT !== undefined ? lastCurT : (abA + 5);
+    abB = t > abA ? t : abA + 1;
+    btnB.style.background = 'rgba(180,80,0,0.5)';
+    startAbLoop();
+    updateAbLbl(); renderTL(lastCurT);
+  });
+
   const closBtn = mkBtn('✕', 'Close (tap video)',
     'margin-left:auto;border-color:#f66;color:#f88;background:rgba(80,0,0,0.4);');
 
@@ -278,6 +318,7 @@ window.openFS = function(it) {
   ctrlRow.appendChild(speedWrap);
   ctrlRow.appendChild(playModeBtn);
   ctrlRow.appendChild(audioBtn);
+  ctrlRow.appendChild(btnA); ctrlRow.appendChild(btnB);
   ctrlRow.appendChild(abLbl);
   ctrlRow.appendChild(closBtn);
 
@@ -310,8 +351,8 @@ window.openFS = function(it) {
     else if (p.setPlaybackRate) p.setPlaybackRate(r).catch(function(){});
   }
 
-  // ── Mount ─────────────────────────────────────────────────────────────────
-  function mountFSPlayer() {
+  // ── Mount — full remount (used on open, audio change, speed change) ──────
+  function mountFSPlayer(seekTo) {
     window.stopCellVideoLoop(vidHost.id);
     if (abLoopTimer) { clearInterval(abLoopTimer); abLoopTimer = null; }
     vidHost.innerHTML = '';
@@ -320,11 +361,72 @@ window.openFS = function(it) {
     const segsArg = playMode === 'selected'
       ? parsed
       : [{ start: 0, dur: totalVidDur || 9999 }];
+    const seekSec = (seekTo !== undefined) ? seekTo : (lastCurT !== undefined ? lastCurT : seg0.start);
     if (window.isYouTubeLink(it.link) && window.mountYouTubeClip)
-      window.mountYouTubeClip(vidHost, it.link, seg0.start, seg0.dur, muted, undefined, segsArg);
+      window.mountYouTubeClip(vidHost, it.link, seg0.start, seg0.dur, muted, seekSec, segsArg);
     else if (window.isVimeoLink(it.link) && window.mountVimeoClip)
-      window.mountVimeoClip(vidHost, it.link, seg0.start, seg0.dur, muted, undefined, segsArg);
+      window.mountVimeoClip(vidHost, it.link, seg0.start, seg0.dur, muted, seekSec, segsArg);
     setTimeout(() => { if (playSpeed !== 1) fsSetSpeed(playSpeed); }, 1200);
+  }
+
+  // ── Switch mode without remounting — seek existing player, change loop ────
+  function switchPlayMode() {
+    timelineExpanded = playMode === 'full';
+    sessionStorage.setItem('fs-play', playMode);
+    renderTL(lastCurT);
+
+    // Try to update loop on the existing player without destroying it
+    const p = getP();
+    const cur = lastCurT;
+    if (!p) { mountFSPlayer(cur); return; }
+
+    // Stop the current loop interval, keep the player alive
+    if (window.seeLearnVideoTimers[vidHost.id]) {
+      clearInterval(window.seeLearnVideoTimers[vidHost.id]);
+      delete window.seeLearnVideoTimers[vidHost.id];
+    }
+
+    // Restart the loop with new segs
+    const segsArg = playMode === 'selected'
+      ? parsed
+      : [{ start: 0, dur: totalVidDur || 9999 }];
+
+    if (typeof p.seekTo === 'function') {
+      // YT: seek to current position and restart interval with new boundaries
+      try {
+        if (cur !== undefined) p.seekTo(cur, !window.keyframeOnly);
+        p.playVideo();
+      } catch(ex) {}
+      let segIdx = 0;
+      window.seeLearnVideoTimers[vidHost.id] = setInterval(function() {
+        try {
+          const t = p.getCurrentTime();
+          const seg = segsArg[segIdx];
+          if (t >= seg.start + seg.dur || t < seg.start - 0.5) {
+            segIdx = (segIdx + 1) % segsArg.length;
+            p.seekTo(segsArg[segIdx].start, !window.keyframeOnly);
+            p.playVideo();
+          }
+        } catch(ex) {}
+      }, 100);
+    } else if (p.setCurrentTime) {
+      // Vimeo: same
+      if (cur !== undefined) p.setCurrentTime(cur).catch(function(){});
+      p.play().catch(function(){});
+      let segIdx = 0;
+      window.seeLearnVideoTimers[vidHost.id] = setInterval(function() {
+        p.getCurrentTime().then(function(t) {
+          const seg = segsArg[segIdx];
+          if (t >= seg.start + seg.dur || t < seg.start - 0.5) {
+            segIdx = (segIdx + 1) % segsArg.length;
+            p.setCurrentTime(segsArg[segIdx].start);
+            p.play();
+          }
+        }).catch(function(){});
+      }, 100);
+    } else {
+      mountFSPlayer(cur);
+    }
   }
 
   // Image mode
@@ -769,6 +871,9 @@ window.renderTableEditor = function() {
   });
 
   // Data columns
+  // Re-read colWidths from localStorage every render to pick up widths saved in prior sessions
+  colWidths = JSON.parse(localStorage.getItem('seeandlearn-colWidths') || '{}');
+
   tableKeys.forEach(k => {
     const w = colWidths[k] !== undefined ? colWidths[k] : COL_DEFAULT_PX;
     const colDef = {

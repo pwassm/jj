@@ -27,6 +27,18 @@ async function init(){
       row.VidRange = row.asset;
       delete row.asset;
     }
+    // Normalize V.Title → v.title, V.Author → v.author (capital V was old convention)
+    if ('V.Title' in row && !('v.title' in row)) {
+      row['v.title'] = row['V.Title'];
+      delete row['V.Title'];
+    }
+    if ('V.Author' in row && !('v.author' in row)) {
+      row['v.author'] = row['V.Author'];
+      delete row['V.Author'];
+    }
+    // Remove old uppercase duplicates if both exist
+    if ('V.Title' in row && 'v.title' in row) delete row['V.Title'];
+    if ('V.Author' in row && 'v.author' in row) delete row['V.Author'];
   });
   render();
 
