@@ -254,7 +254,7 @@
     "show": "1",
     "Mute": "",
     "cell": "3c",
-    "fit": "fc",
+    "fit": "ei",
     "link": "https://sealifeandmore.org/wp-content/uploads/2025/07/codblackface_20250720.gif",
     "attribution": "My picture!",
     "comment": "Hemifacial melanosis",
@@ -364,6 +364,24 @@
     "v.author": "waymire5"
   },
   {
+    "cname": "Swimming anemone with Leather star",
+    "sname": "Stomphia coccinea",
+    "Portrait": "0",
+    "show": "1",
+    "Mute": "1",
+    "cell": "4b",
+    "fit": "",
+    "link": "https://www.youtube.com/watch?v=iw3U66gDlvE",
+    "attribution": "",
+    "comment": "",
+    "VidRange": "70 40",
+    "VidComment": "",
+    "UniqID": "2",
+    "Topic": "",
+    "v.title": "Swimming Anemone - Stomphia coccinea",
+    "v.author": "C Tamis Photography"
+  },
+  {
     "MPix": "",
     "Thumb": "",
     "cname": "Diamond Squid",
@@ -383,24 +401,6 @@
     "Topic": "",
     "v.title": "",
     "v.author": ""
-  },
-  {
-    "cname": "Swimming anemone with Leather star",
-    "sname": "Stomphia coccinea",
-    "Portrait": "0",
-    "show": "1",
-    "Mute": "1",
-    "cell": "4b",
-    "fit": "",
-    "link": "https://www.youtube.com/watch?v=iw3U66gDlvE",
-    "attribution": "",
-    "comment": "",
-    "VidRange": "70 40",
-    "VidComment": "",
-    "UniqID": "",
-    "Topic": "",
-    "v.title": "Swimming Anemone - Stomphia coccinea",
-    "v.author": "C Tamis Photography"
   },
   {
     "cname": "California Sheephead,Sea Urchin,Predation",
