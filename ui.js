@@ -629,7 +629,8 @@ document.addEventListener('pointerup', () => { if (menuPanel.classList.contains(
 let rawJsonMode = false;
 let tableKeys   = [];
 
-const COL_DEFAULT_PX = 120;   // sensible default — not too wide
+const COL_DEFAULT_PX = 120;   // sensible default
+const COL_MAX_PX     = 220;   // cap so long-content cols (comment, link) don't blow out the table
 const COL_MIN_PX     = 8;
 
 // colWidths: persisted in localStorage, keyed by field name
@@ -910,11 +911,18 @@ window.renderTableEditor = function() {
   colWidths = JSON.parse(localStorage.getItem('seeandlearn-colWidths') || '{}');
 
   tableKeys.forEach(k => {
+    // Clamp saved width between min and max
+    const saved = colWidths[k];
+    const w = saved !== undefined
+      ? Math.min(Math.max(saved, COL_MIN_PX), COL_MAX_PX)
+      : COL_DEFAULT_PX;
     const colDef = {
       title: k,
       field: k,
       editor: 'input',
       headerSort: true,
+      width: w,          // explicit — layout:false honours this exactly
+      maxWidth: COL_MAX_PX,
       minWidth: COL_MIN_PX,
       resizable: true,
       tooltip: true,
@@ -1094,24 +1102,25 @@ window.renderTableEditor = function() {
   // ── Instantiate Tabulator ─────────────────────────────────────────────────
   // CRITICAL: pass getDataCopy() not linksData directly — prevents double-rows
   window.tabulatorTable = new Tabulator(container, {
-    data: getDataCopy(),       // deep copy — Tabulator owns its own copy
-    reactiveData: false,       // DO NOT use reactive — causes doubles
+    data: getDataCopy(),
+    reactiveData: false,
     columns: cols,
-    layout: 'fitDataTable',    // renders columns to data width, then we override with saved widths
+    layout: false,         // NO layout engine — column widths are exactly what we set, always
     autoResize: false,
     selectableRows: true,
     movableColumns: true,
     history: false,
     height: '100%',
 
-    // After table is fully built, apply saved widths (overrides layout engine)
+    // Belt-and-suspenders: re-apply saved widths after build in case anything shifted
     tableBuilt() {
       const tbl = window.tabulatorTable;
       if (!tbl) return;
       tableKeys.forEach(k => {
-        if (colWidths[k] !== undefined) {
-          try { tbl.getColumn(k).setWidth(colWidths[k]); } catch(e) {}
-        }
+        const w = colWidths[k] !== undefined
+          ? Math.min(Math.max(colWidths[k], COL_MIN_PX), COL_MAX_PX)
+          : COL_DEFAULT_PX;
+        try { tbl.getColumn(k).setWidth(w); } catch(e) {}
       });
     },
 
@@ -1119,7 +1128,8 @@ window.renderTableEditor = function() {
     columnResized(column) {
       const f = column.getField();
       if (!f || f.startsWith('_')) return;
-      colWidths[f] = column.getWidth();
+      // Clamp to max so accidental over-drag is corrected on next open
+      colWidths[f] = Math.min(column.getWidth(), COL_MAX_PX);
       localStorage.setItem('seeandlearn-colWidths', JSON.stringify(colWidths));
       syncFromTabulator();
       saveJsonSilent();
@@ -1377,6 +1387,25 @@ document.getElementById('jsonPush').addEventListener('pointerup', e => {
 });
 document.getElementById('jsonDl').addEventListener('click', saveJson);
 document.getElementById('jsonCancel').addEventListener('click', closeTableEditor);
+
+// ─── Table horizontal scroll arrows ──────────────────────────────────────────
+(function() {
+  const SCROLL_AMT = 400; // px per click — aggressive
+  function getTableScroller() {
+    // Tabulator's scrollable inner element
+    const te = document.getElementById('tableEditor');
+    if (!te) return null;
+    return te.querySelector('.tabulator-tableholder') || te;
+  }
+  document.getElementById('jsonScrollLeft').addEventListener('click', function() {
+    const el = getTableScroller();
+    if (el) el.scrollBy({ left: -SCROLL_AMT, behavior: 'smooth' });
+  });
+  document.getElementById('jsonScrollRight').addEventListener('click', function() {
+    const el = getTableScroller();
+    if (el) el.scrollBy({ left: SCROLL_AMT, behavior: 'smooth' });
+  });
+})();
 document.getElementById('jsonModal').addEventListener('pointerup', e => e.stopPropagation());
 document.getElementById('jsonText').addEventListener('keydown', e => {
   if (e.ctrlKey && e.key.toLowerCase() === 's') { e.preventDefault(); window.applyJsonChanges(); }
