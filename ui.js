@@ -804,7 +804,7 @@ function delColumn(k) {
   tableKeys = tableKeys.filter(x => x !== k);
   linksData.forEach(row => delete row[k]);
   if (activeCol === k) activeCol = null;
-  localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+  saveJsonSilent();
   window.renderTableEditor();
 }
 
@@ -828,7 +828,7 @@ function renameColumn(k) {
   if (tableKeys.includes(newK)) { alert('"' + newK + '" already exists.'); return; }
   tableKeys[tableKeys.indexOf(k)] = newK;
   linksData.forEach(row => { row[newK] = row[k] !== undefined ? row[k] : ''; delete row[k]; });
-  localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+  saveJsonSilent();
   activeCol = newK;
   window.renderTableEditor();
 }
@@ -873,7 +873,7 @@ window.renderTableEditor = function() {
       );
       if (idx > -1) linksData.splice(idx, 1);
       cell.getRow().delete();
-      localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+      saveJsonSilent();
     }
   });
 
@@ -905,7 +905,7 @@ window.renderTableEditor = function() {
       if (tgt < 0 || tgt >= rows.length) return;
       // Swap in linksData using position
       const tmp = linksData[pos]; linksData[pos] = linksData[tgt]; linksData[tgt] = tmp;
-      localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+      saveJsonSilent();
       window.renderTableEditor();
     }
   });
@@ -1112,25 +1112,11 @@ window.renderTableEditor = function() {
     history: false,
     height: '100%',
 
-    // Re-apply persisted widths AFTER Tabulator's layout pass (fitDataNoStretch
-    // runs post-init and silently overwrites the width values in column defs).
-    tableBuilt() {
-      const _saved = JSON.parse(localStorage.getItem('seeandlearn-colWidths') || '{}');
-      if (!Object.keys(_saved).length) return;
-      this.getColumns().forEach(col => {
-        const _f = col.getField();
-        if (!_f || _f.startsWith('_')) return;
-        if (_saved[_f] !== undefined && _saved[_f] > 8) col.setWidth(_saved[_f]);
-      });
-    },
-
     // Save column width immediately on every resize drag
     columnResized(column) {
       const f = column.getField();
       if (!f || f.startsWith('_')) return;
-      const w = column.getWidth();
-      if (!w || w < 8) return; // guard: never persist a zero/corrupt width
-      colWidths[f] = w;
+      colWidths[f] = column.getWidth();
       localStorage.setItem('seeandlearn-colWidths', JSON.stringify(colWidths));
     },
 
@@ -1143,13 +1129,6 @@ window.renderTableEditor = function() {
       tableKeys = newOrder;
       reorderLinksDataKeys();
       saveJsonSilent(); // saves both linksData AND tableKeys
-      // Re-apply saved widths — Tabulator re-layouts on column drag and may reset widths
-      const _savedW = JSON.parse(localStorage.getItem('seeandlearn-colWidths') || '{}');
-      columns.forEach(col => {
-        const _f = col.getField();
-        if (!_f || _f.startsWith('_')) return;
-        if (_savedW[_f] !== undefined && _savedW[_f] > 8) col.setWidth(_savedW[_f]);
-      });
       updateColHeaderStrip();
     },
 
@@ -1182,7 +1161,7 @@ document.getElementById('addTableItem').addEventListener('click', function() {
   }
   // Sync Tabulator → linksData after structural change
   syncFromTabulator();
-  localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+  saveJsonSilent();
   setStatus('Row added');
 });
 
@@ -1191,7 +1170,7 @@ document.getElementById('btn-row-add-bottom').addEventListener('click', function
   const newRow = {}; tableKeys.forEach(k => newRow[k] = '');
   window.tabulatorTable.addRow(newRow, false);
   syncFromTabulator();
-  localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+  saveJsonSilent();
   setStatus('Row added at bottom');
 });
 
@@ -1210,7 +1189,7 @@ document.getElementById('btn-duplicate-row-action').addEventListener('click', fu
   });
 
   syncFromTabulator();
-  localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+  saveJsonSilent();
   setStatus('Row(s) duplicated');
 });
 
@@ -1225,7 +1204,7 @@ document.getElementById('deleteSelectedRows').addEventListener('click', function
   });
   localStorage.setItem('seeandlearn-recycle', JSON.stringify(recycleData));
   syncFromTabulator();
-  localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+  saveJsonSilent();
   activeRow = null;
   this.style.display = 'none';
   setStatus('Row(s) deleted');
@@ -1284,7 +1263,7 @@ document.getElementById('btn-import').addEventListener('click', function() {
         if (merge) imported.forEach(r => linksData.push(r));
         else { linksData = imported; }
         initTableKeys();
-        localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+        saveJsonSilent();
         window.renderTableEditor();
         setStatus('Imported ' + imported.length + ' rows');
       } catch(e) { alert('Invalid JSON: ' + e.message); }
@@ -1494,7 +1473,7 @@ window.fillEmptyVideoInfo = async function() {
   }));
 
   if (updated) {
-    localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+    saveJsonSilent();
     window.renderTableEditor();
   }
   if (btn) btn.textContent = 'Get Video Info';
@@ -1529,7 +1508,7 @@ document.getElementById('miLoadGithub').addEventListener('pointerup', async e =>
     linksData.forEach(row => {
       if ('asset' in row && !('VidRange' in row)) { row.VidRange = row.asset; delete row.asset; }
     });
-    localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+    saveJsonSilent();
     render();
     alert('Loaded ' + linksData.length + ' rows from GitHub.');
   } catch(err) { alert('Load from GitHub failed:\n' + err.message); }
