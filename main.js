@@ -1,28 +1,26 @@
 async function init(){
   setupLayout(); syncFit(); syncAdminUI();
 
-  // Data loading strategy (robust for both file:/// and http://):
+  // Data loading strategy (works for both file:/// and http://):
   //
-  // ALWAYS attempt to load links.json first.
-  //   - On http/https: fetch() works, gets latest file from server/GitHub Pages.
-  //   - On file:///: fetch() is blocked by browser security; we catch the error
-  //     and fall back to localStorage.
+  // Priority:
+  //   1. fetch('links.json') — works on http/https, gets fresh server copy
+  //   2. window.LINKS_JSON_INLINE — embedded in index.html, always works including file:///
+  //   3. localStorage — saved edits from previous sessions
   //
-  // After loading links.json, we compare with localStorage:
-  //   - If localStorage has MORE rows than links.json, it has unsaved edits → use localStorage.
-  //   - Otherwise links.json is authoritative (catches newly deployed data).
-  //
-  // This solves:
-  //   1. file:/// showing empty table — falls back to localStorage gracefully.
-  //   2. Stale/empty localStorage overriding good links.json — file wins when it has more data.
-  //   3. Unsaved edits in localStorage are preserved when they represent more work.
+  // If localStorage has MORE rows than the file, it has unsaved edits → keep localStorage.
+  // This means local edits are never silently discarded, and file:/// always works.
 
   let fileData = null;
   try {
     const r = await fetch('links.json?v=' + Date.now());
     if (r.ok) fileData = await r.json();
   } catch(e) {
-    // fetch() blocked (file:///) or network error — will fall back to localStorage
+    // fetch() blocked (file:///) or network error
+  }
+  // Fallback: use the data embedded inline in index.html
+  if (!fileData && window.LINKS_JSON_INLINE) {
+    fileData = window.LINKS_JSON_INLINE;
   }
 
   const lsRaw = localStorage.getItem('seeandlearn-links') || localStorage.getItem('mlynx-links');
@@ -32,21 +30,18 @@ async function init(){
   }
 
   if (fileData && Array.isArray(fileData) && fileData.length > 0) {
-    // links.json loaded successfully
     if (lsData && Array.isArray(lsData) && lsData.length > fileData.length) {
-      // localStorage has more rows → user has unsaved edits beyond what's in file
+      // localStorage has more rows → user has unsaved edits
       linksData = lsData;
     } else {
-      // Use file data (authoritative)
+      // File data is authoritative
       linksData = fileData;
-      // Persist to localStorage so file:/// works on subsequent loads
+      // Seed localStorage so next load (including file:///) has a copy
       localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
     }
   } else if (lsData && Array.isArray(lsData) && lsData.length > 0) {
-    // links.json unavailable (file:///) but localStorage has data
     linksData = lsData;
   } else {
-    // Nothing available — empty start
     linksData = [];
   }
 

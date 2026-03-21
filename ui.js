@@ -1107,6 +1107,7 @@ window.renderTableEditor = function() {
     reactiveData: false,       // DO NOT use reactive — causes doubles
     columns: cols,
     layout: 'fitDataNoStretch',
+    autoResize: false,         // prevent Tabulator re-fitting widths on window resize
     selectableRows: true,
     movableColumns: true,      // allow drag-to-reorder column headers
     history: false,
@@ -1118,6 +1119,9 @@ window.renderTableEditor = function() {
       if (!f || f.startsWith('_')) return;
       colWidths[f] = column.getWidth();
       localStorage.setItem('seeandlearn-colWidths', JSON.stringify(colWidths));
+      // Also persist full state so tableKeys survives reload
+      syncFromTabulator();
+      saveJsonSilent();
     },
 
     // When user drags columns to reorder, update tableKeys and persist key order
