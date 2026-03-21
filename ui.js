@@ -652,31 +652,21 @@ function initTableKeys() {
     try {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed) && parsed.length) {
-        // Stale-order guard: if linksData has rows and the first key of the
-        // first row doesn't match the first saved key, the saved order is from
-        // an old schema — discard it and rebuild from linksData key order.
-        const firstRowKeys = linksData.length ? Object.keys(linksData[0]).filter(k => !k.startsWith('_')) : [];
-        const savedFirstKey = parsed[0];
-        if (firstRowKeys.length && savedFirstKey !== firstRowKeys[0]) {
-          // Stale saved order detected — fall through to rebuild from linksData
-          localStorage.removeItem('seeandlearn-tableKeys');
-        } else {
-          // Merge: keep saved order, append any new keys not in saved order
-          const savedSet = new Set(parsed);
-          const allKeys = new Set();
-          linksData.forEach(r => Object.keys(r).forEach(k => {
-            if (!k.startsWith('_')) allKeys.add(k);
-          }));
-          const extra = [...allKeys].filter(k => !savedSet.has(k));
-          tableKeys = [...parsed.filter(k => allKeys.has(k)), ...extra];
-          // Scrub linksData of _ keys
-          linksData = linksData.map(r => {
-            const clean = {};
-            Object.keys(r).forEach(k => { if (!k.startsWith('_')) clean[k] = r[k]; });
-            return clean;
-          });
-          return;
-        }
+        // Merge: keep saved order, append any new keys not in saved order
+        const savedSet = new Set(parsed);
+        const allKeys = new Set();
+        linksData.forEach(r => Object.keys(r).forEach(k => {
+          if (!k.startsWith('_')) allKeys.add(k);
+        }));
+        const extra = [...allKeys].filter(k => !savedSet.has(k));
+        tableKeys = [...parsed.filter(k => allKeys.has(k)), ...extra];
+        // Scrub linksData of _ keys
+        linksData = linksData.map(r => {
+          const clean = {};
+          Object.keys(r).forEach(k => { if (!k.startsWith('_')) clean[k] = r[k]; });
+          return clean;
+        });
+        return;
       }
     } catch(e) {}
   }
