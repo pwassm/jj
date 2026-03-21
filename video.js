@@ -102,6 +102,23 @@ window.stopCellVideoLoop = function(cellId) {
 window.mountYouTubeClip = async function(hostEl, url, startSec, dur, isMuted, customSeekTo, segsArg) {
   var vid = getYouTubeId(url);
   if (!vid || !hostEl) return;
+
+  // YouTube blocks embedding on file:/// origins (Error 153).
+  // Show a simple click-to-open card instead.
+  if (location.protocol === 'file:') {
+    hostEl.innerHTML = '';
+    var card = document.createElement('div');
+    card.style.cssText = 'width:100%;height:100%;display:flex;flex-direction:column;'
+      + 'align-items:center;justify-content:center;background:#111;cursor:pointer;';
+    card.innerHTML = '<div style="font-size:28px;margin-bottom:6px;">▶</div>'
+      + '<div style="color:#f00;font-size:11px;font-weight:bold;">YouTube</div>'
+      + '<div style="color:#aaa;font-size:10px;margin-top:4px;text-align:center;padding:0 8px;">'
+      + 'Tap to open<br>(local file)</div>';
+    card.addEventListener('click', function() { window.open(url, '_blank'); });
+    hostEl.appendChild(card);
+    return;
+  }
+
   await loadYouTubeApiOnce();
   var cellId = hostEl.id;
   stopCellVideoLoop(cellId);

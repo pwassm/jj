@@ -646,31 +646,12 @@ let activeCol = null;   // field name string
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function initTableKeys() {
-  // Try to restore saved column order from localStorage first
-  const saved = localStorage.getItem('seeandlearn-tableKeys');
-  if (saved) {
-    try {
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length) {
-        // Merge: keep saved order, append any new keys not in saved order
-        const savedSet = new Set(parsed);
-        const allKeys = new Set();
-        linksData.forEach(r => Object.keys(r).forEach(k => {
-          if (!k.startsWith('_')) allKeys.add(k);
-        }));
-        const extra = [...allKeys].filter(k => !savedSet.has(k));
-        tableKeys = [...parsed.filter(k => allKeys.has(k)), ...extra];
-        // Scrub linksData of _ keys
-        linksData = linksData.map(r => {
-          const clean = {};
-          Object.keys(r).forEach(k => { if (!k.startsWith('_')) clean[k] = r[k]; });
-          return clean;
-        });
-        return;
-      }
-    } catch(e) {}
-  }
-  // No saved order — build from linksData key order
+  // Column order source of truth: the key order in linksData rows (which mirrors links.json).
+  // This means column order is consistent across ALL browsers and devices — no per-browser
+  // localStorage divergence. localStorage is used only to merge in any newly added columns
+  // that aren't yet in the saved JSON.
+
+  // Build ordered key list from linksData rows (first-seen insertion order)
   const seen = new Set();
   const ordered = [];
   linksData.forEach(r => {
@@ -678,9 +659,23 @@ function initTableKeys() {
       if (!k.startsWith('_') && !seen.has(k)) { seen.add(k); ordered.push(k); }
     });
   });
+
+  // Merge in any keys from localStorage that aren't in linksData
+  // (e.g. a column added in the editor but not yet saved to links.json)
+  const lsSaved = localStorage.getItem('seeandlearn-tableKeys');
+  if (lsSaved) {
+    try {
+      const lsKeys = JSON.parse(lsSaved);
+      if (Array.isArray(lsKeys)) {
+        lsKeys.forEach(k => { if (!seen.has(k) && !k.startsWith('_')) { seen.add(k); ordered.push(k); } });
+      }
+    } catch(e) {}
+  }
+
   tableKeys = ordered.length ? ordered
     : ['show','VidRange','cell','fit','link','cname','sname','v.title','v.author','attribution','comment','Mute','Portrait'];
-  // Scrub linksData of _ keys
+
+  // Scrub any _ keys from linksData
   linksData = linksData.map(r => {
     const clean = {};
     Object.keys(r).forEach(k => { if (!k.startsWith('_')) clean[k] = r[k]; });
@@ -915,15 +910,11 @@ window.renderTableEditor = function() {
   colWidths = JSON.parse(localStorage.getItem('seeandlearn-colWidths') || '{}');
 
   tableKeys.forEach(k => {
-    const w = colWidths[k] !== undefined ? colWidths[k] : COL_DEFAULT_PX;
     const colDef = {
       title: k,
       field: k,
       editor: 'input',
       headerSort: true,
-      // NO headerMenu, NO contextMenu — these both add visible icons
-      // Column operations available via toolbar buttons (focused col) and right-click via CSS trick
-      width: w,
       minWidth: COL_MIN_PX,
       resizable: true,
       tooltip: true,
@@ -1106,12 +1097,23 @@ window.renderTableEditor = function() {
     data: getDataCopy(),       // deep copy — Tabulator owns its own copy
     reactiveData: false,       // DO NOT use reactive — causes doubles
     columns: cols,
-    layout: 'fitDataNoStretch',
-    autoResize: false,         // prevent Tabulator re-fitting widths on window resize
+    layout: 'fitDataTable',    // renders columns to data width, then we override with saved widths
+    autoResize: false,
     selectableRows: true,
-    movableColumns: true,      // allow drag-to-reorder column headers
+    movableColumns: true,
     history: false,
     height: '100%',
+
+    // After table is fully built, apply saved widths (overrides layout engine)
+    tableBuilt() {
+      const tbl = window.tabulatorTable;
+      if (!tbl) return;
+      tableKeys.forEach(k => {
+        if (colWidths[k] !== undefined) {
+          try { tbl.getColumn(k).setWidth(colWidths[k]); } catch(e) {}
+        }
+      });
+    },
 
     // Save column width immediately on every resize drag
     columnResized(column) {
@@ -1119,7 +1121,6 @@ window.renderTableEditor = function() {
       if (!f || f.startsWith('_')) return;
       colWidths[f] = column.getWidth();
       localStorage.setItem('seeandlearn-colWidths', JSON.stringify(colWidths));
-      // Also persist full state so tableKeys survives reload
       syncFromTabulator();
       saveJsonSilent();
     },
@@ -1132,7 +1133,7 @@ window.renderTableEditor = function() {
         .filter(f => f && !f.startsWith('_'));
       tableKeys = newOrder;
       reorderLinksDataKeys();
-      saveJsonSilent(); // saves both linksData AND tableKeys
+      saveJsonSilent();
       updateColHeaderStrip();
     },
 
