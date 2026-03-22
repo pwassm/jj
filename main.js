@@ -1,50 +1,62 @@
 async function init(){
   setupLayout(); syncFit(); syncAdminUI();
 
-  // Data loading — simple timestamp-based priority:
+  // Data loading priority:
   //
-  // localStorage is ALWAYS preferred if it has been written by the app
-  // (i.e. the user has opened the table at least once).
-  // We detect this via a 'sal-edited' timestamp written by saveData().
-  //
-  // Only fall back to links.json / LINKS_JSON_INLINE on a truly fresh install
-  // (no 'sal-edited' key exists in localStorage).
+  // 1. Fetch links.json from server (always attempted on http/https)
+  // 2. Compare server data's _salPushTime against localStorage's sal-edited timestamp
+  //    If server data is NEWER → use server data (picks up pushes from other sessions/devices)
+  //    If localStorage is NEWER or same → use localStorage (preserves local edits)
+  // 3. On file:/// fetch fails → use localStorage or LINKS_JSON_INLINE fallback
   //
   // This means:
-  //  - Deletions stick (localStorage is shorter → still preferred)
-  //  - Column resizes stick (same row count → still preferred)
-  //  - Fresh install gets links.json content
-  //  - Deploying a new zip never silently overwrites user edits
+  //  - Push to GitHub from any session → other sessions pick it up on next load
+  //  - Local edits always preserved until a newer push overwrites them
+  //  - file:/// still works via localStorage/inline fallback
 
-  const wasEdited = localStorage.getItem('sal-edited');
   const lsRaw = localStorage.getItem('seeandlearn-links') || localStorage.getItem('mlynx-links');
   let lsData = null;
-  if (lsRaw) {
-    try { lsData = JSON.parse(lsRaw); } catch(e) {}
-  }
+  if (lsRaw) { try { lsData = JSON.parse(lsRaw); } catch(e) {} }
+  const lsTime = parseInt(localStorage.getItem('sal-edited') || '0', 10);
 
-  if (wasEdited && lsData && Array.isArray(lsData)) {
-    // User has edited before — trust localStorage completely
-    linksData = lsData;
-  } else {
-    // Fresh install — load from file
-    let fileData = null;
-    try {
-      const r = await fetch('links.json?v=' + Date.now());
-      if (r.ok) fileData = await r.json();
-    } catch(e) {}
-    if (!fileData && window.LINKS_JSON_INLINE) fileData = window.LINKS_JSON_INLINE;
-
-    if (fileData && Array.isArray(fileData) && fileData.length > 0) {
-      linksData = fileData;
-      // Seed localStorage and mark as edited so future loads use localStorage
-      localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
-      localStorage.setItem('sal-edited', Date.now().toString());
-    } else if (lsData && Array.isArray(lsData)) {
-      linksData = lsData;
-    } else {
-      linksData = [];
+  let fileData = null;
+  let fileTime = 0;
+  try {
+    const r = await fetch('links.json?v=' + Date.now());
+    if (r.ok) {
+      const raw = await r.json();
+      if (Array.isArray(raw)) {
+        // Check for metadata element (first element with _salMeta flag)
+        if (raw.length > 0 && raw[0]._salMeta) {
+          fileTime = parseInt(raw[0]._salPushTime || '0', 10);
+          fileData = raw.slice(1); // rest is the actual data
+        } else {
+          fileData = raw; // legacy format, no timestamp
+        }
+      }
     }
+  } catch(e) {}
+
+  if (!fileData && window.LINKS_JSON_INLINE) fileData = window.LINKS_JSON_INLINE;
+
+  const fileIsNewer = fileData && Array.isArray(fileData) && fileData.length > 0 && fileTime > lsTime;
+  const hasLocalData = lsData && Array.isArray(lsData) && lsData.length > 0 && lsTime > 0;
+
+  if (fileIsNewer) {
+    // Server has data pushed after our last local edit — use it
+    linksData = fileData;
+    localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+    localStorage.setItem('sal-edited', String(fileTime));
+  } else if (hasLocalData) {
+    // Local edits are current
+    linksData = lsData;
+  } else if (fileData && Array.isArray(fileData) && fileData.length > 0) {
+    // Fresh install — seed from file
+    linksData = fileData;
+    localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+    localStorage.setItem('sal-edited', Date.now().toString());
+  } else {
+    linksData = [];
   }
 
   // Migrate legacy field names

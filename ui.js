@@ -486,7 +486,62 @@ window.openFS = function(it) {
     }
   }, 250);
 
-  // ── Timeline interaction — scrub only, no tap-toggle ─────────────────────
+  // ── Timeline interaction — scrub only ────────────────────────────────────
+  let scrubResumeTimer = null;
+  let isPlayingFS = true;  // track play state for spacebar toggle
+
+  function scrubSuspend() {
+    if (window.seeLearnVideoTimers[vidHost.id]) {
+      clearInterval(window.seeLearnVideoTimers[vidHost.id]);
+      delete window.seeLearnVideoTimers[vidHost.id];
+    }
+    if (scrubResumeTimer) { clearTimeout(scrubResumeTimer); scrubResumeTimer = null; }
+  }
+  // No auto-resume — user must press spacebar or click a segment to resume
+
+  function fsPause() {
+    isPlayingFS = false;
+    scrubSuspend();
+    const p = getP(); if (!p) return;
+    if (typeof p.pauseVideo === 'function') try { p.pauseVideo(); } catch(ex) {}
+    else if (p.pause) p.pause().catch(function(){});
+  }
+
+  function fsPlay() {
+    isPlayingFS = true;
+    const p = getP(); if (!p) return;
+    const segsArg = playMode === 'selected'
+      ? parsed
+      : [{ start: 0, dur: totalVidDur || 9999 }];
+    let segIdx = 0;
+    if (typeof p.seekTo === 'function') {
+      try { p.playVideo(); } catch(ex) {}
+      window.seeLearnVideoTimers[vidHost.id] = setInterval(function() {
+        try {
+          const t = p.getCurrentTime();
+          const seg = segsArg[segIdx];
+          if (t >= seg.start + seg.dur || t < seg.start - 0.5) {
+            segIdx = (segIdx + 1) % segsArg.length;
+            p.seekTo(segsArg[segIdx].start, !window.keyframeOnly);
+            p.playVideo();
+          }
+        } catch(ex) {}
+      }, 100);
+    } else if (p.setCurrentTime) {
+      p.play().catch(function(){});
+      window.seeLearnVideoTimers[vidHost.id] = setInterval(function() {
+        p.getCurrentTime().then(function(t) {
+          const seg = segsArg[segIdx];
+          if (t >= seg.start + seg.dur || t < seg.start - 0.5) {
+            segIdx = (segIdx + 1) % segsArg.length;
+            p.setCurrentTime(segsArg[segIdx].start);
+            p.play();
+          }
+        }).catch(function(){});
+      }, 100);
+    }
+  }
+
   tl.addEventListener('pointerdown', function(e) {
     if (e.ctrlKey) {
       e.preventDefault(); e.stopPropagation();
@@ -495,6 +550,7 @@ window.openFS = function(it) {
     }
     e.preventDefault(); isScrubbing = true;
     tl.setPointerCapture(e.pointerId);
+    scrubSuspend();
     fsSeek(tlScrubSec(e));
   });
   tl.addEventListener('pointermove', function(e) {
@@ -505,7 +561,7 @@ window.openFS = function(it) {
     if (!isScrubbing) return;
     isScrubbing = false;
     fsSeek(tlScrubSec(e));
-    // Playhead stays at scrubbed position; polling resumes naturally
+    // Stay paused — press Space to resume
   });
   tl.addEventListener('pointercancel', function() { isScrubbing = false; });
 
@@ -578,9 +634,20 @@ window.openFS = function(it) {
   });
   closBtn.addEventListener('click', function(e) { e.stopPropagation(); fsClose(); });
 
+  // Escape closes VideoShow
+  function fsKeyHandler(e) {
+    if (e.key === 'Escape') { e.stopPropagation(); fsClose(); return; }
+    if (e.key === ' ' || e.key === 'Spacebar') {
+      e.preventDefault(); e.stopPropagation();
+      if (isPlayingFS) fsPause(); else fsPlay();
+    }
+  }
+  document.addEventListener('keydown', fsKeyHandler);
+
   function fsClose() {
     clearInterval(durTimer); clearInterval(playTimer);
     if (abLoopTimer) clearInterval(abLoopTimer);
+    document.removeEventListener('keydown', fsKeyHandler);
     window.stopCellVideoLoop(vidHost.id);
     fs.remove();
   }
@@ -963,6 +1030,7 @@ window.openTable = function() {
   _activeRow = null;
   scrubUnderscores();
   _colOrder = buildKeyOrder();
+  prefetchVimeoThumbs();  // async pre-fetch Vimeo thumbnails for the Thumb column
 
   const cnameVals  = getDistinctVals('cname');
   const snameVals  = getDistinctVals('sname');
@@ -1007,9 +1075,39 @@ window.openTable = function() {
 
   _colOrder.forEach(k => {
     const def = { title:k, field:k, editor:'input', headerSort:true, maxWidth:COL_W_MAX, minWidth:COL_W_MIN, resizable:true, tooltip:true,
-      cellClick(e,cell){ _activeRow=cell.getRow(); _activeCol=cell.getColumn().getField(); updateFocusIndicator(); },
+      cellClick(e,cell){ _activeRow=cell.getRow(); _activeCol=cell.getColumn().getField(); updateFocusIndicator();
+        if (typeof showThumbForRow === 'function') showThumbForRow(cell.getRow().getData(), cell.getRow().getElement());
+      },
       cellEdited(){ saveData(); }
     };
+    // Thumb column: show tiny inline thumbnail image derived from row's link
+    if (k === 'Thumb') {
+      def.formatter = function(cell) {
+        if (!window._thumbEnabled) return '<span style="color:#444;font-size:10px;">—</span>';
+        const row = cell.getRow().getData();
+        const link = row.link || '';
+        const isVid = row.VidRange && window.parseVideoAsset && window.parseVideoAsset(String(row.VidRange)) !== null;
+        const isYT  = window.isYouTubeLink && window.isYouTubeLink(link);
+        const isVim = window.isVimeoLink && window.isVimeoLink(link);
+        let src = '';
+        if (isYT) {
+          const m = link.match(/(?:v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+          if (m) src = 'https://img.youtube.com/vi/' + m[1] + '/default.jpg';
+        } else if (isVim) {
+          src = _vimeoThumbCache[link] || '';
+        } else if (!isVid && link.match(/^https?:\/\//)) {
+          src = link;
+        }
+        if (!src) return '<span style="color:#444;font-size:10px;">—</span>';
+        return '<img src="' + src + '" style="height:54px;width:96px;object-fit:cover;'
+          + 'border-radius:2px;display:block;" onerror="this.style.display=\'none\'">';
+      };
+      def.width = 100;
+      def.minWidth = 100;
+      def.maxWidth = 100;
+      def.resizable = false;
+      def.editor = false;
+    }
     if (k==='cname'||k==='Topic') def.editor = makeCommaListEditor(k==='cname'?cnameVals:topicVals);
     else if (k==='sname')    def.editor = makeDatalistEditor(snameVals);
     else if (k==='v.author') def.editor = makeDatalistEditor(authorVals);
@@ -1026,6 +1124,7 @@ window.openTable = function() {
     columns: cols,
     layout: 'fitData',
     autoResize: false,
+    rowHeight: 58,
     selectableRows: true,
     movableColumns: true,
     history: false,
@@ -1054,7 +1153,14 @@ window.openTable = function() {
       if (btn) btn.style.display = rows.length > 0 ? 'inline-block' : 'none';
     },
 
-    rowClick(e, row) { _activeRow = row; updateFocusIndicator(); }
+    rowClick(e, row) {
+      _activeRow = row;
+      updateFocusIndicator();
+      // Auto-show thumbnail for the focused row
+      if (typeof showThumbForRow === 'function') {
+        showThumbForRow(row.getData(), row.getElement());
+      }
+    }
   });
 
   updateColHeaderStrip();
@@ -1305,9 +1411,9 @@ document.getElementById('togAutopause').addEventListener('change', function() {
   const kf = document.getElementById('togKeyframe');
   if (kf) kf.checked = (localStorage.getItem('seeandlearn-keyframeOnly') === '1');
   const ap = document.getElementById('togAutopause');
-  // Default ON — only off if explicitly saved as '0'
-  if (ap) ap.checked = (localStorage.getItem('seeandlearn-autopause') !== '0');
-  window.autoPauseGrid = ap ? ap.checked : true;
+  // Default OFF — only on if explicitly saved as '1'
+  if (ap) ap.checked = (localStorage.getItem('seeandlearn-autopause') === '1');
+  window.autoPauseGrid = ap ? ap.checked : false;
 })();
 
 document.addEventListener('keydown', e => {
@@ -1384,80 +1490,132 @@ document.getElementById('miLoadGithub').addEventListener('pointerup', async e =>
   } catch(err) { alert('Load from GitHub failed:\n' + err.message); }
 });
 
-// ─── ShowThumb ────────────────────────────────────────────────────────────────
-document.getElementById('btn-show-thumb').addEventListener('click', function() {
-  if (!_activeRow) { setStatus('Click a row first', '#f88'); return; }
-  const data = _activeRow.getData();
-  const link = data.link || '';
-  if (!link) { setStatus('No link in this row', '#f88'); return; }
+// ─── ShowThumb — auto thumbnail preview on row focus ─────────────────────────
+// Shows a small floating thumbnail panel whenever a row is clicked.
+// Dismissed by clicking the panel or clicking away.
+let _thumbPanel = null;
+let _thumbEnabled = true;  // toggled by Ctrl+I
+window._thumbEnabled = true; // expose for Tabulator formatter
 
-  // Remove any existing thumb popup
-  const old = document.getElementById('sal-thumb-popup');
-  if (old) { old.remove(); return; }
+// Vimeo thumbnail cache: url → thumbnail src (async pre-fetched)
+const _vimeoThumbCache = {};
+function prefetchVimeoThumbs() {
+  linksData.forEach(function(row) {
+    const link = row.link || '';
+    if (!window.isVimeoLink || !window.isVimeoLink(link)) return;
+    if (_vimeoThumbCache[link] !== undefined) return;
+    _vimeoThumbCache[link] = ''; // mark as pending
+    fetch('https://noembed.com/embed?url=' + encodeURIComponent(link))
+      .then(r => r.json()).then(d => {
+        _vimeoThumbCache[link] = d.thumbnail_url || '';
+      }).catch(() => { _vimeoThumbCache[link] = ''; });
+  });
+}
 
-  const popup = document.createElement('div');
-  popup.id = 'sal-thumb-popup';
-  popup.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);'
-    + 'z-index:99999;background:#111;border:2px solid #4af;border-radius:10px;'
-    + 'padding:8px;box-shadow:0 8px 32px rgba(0,0,0,0.8);max-width:360px;width:90%;';
+function showThumbForRow(data, anchorEl) {
+  if (!_thumbEnabled) return;
+  if (_thumbPanel) { _thumbPanel.remove(); _thumbPanel = null; }
+  if (!data || !data.link) return;
 
+  const link = data.link;
   const isVid = data.VidRange && window.parseVideoAsset && window.parseVideoAsset(String(data.VidRange)) !== null;
   const isYT  = window.isYouTubeLink && window.isYouTubeLink(link);
   const isVim = window.isVimeoLink && window.isVimeoLink(link);
 
-  let imgSrc = '';
-  if (isYT) {
-    // YouTube thumbnail URL (hqdefault is always available)
-    const m = link.match(/(?:v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
-    if (m) imgSrc = 'https://img.youtube.com/vi/' + m[1] + '/hqdefault.jpg';
-  } else if (!isVid) {
-    imgSrc = link; // direct image URL
-  }
+  const panel = document.createElement('div');
+  panel.id = 'sal-thumb-popup';
+  panel.style.cssText = 'position:fixed;z-index:99999;background:#111;'
+    + 'border:1px solid #4af;border-radius:8px;padding:6px;'
+    + 'box-shadow:0 4px 20px rgba(0,0,0,0.8);width:200px;cursor:pointer;';
+
+  // Position: LEFT side of screen, vertically near the anchor row
+  const rect = anchorEl ? anchorEl.getBoundingClientRect() : null;
+  const top = rect ? Math.min(Math.max(rect.top, 10), window.innerHeight - 180) : window.innerHeight / 2 - 80;
+  panel.style.left = '12px';
+  panel.style.top = top + 'px';
 
   const label = document.createElement('div');
-  label.style.cssText = 'color:#8ef;font-size:12px;margin-bottom:6px;text-align:center;'
+  label.style.cssText = 'color:#8ef;font-size:11px;margin-bottom:4px;'
     + 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
-  label.textContent = (data.cname || data['v.title'] || link).slice(0, 50);
-  popup.appendChild(label);
+  label.textContent = (data.cname || data['v.title'] || '').slice(0, 28) || 'Preview';
+  panel.appendChild(label);
 
-  if (imgSrc) {
+  const imgBox = document.createElement('div');
+  imgBox.style.cssText = 'width:188px;height:120px;background:#000;border-radius:4px;'
+    + 'display:flex;align-items:center;justify-content:center;overflow:hidden;';
+
+  if (isYT) {
+    const m = link.match(/(?:v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+    if (m) {
+      const img = document.createElement('img');
+      img.src = 'https://img.youtube.com/vi/' + m[1] + '/mqdefault.jpg';
+      img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+      img.onerror = function() { imgBox.innerHTML = '<span style="color:#666;font-size:11px;">No thumbnail</span>'; };
+      imgBox.appendChild(img);
+    }
+  } else if (!isVid) {
     const img = document.createElement('img');
-    img.src = imgSrc;
-    img.style.cssText = 'width:100%;border-radius:6px;display:block;';
-    img.onerror = function() { img.style.display='none'; label.textContent += ' (image failed to load)'; };
-    popup.appendChild(img);
+    img.src = link;
+    img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+    img.onerror = function() { imgBox.innerHTML = '<span style="color:#666;font-size:11px;">Image failed</span>'; };
+    imgBox.appendChild(img);
   } else if (isVim) {
-    // Vimeo thumbnail via noembed
+    imgBox.innerHTML = '<span style="color:#666;font-size:11px;">Loading...</span>';
     fetch('https://noembed.com/embed?url=' + encodeURIComponent(link))
       .then(r => r.json()).then(d => {
         if (d.thumbnail_url) {
+          imgBox.innerHTML = '';
           const img = document.createElement('img');
           img.src = d.thumbnail_url;
-          img.style.cssText = 'width:100%;border-radius:6px;display:block;';
-          popup.appendChild(img);
+          img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+          imgBox.appendChild(img);
+        } else {
+          imgBox.innerHTML = '<span style="color:#666;font-size:11px;">No thumbnail</span>';
         }
-      }).catch(function(){});
+      }).catch(() => { imgBox.innerHTML = '<span style="color:#666;font-size:11px;">Failed</span>'; });
   } else {
-    const msg = document.createElement('div');
-    msg.style.cssText = 'color:#888;font-size:12px;text-align:center;padding:20px;';
-    msg.textContent = 'No thumbnail available';
-    popup.appendChild(msg);
+    imgBox.innerHTML = '<span style="color:#666;font-size:11px;">No preview</span>';
   }
 
-  const close = document.createElement('div');
-  close.style.cssText = 'text-align:center;margin-top:8px;color:#666;font-size:11px;cursor:pointer;';
-  close.textContent = 'click anywhere to close';
-  popup.appendChild(close);
+  panel.appendChild(imgBox);
+  const hint = document.createElement('div');
+  hint.style.cssText = 'color:#444;font-size:10px;margin-top:3px;text-align:center;';
+  hint.textContent = 'click to close · Ctrl+I to toggle';
+  panel.appendChild(hint);
 
-  document.body.appendChild(popup);
+  panel.addEventListener('click', function() { panel.remove(); _thumbPanel = null; });
+  document.body.appendChild(panel);
+  _thumbPanel = panel;
+}
 
-  // Click anywhere to close
-  setTimeout(function() {
-    document.addEventListener('pointerup', function handler() {
-      popup.remove(); document.removeEventListener('pointerup', handler);
-    });
-  }, 100);
+function toggleThumb() {
+  _thumbEnabled = !_thumbEnabled;
+  window._thumbEnabled = _thumbEnabled;  // keep window ref in sync for formatter
+  const btn = document.getElementById('btn-show-thumb');
+  if (btn) btn.textContent = _thumbEnabled ? 'Thumb ON' : 'Thumb OFF';
+  // Close the popup panel if open
+  if (_thumbPanel) { _thumbPanel.remove(); _thumbPanel = null; }
+  setStatus(_thumbEnabled ? 'Thumbnails: ON' : 'Thumbnails: OFF (Ctrl+I to restore)');
+  // Redraw the table so Thumb column shows/hides images immediately
+  if (window._salTab) window.openTable();
+}
+
+// Ctrl+I toggles thumbnail panel
+document.addEventListener('keydown', function(e) {
+  const modal = document.getElementById('jsonModal');
+  if (modal && modal.classList.contains('open') && e.ctrlKey && e.key.toLowerCase() === 'i') {
+    e.preventDefault(); toggleThumb();
+  }
 });
+
+document.getElementById('btn-show-thumb').addEventListener('click', function() {
+  if (!_activeRow) { toggleThumb(); return; }  // no row focused = just toggle
+  if (_thumbPanel) { _thumbPanel.remove(); _thumbPanel = null; return; }
+  showThumbForRow(_activeRow.getData(), _activeRow.getElement());
+});
+// Update button label to show hint
+document.getElementById('btn-show-thumb').title = 'Ctrl+I to toggle thumbnail preview';
+document.getElementById('btn-show-thumb').textContent = 'Thumb ON';
 
 // ─── MakeJsonFromTopic stub ───────────────────────────────────────────────────
 document.getElementById('btn-make-json-topic').addEventListener('click', function() {

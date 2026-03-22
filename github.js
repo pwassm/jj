@@ -1,4 +1,4 @@
-// --- GITHUB INTEGRATION v57 ---
+// --- GITHUB INTEGRATION ---
 
 function showGhBalloon(msg, duration) {
   if (duration === undefined) duration = 2000;
@@ -54,25 +54,37 @@ window.pushToGitHub = async function() {
       'Content-Type': 'application/json'
     };
 
+    // GET current file to retrieve its SHA (required for PUT)
     var getRes = await fetch(apiUrl, { headers: headers });
     if (!getRes.ok) {
       var ge = {}; try { ge = await getRes.json(); } catch(x) {}
       throw new Error('GET ' + getRes.status + ': ' + (ge.message || getRes.statusText));
     }
-    var sha = (await getRes.json()).sha;
+    var getJson = await getRes.json();
+    var sha = getJson.sha;
 
-    var jsonText   = JSON.stringify(linksData, null, 2);
+    // Build data: prepend _salMeta row with push timestamp so other clients
+    // can detect this push is newer than their localStorage
+    var pushTime = Date.now();
+    var dataToSend = [{ _salMeta: true, _salPushTime: pushTime }]
+      .concat(JSON.parse(JSON.stringify(linksData)));
+
+    var jsonText   = JSON.stringify(dataToSend, null, 2);
     var contentB64 = btoa(unescape(encodeURIComponent(jsonText)));
     var stamp      = new Date().toISOString().slice(0,16).replace('T',' ');
 
+    // Also update local sal-edited to match push time so we don't re-load our own push
+    localStorage.setItem('sal-edited', String(pushTime));
+
     var putRes = await fetch(apiUrl, {
-      method: 'PUT', headers: headers,
+      method: 'PUT',
+      headers: headers,
       body: JSON.stringify({ message: 'Update links.json ' + stamp, content: contentB64, sha: sha })
     });
 
     if (putRes.ok) {
-      showGhBalloon('OK - Pushed to GitHub!', 4000);
-      setGhStatus('OK - Pushed ' + stamp, '#4f8');
+      showGhBalloon('✓ Pushed to GitHub!', 4000);
+      setGhStatus('Pushed ' + stamp, '#4f8');
     } else {
       var pe = {}; try { pe = await putRes.json(); } catch(x) {}
       throw new Error('PUT ' + putRes.status + ': ' + (pe.message || putRes.statusText));

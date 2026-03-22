@@ -517,6 +517,13 @@ window.openVideoEditor = function(it) {
       popup.remove();
       renderTimeline();
       renderSegTabs();
+      // Persist comment immediately — don't wait for main Save button
+      it.VidComment = segs.map(function(s) { return s.comment || ''; }).join(', ');
+      if (window.saveData) window.saveData(true);
+      else {
+        localStorage.setItem('seeandlearn-links', JSON.stringify(window.linksData));
+        localStorage.setItem('sal-edited', Date.now().toString());
+      }
     });
     document.getElementById('v2comment-cancel').addEventListener('click', function() {
       popup.remove();
@@ -528,6 +535,13 @@ window.openVideoEditor = function(it) {
         e.preventDefault(); e.stopPropagation();
         segs[segIdx].comment = inp.value.trim();
         popup.remove(); renderTimeline(); renderSegTabs();
+        // Persist comment immediately
+        it.VidComment = segs.map(function(s) { return s.comment || ''; }).join(', ');
+        if (window.saveData) window.saveData(true);
+        else {
+          localStorage.setItem('seeandlearn-links', JSON.stringify(window.linksData));
+          localStorage.setItem('sal-edited', Date.now().toString());
+        }
       }
     });
     // Click outside closes
@@ -665,19 +679,6 @@ window.openVideoEditor = function(it) {
     }
   }
 
-  function scrubToSec(sec) {
-    var clamped = Math.max(0, Math.min(sec, calcEnd()));
-    renderTimeline(clamped);
-    tCur.textContent = clamped.toFixed(1) + 's';
-    var p = getEditorPlayer();
-    if (!p) return;
-    // Approximate seek — fast, nearest keyframe
-    if (typeof p.seekTo === 'function') {
-      try { p.seekTo(clamped, false); } catch(ex) {}
-    } else if (p.setCurrentTime) {
-      p.setCurrentTime(clamped).catch(function(){});
-    }
-  }
 
   function timelineSecFromEvent(e) {
     var rect = timeline.getBoundingClientRect();
@@ -685,17 +686,42 @@ window.openVideoEditor = function(it) {
     return (x / rect.width) * calcEnd();
   }
 
+  // ── Scrub shield: covers entire overlay during scrub, blocks YouTube iframe ──
+  // Appended to overlay at z-index:200000 so it sits above the YouTube iframe.
+  // Shown on pointerdown, hidden on pointerup.
+  var scrubShield = document.createElement('div');
+  scrubShield.style.cssText = 'position:absolute;inset:0;z-index:200000;display:none;'
+    + 'background:transparent;cursor:crosshair;pointer-events:auto;';
+  overlay.appendChild(scrubShield);
+
+  // scrubToSec: mirrors VideoShow's fsSeek exactly.
+  // Just seek — no pause, no suspendLoop, no player state changes.
+  // Pausing is what triggers YouTube's "More videos" UI.
+  function scrubToSec(sec) {
+    var maxSec = totalVideoDur > 2 ? totalVideoDur - 1 : calcEnd();
+    var clamped = Math.max(0, Math.min(sec, Math.min(calcEnd(), maxSec)));
+    renderTimeline(clamped);
+    tCur.textContent = clamped.toFixed(1) + 's';
+    var p = getEditorPlayer();
+    if (!p) return;
+    if (typeof p.seekTo === 'function') {
+      try { p.seekTo(clamped, !window.keyframeOnly); } catch(ex) {}
+    } else if (p.setCurrentTime) {
+      p.setCurrentTime(clamped).catch(function(){});
+    }
+  }
+
+  var scrubResumeTimerV2 = null;
+
   timeline.addEventListener('pointerdown', function(e) {
     if (e.ctrlKey) return;
     if (scrubClickedBand) { scrubClickedBand = false; return; }
     e.preventDefault();
     isDraggingScrub = true;
+    scrubShield.style.display = 'block';
+    if (scrubResumeTimerV2) { clearTimeout(scrubResumeTimerV2); scrubResumeTimerV2 = null; }
     timeline.setPointerCapture(e.pointerId);
-    clearTimeout(mountDebounce);
     suspendLoop();
-    var p = getEditorPlayer();
-    if (p && typeof p.pauseVideo === 'function') try { p.pauseVideo(); } catch(ex) {}
-    else if (p && p.pause) p.pause().catch(function(){});
     scrubToSec(timelineSecFromEvent(e));
   });
 
@@ -707,19 +733,20 @@ window.openVideoEditor = function(it) {
   timeline.addEventListener('pointerup', function(e) {
     if (!isDraggingScrub) return;
     isDraggingScrub = false;
+    scrubShield.style.display = 'none';
     scrubToSec(timelineSecFromEvent(e));
-    // Stay paused — user clicks a segment band or tab to resume looping
+    // Stay paused — press Space to resume
   });
 
   timeline.addEventListener('pointercancel', function() {
     isDraggingScrub = false;
+    scrubShield.style.display = 'none';
   });
 
   timeline.addEventListener('click', function(e) {
     if (!e.ctrlKey) return;
     var W = timeline.offsetWidth || 600;
     var clickSec = (e.offsetX / W) * calcEnd();
-    // Empty area ctrl+click = add segment (band ctrl+click handled in band pointerdown)
     var hitIdx = -1;
     segs.forEach(function(s, i) {
       if (clickSec >= s.start && clickSec <= s.start + s.dur) hitIdx = i;
@@ -927,7 +954,16 @@ window.openVideoEditor = function(it) {
     it.VidRange   = window.serializeSegments(segs);
     it.VidComment = segs.map(function(s) { return s.comment || ''; }).join(', ');
     it.Mute       = iMute.checked ? '1' : '0';
-    localStorage.setItem('seeandlearn-links', JSON.stringify(window.linksData));
+    // Use saveData() if available (writes sal-edited + both storage keys)
+    // Fallback for safety if called before ui.js initialises saveData
+    if (window.saveData) {
+      window.saveData(true);  // skipSync — we've already updated linksData via it.*
+    } else {
+      var s = JSON.stringify(window.linksData);
+      localStorage.setItem('seeandlearn-links', s);
+      localStorage.setItem('mlynx-links', s);
+      localStorage.setItem('sal-edited', Date.now().toString());
+    }
     closeEditor();
     if (window.renderTableEditor && document.getElementById('tableEditor'))
       window.renderTableEditor();
@@ -967,25 +1003,43 @@ window.openVideoEditor = function(it) {
       e.preventDefault(); e.stopPropagation(); saveEditor(); return;
     }
     if (e.key === 'Escape') { closeEditor(); return; }
+    if (e.key === ' ' || e.key === 'Spacebar') {
+      e.preventDefault(); e.stopPropagation();
+      var p = getEditorPlayer();
+      if (!p) return;
+      // Toggle play/pause
+      if (typeof p.getPlayerState === 'function') {
+        try {
+          var state = p.getPlayerState();
+          if (state === 1 /* playing */) { suspendLoop(); p.pauseVideo(); }
+          else { var seg = segs[activeSegIdx]; resumeLoop(p, seg.start, seg.dur); }
+        } catch(ex) {}
+      } else if (p.getPaused) {
+        p.getPaused().then(function(paused) {
+          if (paused) { var seg = segs[activeSegIdx]; resumeLoop(p, seg.start, seg.dur); }
+          else { suspendLoop(); p.pause().catch(function(){}); }
+        }).catch(function(){});
+      }
+      return;
+    }
     if (e.key === 'Tab') {
       e.preventDefault(); e.stopPropagation();
       setActiveSeg((activeSegIdx + 1) % segs.length); return;
     }
 
-    // L/R/ArrowLeft/Right adjust start; Up/Down adjust duration — no remount
+    // Arrow keys adjust start (left/right) and duration (up/down) — no remount
+    // L and R letter keys are NOT bound here — only arrow keys
     var isInp = document.activeElement &&
       (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA');
-    var k = e.key, kl = k.toLowerCase();
+    var k = e.key;
 
-    if (kl==='l'||kl==='r'||k==='ArrowLeft'||k==='ArrowRight'||k==='ArrowUp'||k==='ArrowDown') {
-      if (isInp && (k==='ArrowLeft'||k==='ArrowRight')) return;
+    if (k==='ArrowLeft'||k==='ArrowRight'||k==='ArrowUp'||k==='ArrowDown') {
+      if (isInp) return;  // don't intercept arrow keys when typing in an input
       e.preventDefault();
-      // L/R adjust start time BUT don't trigger a full mountLoop (which resets video position).
-      // Instead: update data, seek existing player to new start, let loop interval handle the rest.
-      if (kl==='l'||k==='ArrowLeft')  applyDeltaNoRemount('start', -0.1);
-      if (kl==='r'||k==='ArrowRight') applyDeltaNoRemount('start',  0.1);
-      if (k==='ArrowDown')            applyDeltaNoRemount('dur',   -0.1);
-      if (k==='ArrowUp')              applyDeltaNoRemount('dur',    0.1);
+      if (k==='ArrowLeft')  applyDeltaNoRemount('start', -0.1);
+      if (k==='ArrowRight') applyDeltaNoRemount('start',  0.1);
+      if (k==='ArrowDown')  applyDeltaNoRemount('dur',   -0.1);
+      if (k==='ArrowUp')    applyDeltaNoRemount('dur',    0.1);
     }
   }
   document.addEventListener('keydown', handleKey, true);
