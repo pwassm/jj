@@ -162,7 +162,9 @@ window.mountYouTubeClip = async function(hostEl, url, startSec, dur, isMuted, cu
           try {
             var t   = e.target.getCurrentTime();
             var seg = segs[segIdx];
-            if (t >= seg.start + seg.dur || t < seg.start - 0.5) {
+            // Seek back 0.2s before end to prevent YouTube reaching ENDED state
+            // (ENDED triggers the suggestions overlay)
+            if (t >= seg.start + seg.dur - 0.2 || t < seg.start - 0.5) {
               segIdx = (segIdx + 1) % segs.length;
               e.target.seekTo(segs[segIdx].start, allowSeek);
               e.target.playVideo();
@@ -319,30 +321,30 @@ window.openVideoEditor = function(it) {
     + '<div id="v2segtabs" style="display:flex;gap:5px;flex-wrap:wrap;"></div></div>'
     // Fine Adjustments title
     + '<div style="font-size:13px;font-weight:bold;color:#ccc;border-bottom:1px solid #444;'
-    + 'padding-bottom:5px;">Fine Adjustments</div>'
+    + 'padding-bottom:5px;">Fine Adjustments <span style="font-size:10px;color:#666;">(▲▼ = dur, ◀▶ = start)</span></div>'
     // Start
     + '<div><div style="font-size:11px;color:#888;margin-bottom:4px;">Start time (sec)</div>'
     + '<input type="number" id="v2start" class="v2num" min="0" step="0.1" style="margin-bottom:5px;">'
-    + '<div style="display:flex;gap:3px;">'
-    + '<button class="v2btn" id="vs---">&#8722;&#8722;&#8722;</button>'
-    + '<button class="v2btn" id="vs--">&#8722;&#8722;</button>'
-    + '<button class="v2btn" id="vs-">&#8722;</button>'
-    + '<div style="flex:1"></div>'
-    + '<button class="v2btn" id="vs+">+</button>'
-    + '<button class="v2btn" id="vs++">++</button>'
-    + '<button class="v2btn" id="vs+++">+++</button>'
+    + '<div style="display:flex;gap:3px;align-items:center;">'
+    + '<button class="v2btn" id="vs---" title="-5s">-5</button>'
+    + '<button class="v2btn" id="vs--" title="-1s">-1</button>'
+    + '<button class="v2btn" id="vs-frame" title="Back 1 frame">&#9664;</button>'
+    + '<button class="v2btn" id="vs-set" title="Set start to current scrub position" style="border-color:#4af;color:#8ef;">&#9679;</button>'
+    + '<button class="v2btn" id="vs+frame" title="Forward 1 frame">&#9654;</button>'
+    + '<button class="v2btn" id="vs++" title="+1s">+1</button>'
+    + '<button class="v2btn" id="vs+++" title="+5s">+5</button>'
     + '</div></div>'
     // Duration
     + '<div><div style="font-size:11px;color:#888;margin-bottom:4px;">Duration (sec)</div>'
     + '<input type="number" id="v2dur" class="v2num" min="0.1" step="0.1" style="margin-bottom:5px;">'
-    + '<div style="display:flex;gap:3px;">'
-    + '<button class="v2btn" id="vd---">&#8722;&#8722;&#8722;</button>'
-    + '<button class="v2btn" id="vd--">&#8722;&#8722;</button>'
-    + '<button class="v2btn" id="vd-">&#8722;</button>'
-    + '<div style="flex:1"></div>'
-    + '<button class="v2btn" id="vd+">+</button>'
-    + '<button class="v2btn" id="vd++">++</button>'
-    + '<button class="v2btn" id="vd+++">+++</button>'
+    + '<div style="display:flex;gap:3px;align-items:center;">'
+    + '<button class="v2btn" id="vd---" title="-5s">-5</button>'
+    + '<button class="v2btn" id="vd--" title="-1s">-1</button>'
+    + '<button class="v2btn" id="vd-frame" title="Shorten by 1 frame">&#9664;</button>'
+    + '<button class="v2btn" id="vd-set" title="Set end to current scrub position" style="border-color:#4af;color:#8ef;">&#9679;</button>'
+    + '<button class="v2btn" id="vd+frame" title="Extend by 1 frame">&#9654;</button>'
+    + '<button class="v2btn" id="vd++" title="+1s">+1</button>'
+    + '<button class="v2btn" id="vd+++" title="+5s">+5</button>'
     + '</div></div>'
     // Segment ops
     + '<button id="v2addseg" style="padding:7px;border-radius:4px;border:1px solid #4af;'
@@ -598,19 +600,69 @@ window.openVideoEditor = function(it) {
     // The interval already reads segs[activeSegIdx] each tick, so it self-corrects.
   }
 
+  var FRAME_SEC = 1 / 30;
+
   // Wire start buttons
-  var startDeltas = { 'vs---': -5, 'vs--': -1, 'vs-': -0.1, 'vs+': 0.1, 'vs++': 1, 'vs+++': 5 };
+  var startDeltas = { 'vs---': -5, 'vs--': -1, 'vs++': 1, 'vs+++': 5 };
   Object.keys(startDeltas).forEach(function(id) {
     document.getElementById(id).addEventListener('pointerdown', function(e) {
       e.preventDefault(); applyDelta('start', startDeltas[id]);
     });
   });
+  document.getElementById('vs-frame').addEventListener('pointerdown', function(e) {
+    e.preventDefault(); applyDelta('start', -FRAME_SEC);
+  });
+  document.getElementById('vs+frame').addEventListener('pointerdown', function(e) {
+    e.preventDefault(); applyDelta('start', FRAME_SEC);
+  });
+  // ● set start to current scrub position
+  document.getElementById('vs-set').addEventListener('pointerdown', function(e) {
+    e.preventDefault();
+    var p = getEditorPlayer();
+    function doSet(t) {
+      segs[activeSegIdx].start = fmt(Math.max(0, t));
+      iStart.value = segs[activeSegIdx].start;
+      vrPrev.textContent = window.serializeSegments(segs);
+      updateStats(); renderTimeline(); renderSegTabs();
+      scheduleMount('start');
+    }
+    if (p && typeof p.getCurrentTime === 'function') {
+      try { doSet(p.getCurrentTime()); } catch(ex) {}
+    } else if (p && p.getCurrentTime) {
+      p.getCurrentTime().then(doSet).catch(function(){});
+    }
+  });
+
   // Wire dur buttons
-  var durDeltas = { 'vd---': -5, 'vd--': -1, 'vd-': -0.1, 'vd+': 0.1, 'vd++': 1, 'vd+++': 5 };
+  var durDeltas = { 'vd---': -5, 'vd--': -1, 'vd++': 1, 'vd+++': 5 };
   Object.keys(durDeltas).forEach(function(id) {
     document.getElementById(id).addEventListener('pointerdown', function(e) {
       e.preventDefault(); applyDelta('dur', durDeltas[id]);
     });
+  });
+  document.getElementById('vd-frame').addEventListener('pointerdown', function(e) {
+    e.preventDefault(); applyDelta('dur', -FRAME_SEC);
+  });
+  document.getElementById('vd+frame').addEventListener('pointerdown', function(e) {
+    e.preventDefault(); applyDelta('dur', FRAME_SEC);
+  });
+  // ● set duration end to current scrub position
+  document.getElementById('vd-set').addEventListener('pointerdown', function(e) {
+    e.preventDefault();
+    var p = getEditorPlayer();
+    function doSet(t) {
+      var newDur = fmt(Math.max(0.1, t - segs[activeSegIdx].start));
+      segs[activeSegIdx].dur = newDur;
+      iDur.value = newDur;
+      vrPrev.textContent = window.serializeSegments(segs);
+      updateStats(); renderTimeline(); renderSegTabs();
+      scheduleMount('end');
+    }
+    if (p && typeof p.getCurrentTime === 'function') {
+      try { doSet(p.getCurrentTime()); } catch(ex) {}
+    } else if (p && p.getCurrentTime) {
+      p.getCurrentTime().then(doSet).catch(function(){});
+    }
   });
 
   // Input field changes

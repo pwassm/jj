@@ -323,6 +323,23 @@ window.openFS = function(it) {
   ctrlRow.appendChild(closBtn);
 
   bar.appendChild(tl);
+
+  // A/B frame adjustment row — only shown when A/B marks are set
+  const abAdjRow = document.createElement('div');
+  abAdjRow.style.cssText = 'display:none;align-items:center;gap:4px;padding:2px 0;font-size:11px;';
+  abAdjRow.innerHTML = '<span style="color:#ff0;min-width:12px;">A</span>'
+    + '<button id="fs-a-prev" title="A start -1 frame" style="padding:2px 6px;font-size:12px;border-radius:3px;'
+    + 'border:1px solid #666;background:#222;color:#ff0;cursor:pointer;">&#9664;</button>'
+    + '<button id="fs-a-next" title="A start +1 frame" style="padding:2px 6px;font-size:12px;border-radius:3px;'
+    + 'border:1px solid #666;background:#222;color:#ff0;cursor:pointer;">&#9654;</button>'
+    + '<span style="color:#555;padding:0 4px;">|</span>'
+    + '<span style="color:#f80;min-width:12px;">B</span>'
+    + '<button id="fs-b-prev" title="B end -1 frame" style="padding:2px 6px;font-size:12px;border-radius:3px;'
+    + 'border:1px solid #666;background:#222;color:#f80;cursor:pointer;">&#9664;</button>'
+    + '<button id="fs-b-next" title="B end +1 frame" style="padding:2px 6px;font-size:12px;border-radius:3px;'
+    + 'border:1px solid #666;background:#222;color:#f80;cursor:pointer;">&#9654;</button>';
+  bar.appendChild(abAdjRow);
+
   bar.appendChild(ctrlRow);
   fs.appendChild(topBar);
   fs.appendChild(vidHost);
@@ -402,7 +419,7 @@ window.openFS = function(it) {
         try {
           const t = p.getCurrentTime();
           const seg = segsArg[segIdx];
-          if (t >= seg.start + seg.dur || t < seg.start - 0.5) {
+          if (t >= seg.start + seg.dur - 0.2 || t < seg.start - 0.5) {
             segIdx = (segIdx + 1) % segsArg.length;
             p.seekTo(segsArg[segIdx].start, !window.keyframeOnly);
             p.playVideo();
@@ -417,7 +434,7 @@ window.openFS = function(it) {
       window.seeLearnVideoTimers[vidHost.id] = setInterval(function() {
         p.getCurrentTime().then(function(t) {
           const seg = segsArg[segIdx];
-          if (t >= seg.start + seg.dur || t < seg.start - 0.5) {
+          if (t >= seg.start + seg.dur - 0.2 || t < seg.start - 0.5) {
             segIdx = (segIdx + 1) % segsArg.length;
             p.setCurrentTime(segsArg[segIdx].start);
             p.play();
@@ -520,7 +537,7 @@ window.openFS = function(it) {
         try {
           const t = p.getCurrentTime();
           const seg = segsArg[segIdx];
-          if (t >= seg.start + seg.dur || t < seg.start - 0.5) {
+          if (t >= seg.start + seg.dur - 0.2 || t < seg.start - 0.5) {
             segIdx = (segIdx + 1) % segsArg.length;
             p.seekTo(segsArg[segIdx].start, !window.keyframeOnly);
             p.playVideo();
@@ -532,7 +549,7 @@ window.openFS = function(it) {
       window.seeLearnVideoTimers[vidHost.id] = setInterval(function() {
         p.getCurrentTime().then(function(t) {
           const seg = segsArg[segIdx];
-          if (t >= seg.start + seg.dur || t < seg.start - 0.5) {
+          if (t >= seg.start + seg.dur - 0.2 || t < seg.start - 0.5) {
             segIdx = (segIdx + 1) % segsArg.length;
             p.setCurrentTime(segsArg[segIdx].start);
             p.play();
@@ -568,7 +585,41 @@ window.openFS = function(it) {
   // ── A/B ───────────────────────────────────────────────────────────────────
   function updateAbLbl() {
     abLbl.textContent = abA !== null ? ('A:' + abA.toFixed(1) + (abB !== null ? ' B:' + abB.toFixed(1) : '')) : '';
+    // Show/hide the A/B frame adjustment row
+    abAdjRow.style.display = (abA !== null && abB !== null) ? 'flex' : 'none';
   }
+
+  // Wire A/B frame adjustment buttons (appear when both A and B are set)
+  const FS_FRAME = 1 / 30;
+  document.getElementById('fs-a-prev').addEventListener('click', function(e) {
+    e.stopPropagation();
+    if (abA === null) return;
+    abA = Math.max(0, abA - FS_FRAME);
+    if (abB !== null) startAbLoop();
+    updateAbLbl(); renderTL(lastCurT);
+  });
+  document.getElementById('fs-a-next').addEventListener('click', function(e) {
+    e.stopPropagation();
+    if (abA === null) return;
+    abA = abA + FS_FRAME;
+    if (abB !== null && abA >= abB) abB = abA + FS_FRAME;
+    if (abB !== null) startAbLoop();
+    updateAbLbl(); renderTL(lastCurT);
+  });
+  document.getElementById('fs-b-prev').addEventListener('click', function(e) {
+    e.stopPropagation();
+    if (abB === null) return;
+    abB = Math.max(abA + FS_FRAME, abB - FS_FRAME);
+    startAbLoop();
+    updateAbLbl(); renderTL(lastCurT);
+  });
+  document.getElementById('fs-b-next').addEventListener('click', function(e) {
+    e.stopPropagation();
+    if (abB === null) return;
+    abB = abB + FS_FRAME;
+    startAbLoop();
+    updateAbLbl(); renderTL(lastCurT);
+  });
 
   function startAbLoop() {
     if (abLoopTimer) clearInterval(abLoopTimer);
