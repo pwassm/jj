@@ -387,7 +387,7 @@
     "cname": "Crinoid",
     "sname": "",
     "Portrait": "",
-    "show": "1",
+    "show": "0",
     "Mute": "1",
     "cell": "4e",
     "fit": "",
@@ -438,8 +438,8 @@
     "Topic": ""
   },
   {
-    "show": "1",
-    "VidRange": "1 ",
+    "show": "0",
+    "VidRange": "1 2",
     "cell": "5b",
     "fit": "",
     "link": "https://www.instagram.com/bobtec/reel/DLFC1GrxZBU/",
