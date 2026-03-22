@@ -154,6 +154,10 @@ window.mountYouTubeClip = async function(hostEl, url, startSec, dur, isMuted, cu
         var allowSeek = !window.keyframeOnly;
         e.target.seekTo(initSeek, allowSeek);
         e.target.playVideo();
+        // Autopause: if enabled, pause after 100ms so a frame is visible but video doesn't run
+        if (window.autoPauseGrid !== false) {
+          setTimeout(function() { try { e.target.pauseVideo(); } catch(ex) {} }, 100);
+        }
         window.seeLearnVideoTimers[cellId] = setInterval(function() {
           try {
             var t   = e.target.getCurrentTime();
@@ -205,6 +209,10 @@ window.mountVimeoClip = async function(hostEl, url, startSec, dur, isMuted, cust
     var seekTo = customSeekTo !== undefined ? Number(customSeekTo) : segs[0].start;
     player.setCurrentTime(seekTo);
     player.play();
+    // Autopause: pause after 100ms so a frame is visible
+    if (window.autoPauseGrid !== false) {
+      setTimeout(function() { player.pause().catch(function(){}); }, 100);
+    }
     window.seeLearnVideoTimers[cellId] = setInterval(function() {
       player.getCurrentTime().then(function(t) {
         var seg = segs[segIdx];
@@ -412,35 +420,24 @@ window.openVideoEditor = function(it) {
       band.textContent = (segs[i].comment ? segs[i].comment.slice(0, 8) : (i + 1));
       // Use pointerdown so it fires before the timeline's own pointerdown handler
       band.addEventListener('pointerdown', function(ev) {
-        ev.stopPropagation(); // prevent timeline drag from starting
-        if (ev.ctrlKey) {
-          // Ctrl+click band = delete
+        ev.stopPropagation();
+        if (ev.ctrlKey && ev.shiftKey) {
+          // Ctrl+Shift+click band = delete segment
           ev.preventDefault();
           if (segs.length <= 1) { alert('Need at least one segment.'); return; }
           segs.splice(i, 1);
           setActiveSeg(Math.min(activeSegIdx, segs.length - 1));
-        } else {
+        } else if (!ev.ctrlKey) {
           // Plain click band = switch to that segment and loop it
           ev.preventDefault();
           scrubClickedBand = true;
-          setActiveSeg(i); // this calls mountLoop which starts the loop
+          setActiveSeg(i);
         }
       });
 
       // Ctrl+right-click band = open VidComment mini-editor
       band.addEventListener('contextmenu', function(ev) {
         ev.preventDefault(); ev.stopPropagation();
-        if (!ev.ctrlKey) {
-          // Show brief hint if no ctrl
-          const hint = document.createElement('div');
-          hint.textContent = 'Ctrl+right-click to edit label';
-          hint.style.cssText = 'position:fixed;left:' + ev.clientX + 'px;top:' + ev.clientY + 'px;'
-            + 'background:#222;color:#8ef;padding:4px 8px;border-radius:4px;font-size:11px;'
-            + 'z-index:999999;pointer-events:none;';
-          document.body.appendChild(hint);
-          setTimeout(() => hint.remove(), 1500);
-          return;
-        }
         openCommentEditor(i, band);
       });
       timeline.appendChild(band);

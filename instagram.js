@@ -1,16 +1,9 @@
 // ─── Instagram embed module ───────────────────────────────────────────────────
-// Instagram does NOT allow iframe embeds in third-party pages.
-// This module shows a styled link-out card for Instagram posts/reels.
+// Uses Instagram's official public embed script (//www.instagram.com/embed.js)
+// which converts <blockquote class="instagram-media"> tags into real iframes.
+// No server auth or API token needed — same method WordPress uses.
 //
-// Thumbnail fetching: Instagram's oEmbed API now requires a Facebook app
-// access token — no public unauthenticated endpoint exists as of 2023.
-// So this module shows a clean branded card that opens the post on click.
-//
-// To remove this feature: delete instagram.js and its <script> tag in index.html.
-// No other files need changing — grid.js checks window.isInstagramLink first.
-//
-// How to use: set VidRange = "ig" (or leave it as whatever it is) for any row
-// whose link is an instagram.com URL. The grid auto-detects Instagram URLs.
+// To remove: delete instagram.js and its <script> tag in index.html.
 
 (function() {
   'use strict';
@@ -19,46 +12,61 @@
     return /instagram\.com\/(p|reel|tv)\//i.test(url || '');
   };
 
-  // Extract shortcode from Instagram URL for display
-  function igShortcode(url) {
-    var m = url.match(/instagram\.com\/(?:p|reel|tv)\/([A-Za-z0-9_-]+)/);
-    return m ? m[1] : '';
+  var _igScriptLoaded = false;
+  function loadIgScript() {
+    if (window.instgrm && window.instgrm.Embeds) {
+      window.instgrm.Embeds.process(); return;
+    }
+    if (_igScriptLoaded) return;
+    _igScriptLoaded = true;
+    var s = document.createElement('script');
+    s.src = 'https://www.instagram.com/embed.js';
+    s.async = true;
+    s.onload = function() {
+      if (window.instgrm && window.instgrm.Embeds) window.instgrm.Embeds.process();
+    };
+    document.head.appendChild(s);
   }
 
-  // Build a branded link-out card for an Instagram cell
+  function cleanUrl(url) {
+    // embed.js wants the clean permalink without query params
+    return url.split('?')[0].replace(/\/$/, '') + '/';
+  }
+
   window.buildInstagramCell = function(it, cellW, cellH, callback) {
-    var div = document.createElement('div');
-    div.style.cssText = 'width:100%;height:100%;position:relative;'
-      + 'background:linear-gradient(135deg,#405DE6,#5851DB,#833AB4,#C13584,#E1306C,#FD1D1D,#F56040);'
-      + 'display:flex;flex-direction:column;align-items:center;justify-content:center;'
-      + 'cursor:pointer;overflow:hidden;';
+    var wrapper = document.createElement('div');
+    wrapper.style.cssText = 'width:100%;height:100%;overflow:auto;background:#000;'
+      + 'display:flex;align-items:flex-start;justify-content:center;';
 
-    var code = igShortcode(it.link);
-    var label = it.cname || (code ? code.slice(0,10) + (code.length > 10 ? '…' : '') : 'Instagram');
+    // Instagram embed.js looks for this blockquote
+    var bq = document.createElement('blockquote');
+    bq.className = 'instagram-media';
+    bq.setAttribute('data-instgrm-permalink', cleanUrl(it.link));
+    bq.setAttribute('data-instgrm-version', '14');
+    bq.style.cssText = 'background:#fff;border:0;border-radius:3px;'
+      + 'box-shadow:0 0 1px 0 rgba(0,0,0,0.5);margin:0;'
+      + 'max-width:540px;min-width:240px;padding:0;width:calc(100% - 2px);';
 
-    div.innerHTML = '<div style="font-size:28px;line-height:1;margin-bottom:6px;">&#x1F4F8;</div>'
-      + '<div style="font-size:11px;font-weight:bold;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,0.6);">'
-      + 'Instagram</div>'
-      + '<div style="font-size:10px;color:rgba(255,255,255,0.75);margin-top:3px;'
-      + 'max-width:90%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;">'
-      + label + '</div>'
-      + '<div style="position:absolute;bottom:3px;right:5px;font-size:9px;'
-      + 'color:rgba(255,255,255,0.5);">tap to open</div>';
+    // Fallback link before embed loads
+    var fallback = document.createElement('div');
+    fallback.style.cssText = 'padding:16px;text-align:center;';
+    var a = document.createElement('a');
+    a.href = it.link; a.target = '_blank'; a.rel = 'noopener noreferrer';
+    a.style.cssText = 'color:#0095f6;font-family:sans-serif;font-size:13px;';
+    a.textContent = it.cname || 'View on Instagram';
+    fallback.appendChild(a);
+    bq.appendChild(fallback);
+    wrapper.appendChild(bq);
 
-    div.title = it.link;
-    div.addEventListener('click', function() {
-      window.open(it.link, '_blank', 'noopener,noreferrer');
-    });
-
-    // Swipe right → open (consistent with image cells)
+    // Swipe right to open
     var startX = 0;
-    div.addEventListener('pointerdown', function(e) { startX = e.clientX; });
-    div.addEventListener('pointerup', function(e) {
-      var dx = e.clientX - startX;
-      if (dx > 25) window.open(it.link, '_blank', 'noopener,noreferrer');
+    wrapper.addEventListener('pointerdown', function(e) { startX = e.clientX; });
+    wrapper.addEventListener('pointerup', function(e) {
+      if (e.clientX - startX > 25) window.open(it.link, '_blank', 'noopener,noreferrer');
     });
 
-    callback(div);
+    callback(wrapper);
+    setTimeout(loadIgScript, 50);
   };
 
 })();

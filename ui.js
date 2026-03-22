@@ -1296,10 +1296,18 @@ document.getElementById('togKeyframe').addEventListener('change', function() {
   window.keyframeOnly = this.checked;
   localStorage.setItem('seeandlearn-keyframeOnly', this.checked ? '1' : '0');
 });
-// Restore keyframe toggle state on load
+document.getElementById('togAutopause').addEventListener('change', function() {
+  window.autoPauseGrid = this.checked;
+  localStorage.setItem('seeandlearn-autopause', this.checked ? '1' : '0');
+});
+// Restore toggles on load
 (function() {
-  const tog = document.getElementById('togKeyframe');
-  if (tog) tog.checked = (localStorage.getItem('seeandlearn-keyframeOnly') === '1');
+  const kf = document.getElementById('togKeyframe');
+  if (kf) kf.checked = (localStorage.getItem('seeandlearn-keyframeOnly') === '1');
+  const ap = document.getElementById('togAutopause');
+  // Default ON — only off if explicitly saved as '0'
+  if (ap) ap.checked = (localStorage.getItem('seeandlearn-autopause') !== '0');
+  window.autoPauseGrid = ap ? ap.checked : true;
 })();
 
 document.addEventListener('keydown', e => {
@@ -1374,6 +1382,81 @@ document.getElementById('miLoadGithub').addEventListener('pointerup', async e =>
     render();
     alert('Loaded ' + linksData.length + ' rows from GitHub.');
   } catch(err) { alert('Load from GitHub failed:\n' + err.message); }
+});
+
+// ─── ShowThumb ────────────────────────────────────────────────────────────────
+document.getElementById('btn-show-thumb').addEventListener('click', function() {
+  if (!_activeRow) { setStatus('Click a row first', '#f88'); return; }
+  const data = _activeRow.getData();
+  const link = data.link || '';
+  if (!link) { setStatus('No link in this row', '#f88'); return; }
+
+  // Remove any existing thumb popup
+  const old = document.getElementById('sal-thumb-popup');
+  if (old) { old.remove(); return; }
+
+  const popup = document.createElement('div');
+  popup.id = 'sal-thumb-popup';
+  popup.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);'
+    + 'z-index:99999;background:#111;border:2px solid #4af;border-radius:10px;'
+    + 'padding:8px;box-shadow:0 8px 32px rgba(0,0,0,0.8);max-width:360px;width:90%;';
+
+  const isVid = data.VidRange && window.parseVideoAsset && window.parseVideoAsset(String(data.VidRange)) !== null;
+  const isYT  = window.isYouTubeLink && window.isYouTubeLink(link);
+  const isVim = window.isVimeoLink && window.isVimeoLink(link);
+
+  let imgSrc = '';
+  if (isYT) {
+    // YouTube thumbnail URL (hqdefault is always available)
+    const m = link.match(/(?:v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+    if (m) imgSrc = 'https://img.youtube.com/vi/' + m[1] + '/hqdefault.jpg';
+  } else if (!isVid) {
+    imgSrc = link; // direct image URL
+  }
+
+  const label = document.createElement('div');
+  label.style.cssText = 'color:#8ef;font-size:12px;margin-bottom:6px;text-align:center;'
+    + 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+  label.textContent = (data.cname || data['v.title'] || link).slice(0, 50);
+  popup.appendChild(label);
+
+  if (imgSrc) {
+    const img = document.createElement('img');
+    img.src = imgSrc;
+    img.style.cssText = 'width:100%;border-radius:6px;display:block;';
+    img.onerror = function() { img.style.display='none'; label.textContent += ' (image failed to load)'; };
+    popup.appendChild(img);
+  } else if (isVim) {
+    // Vimeo thumbnail via noembed
+    fetch('https://noembed.com/embed?url=' + encodeURIComponent(link))
+      .then(r => r.json()).then(d => {
+        if (d.thumbnail_url) {
+          const img = document.createElement('img');
+          img.src = d.thumbnail_url;
+          img.style.cssText = 'width:100%;border-radius:6px;display:block;';
+          popup.appendChild(img);
+        }
+      }).catch(function(){});
+  } else {
+    const msg = document.createElement('div');
+    msg.style.cssText = 'color:#888;font-size:12px;text-align:center;padding:20px;';
+    msg.textContent = 'No thumbnail available';
+    popup.appendChild(msg);
+  }
+
+  const close = document.createElement('div');
+  close.style.cssText = 'text-align:center;margin-top:8px;color:#666;font-size:11px;cursor:pointer;';
+  close.textContent = 'click anywhere to close';
+  popup.appendChild(close);
+
+  document.body.appendChild(popup);
+
+  // Click anywhere to close
+  setTimeout(function() {
+    document.addEventListener('pointerup', function handler() {
+      popup.remove(); document.removeEventListener('pointerup', handler);
+    });
+  }, 100);
 });
 
 // ─── MakeJsonFromTopic stub ───────────────────────────────────────────────────
