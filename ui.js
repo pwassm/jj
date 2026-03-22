@@ -1523,21 +1523,38 @@ document.getElementById('miLoadGithub').addEventListener('pointerup', async e =>
     alert('GitHub owner/repo not set.\nOpen Settings → GitHub Sync to configure, or do a Push first.');
     return;
   }
-  if (!confirm('Load links.json from GitHub?\n\nThis REPLACES your current data.\nMake sure you have pushed unsaved changes first.')) return;
+  if (!confirm('Load links.json from GitHub?\n\nThis REPLACES your current data.\nAlso downloads links.json so your local file is updated.')) return;
   try {
     const headers = token ? { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json' } : {};
     const rawUrl = 'https://raw.githubusercontent.com/' + owner + '/' + repo + '/main/links.json?v=' + Date.now();
     const res = await fetch(rawUrl, { headers });
     if (!res.ok) throw new Error('HTTP ' + res.status + ': ' + res.statusText);
-    const data = await res.json();
-    if (!Array.isArray(data)) throw new Error('Expected JSON array');
+    const raw = await res.json();
+    if (!Array.isArray(raw)) throw new Error('Expected JSON array');
+    // Strip the _salMeta row if present
+    let pushTime = 0;
+    let data = raw;
+    if (raw.length > 0 && raw[0]._salMeta) {
+      pushTime = parseInt(raw[0]._salPushTime || '0', 10);
+      data = raw.slice(1);
+    }
     linksData = data;
     linksData.forEach(row => {
       if ('asset' in row && !('VidRange' in row)) { row.VidRange = row.asset; delete row.asset; }
     });
-    saveData();   // writes sal-edited so localStorage stays authoritative
+    // Save to localStorage with the push timestamp so future loads detect it
+    const s = JSON.stringify(linksData);
+    localStorage.setItem('seeandlearn-links', s);
+    localStorage.setItem('mlynx-links', s);
+    localStorage.setItem('sal-edited', pushTime > 0 ? String(pushTime) : Date.now().toString());
     render();
-    alert('Loaded ' + linksData.length + ' rows from GitHub.');
+    // Auto-download links.json so the local file at m:\jj is updated too
+    const blob = new Blob([JSON.stringify(linksData, null, 2)], {type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = 'links.json';
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(a.href);
+    alert('✓ Loaded ' + linksData.length + ' rows from GitHub.\nlinks.json downloaded — replace your local copy in m:\\jj');
   } catch(err) { alert('Load from GitHub failed:\n' + err.message); }
 });
 

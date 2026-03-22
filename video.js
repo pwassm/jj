@@ -321,28 +321,36 @@ window.openVideoEditor = function(it) {
     + '<div id="v2segtabs" style="display:flex;gap:5px;flex-wrap:wrap;"></div></div>'
     // Fine Adjustments title
     + '<div style="font-size:13px;font-weight:bold;color:#ccc;border-bottom:1px solid #444;'
-    + 'padding-bottom:5px;">Fine Adjustments <span style="font-size:10px;color:#666;">(▲▼ = dur, ◀▶ = start)</span></div>'
+    + 'padding-bottom:5px;">Fine Adjustments</div>'
     // Start
     + '<div><div style="font-size:11px;color:#888;margin-bottom:4px;">Start time (sec)</div>'
-    + '<input type="number" id="v2start" class="v2num" min="0" step="0.1" style="margin-bottom:5px;">'
-    + '<div style="display:flex;gap:3px;align-items:center;">'
+    + '<input type="number" id="v2start" class="v2num" min="0" step="0.1" style="margin-bottom:4px;">'
+    // Frame row (top): ◀ ● ▶
+    + '<div style="display:flex;gap:3px;align-items:center;margin-bottom:3px;">'
+    + '<button class="v2btn" id="vs-frame" title="Back 1 frame (freezes)">&#9664;</button>'
+    + '<button class="v2btn" id="vs-set" title="Set start = current position" style="border-color:#4af;color:#8ef;flex:1;">&#9679; set</button>'
+    + '<button class="v2btn" id="vs+frame" title="Forward 1 frame (freezes)">&#9654;</button>'
+    + '</div>'
+    // Step row (bottom): -5 -1 +1 +5
+    + '<div style="display:flex;gap:3px;">'
     + '<button class="v2btn" id="vs---" title="-5s">-5</button>'
     + '<button class="v2btn" id="vs--" title="-1s">-1</button>'
-    + '<button class="v2btn" id="vs-frame" title="Back 1 frame">&#9664;</button>'
-    + '<button class="v2btn" id="vs-set" title="Set start to current scrub position" style="border-color:#4af;color:#8ef;">&#9679;</button>'
-    + '<button class="v2btn" id="vs+frame" title="Forward 1 frame">&#9654;</button>'
     + '<button class="v2btn" id="vs++" title="+1s">+1</button>'
     + '<button class="v2btn" id="vs+++" title="+5s">+5</button>'
     + '</div></div>'
     // Duration
     + '<div><div style="font-size:11px;color:#888;margin-bottom:4px;">Duration (sec)</div>'
-    + '<input type="number" id="v2dur" class="v2num" min="0.1" step="0.1" style="margin-bottom:5px;">'
-    + '<div style="display:flex;gap:3px;align-items:center;">'
+    + '<input type="number" id="v2dur" class="v2num" min="0.1" step="0.1" style="margin-bottom:4px;">'
+    // Frame row (top): ◀ ● ▶
+    + '<div style="display:flex;gap:3px;align-items:center;margin-bottom:3px;">'
+    + '<button class="v2btn" id="vd-frame" title="Shorten 1 frame (freezes)">&#9664;</button>'
+    + '<button class="v2btn" id="vd-set" title="Set end = current position" style="border-color:#4af;color:#8ef;flex:1;">&#9679; set</button>'
+    + '<button class="v2btn" id="vd+frame" title="Extend 1 frame (freezes)">&#9654;</button>'
+    + '</div>'
+    // Step row (bottom): -5 -1 +1 +5
+    + '<div style="display:flex;gap:3px;">'
     + '<button class="v2btn" id="vd---" title="-5s">-5</button>'
     + '<button class="v2btn" id="vd--" title="-1s">-1</button>'
-    + '<button class="v2btn" id="vd-frame" title="Shorten by 1 frame">&#9664;</button>'
-    + '<button class="v2btn" id="vd-set" title="Set end to current scrub position" style="border-color:#4af;color:#8ef;">&#9679;</button>'
-    + '<button class="v2btn" id="vd+frame" title="Extend by 1 frame">&#9654;</button>'
     + '<button class="v2btn" id="vd++" title="+1s">+1</button>'
     + '<button class="v2btn" id="vd+++" title="+5s">+5</button>'
     + '</div></div>'
@@ -602,29 +610,53 @@ window.openVideoEditor = function(it) {
 
   var FRAME_SEC = 1 / 30;
 
-  // Wire start buttons
+  // applyFrameDelta: freeze play, adjust value, seek to new position (no remount/no loop restart)
+  function applyFrameDelta(type, delta) {
+    suspendLoop();
+    if (type === 'start') {
+      segs[activeSegIdx].start = fmt(Math.max(0, segs[activeSegIdx].start + delta));
+      iStart.value = segs[activeSegIdx].start;
+    } else {
+      segs[activeSegIdx].dur = fmt(Math.max(0.1, segs[activeSegIdx].dur + delta));
+      iDur.value = segs[activeSegIdx].dur;
+    }
+    vrPrev.textContent = window.serializeSegments(segs);
+    updateStats(); renderTimeline(); renderSegTabs();
+    // Seek the player to the new position without restarting play
+    var p = getEditorPlayer();
+    var seekT = type === 'start'
+      ? segs[activeSegIdx].start
+      : segs[activeSegIdx].start + segs[activeSegIdx].dur - 0.1;
+    if (p) {
+      if (typeof p.seekTo === 'function') { try { p.seekTo(Math.max(0, seekT), true); } catch(ex) {} }
+      else if (p.setCurrentTime) p.setCurrentTime(Math.max(0, seekT)).catch(function(){});
+    }
+  }
+
+  // Wire start buttons: -5/-1/+1/+5 use applyDelta (normal remount flow)
   var startDeltas = { 'vs---': -5, 'vs--': -1, 'vs++': 1, 'vs+++': 5 };
   Object.keys(startDeltas).forEach(function(id) {
     document.getElementById(id).addEventListener('pointerdown', function(e) {
       e.preventDefault(); applyDelta('start', startDeltas[id]);
     });
   });
+  // Frame buttons: freeze play, seek to new start
   document.getElementById('vs-frame').addEventListener('pointerdown', function(e) {
-    e.preventDefault(); applyDelta('start', -FRAME_SEC);
+    e.preventDefault(); applyFrameDelta('start', -FRAME_SEC);
   });
   document.getElementById('vs+frame').addEventListener('pointerdown', function(e) {
-    e.preventDefault(); applyDelta('start', FRAME_SEC);
+    e.preventDefault(); applyFrameDelta('start', FRAME_SEC);
   });
-  // ● set start to current scrub position
+  // ● set start to current player position (freeze, then update)
   document.getElementById('vs-set').addEventListener('pointerdown', function(e) {
     e.preventDefault();
+    suspendLoop();
     var p = getEditorPlayer();
     function doSet(t) {
       segs[activeSegIdx].start = fmt(Math.max(0, t));
       iStart.value = segs[activeSegIdx].start;
       vrPrev.textContent = window.serializeSegments(segs);
       updateStats(); renderTimeline(); renderSegTabs();
-      scheduleMount('start');
     }
     if (p && typeof p.getCurrentTime === 'function') {
       try { doSet(p.getCurrentTime()); } catch(ex) {}
@@ -633,22 +665,24 @@ window.openVideoEditor = function(it) {
     }
   });
 
-  // Wire dur buttons
+  // Wire dur buttons: -5/-1/+1/+5 use applyDelta (normal remount flow)
   var durDeltas = { 'vd---': -5, 'vd--': -1, 'vd++': 1, 'vd+++': 5 };
   Object.keys(durDeltas).forEach(function(id) {
     document.getElementById(id).addEventListener('pointerdown', function(e) {
       e.preventDefault(); applyDelta('dur', durDeltas[id]);
     });
   });
+  // Frame buttons: freeze play, seek to near new end
   document.getElementById('vd-frame').addEventListener('pointerdown', function(e) {
-    e.preventDefault(); applyDelta('dur', -FRAME_SEC);
+    e.preventDefault(); applyFrameDelta('dur', -FRAME_SEC);
   });
   document.getElementById('vd+frame').addEventListener('pointerdown', function(e) {
-    e.preventDefault(); applyDelta('dur', FRAME_SEC);
+    e.preventDefault(); applyFrameDelta('dur', FRAME_SEC);
   });
-  // ● set duration end to current scrub position
+  // ● set duration end to current player position (freeze, then update)
   document.getElementById('vd-set').addEventListener('pointerdown', function(e) {
     e.preventDefault();
+    suspendLoop();
     var p = getEditorPlayer();
     function doSet(t) {
       var newDur = fmt(Math.max(0.1, t - segs[activeSegIdx].start));
@@ -656,7 +690,6 @@ window.openVideoEditor = function(it) {
       iDur.value = newDur;
       vrPrev.textContent = window.serializeSegments(segs);
       updateStats(); renderTimeline(); renderSegTabs();
-      scheduleMount('end');
     }
     if (p && typeof p.getCurrentTime === 'function') {
       try { doSet(p.getCurrentTime()); } catch(ex) {}
