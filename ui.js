@@ -629,13 +629,30 @@ document.addEventListener('pointerup', () => { if (menuPanel.classList.contains(
 let rawJsonMode = false;
 let tableKeys   = [];
 
-const COL_DEFAULT_PX = 120;   // sensible default
-const COL_MAX_PX     = 220;   // cap so long-content cols (comment, link) don't blow out the table
+// ─── Column config — SINGLE SOURCE OF TRUTH ──────────────────────────────────
+// One key: 'seeandlearn-colConfig' = { order:[...], widths:{field:px,...} }
+// Written ONLY by user actions (column move / resize).
+// NEVER touched by data loading (init, Load from GitHub, Import).
+// Read at the start of every renderTableEditor() call.
+const COL_DEFAULT_PX = 120;
+const COL_MAX_PX     = 245;  // ~35 chars at 7px/char
 const COL_MIN_PX     = 8;
 
-// colWidths: persisted in localStorage, keyed by field name
-let colWidths   = JSON.parse(localStorage.getItem('seeandlearn-colWidths') || '{}');
-let recycleData = JSON.parse(localStorage.getItem('seeandlearn-recycle')   || '[]');
+function loadColConfig() {
+  try {
+    const s = localStorage.getItem('seeandlearn-colConfig');
+    if (s) { const c = JSON.parse(s); if (c && Array.isArray(c.order)) return c; }
+  } catch(e) {}
+  return null;
+}
+function saveColConfig() {
+  localStorage.setItem('seeandlearn-colConfig',
+    JSON.stringify({ order: tableKeys.slice(), widths: Object.assign({}, colWidths) }));
+}
+
+// colWidths and tableKeys are still used internally but colConfig is the store
+let colWidths   = {};
+let recycleData = JSON.parse(localStorage.getItem('seeandlearn-recycle') || '[]');
 
 // main.js Esc-handler compatibility
 let isColResizing = false;
@@ -647,40 +664,34 @@ let activeCol = null;   // field name string
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function initTableKeys() {
-  // Column order source of truth: the key order in linksData rows (which mirrors links.json).
-  // This means column order is consistent across ALL browsers and devices — no per-browser
-  // localStorage divergence. localStorage is used only to merge in any newly added columns
-  // that aren't yet in the saved JSON.
+  // All keys present in linksData (union)
+  const allKeys = new Set();
+  linksData.forEach(r => Object.keys(r).forEach(k => { if (!k.startsWith('_')) allKeys.add(k); }));
 
-  // Build ordered key list from linksData rows (first-seen insertion order)
-  const seen = new Set();
-  const ordered = [];
-  linksData.forEach(r => {
-    Object.keys(r).forEach(k => {
-      if (!k.startsWith('_') && !seen.has(k)) { seen.add(k); ordered.push(k); }
-    });
-  });
-
-  // Merge in any keys from localStorage that aren't in linksData
-  // (e.g. a column added in the editor but not yet saved to links.json)
-  const lsSaved = localStorage.getItem('seeandlearn-tableKeys');
-  if (lsSaved) {
-    try {
-      const lsKeys = JSON.parse(lsSaved);
-      if (Array.isArray(lsKeys)) {
-        lsKeys.forEach(k => { if (!seen.has(k) && !k.startsWith('_')) { seen.add(k); ordered.push(k); } });
-      }
-    } catch(e) {}
+  // Try saved config first (user's ordering/widths)
+  const saved = loadColConfig();
+  if (saved && saved.order.length) {
+    const extra = [...allKeys].filter(k => !saved.order.includes(k));
+    tableKeys = [...saved.order.filter(k => allKeys.has(k)), ...extra];
+    colWidths  = saved.widths || {};
+  } else {
+    // No saved config — derive order from linksData row key insertion order
+    const seen = new Set();
+    tableKeys = [];
+    linksData.forEach(r => Object.keys(r).forEach(k => {
+      if (!k.startsWith('_') && !seen.has(k)) { seen.add(k); tableKeys.push(k); }
+    }));
+    if (!tableKeys.length)
+      tableKeys = ['show','VidRange','cell','fit','link','cname','sname',
+                   'v.title','v.author','attribution','comment','Mute','Portrait'];
+    colWidths = {};
   }
 
-  tableKeys = ordered.length ? ordered
-    : ['show','VidRange','cell','fit','link','cname','sname','v.title','v.author','attribution','comment','Mute','Portrait'];
-
-  // Scrub any _ keys from linksData
+  // Scrub _ keys from linksData rows
   linksData = linksData.map(r => {
-    const clean = {};
-    Object.keys(r).forEach(k => { if (!k.startsWith('_')) clean[k] = r[k]; });
-    return clean;
+    const c = {};
+    Object.keys(r).forEach(k => { if (!k.startsWith('_')) c[k] = r[k]; });
+    return c;
   });
 }
 
@@ -833,7 +844,11 @@ function renameColumn(k) {
 window.renderTableEditor = function() {
   const container = document.getElementById('tableEditor');
   if (!container) return;
-  if (!tableKeys.length) initTableKeys();
+
+  // Always (re)load colConfig — this is the single source of truth
+  // for both column order and column widths.
+  // initTableKeys reads it and populates tableKeys + colWidths.
+  initTableKeys();
 
   if (window.tabulatorTable) {
     try { window.tabulatorTable.destroy(); } catch(e) {}
@@ -906,9 +921,7 @@ window.renderTableEditor = function() {
     }
   });
 
-  // Data columns
-  // Re-read colWidths from localStorage every render to pick up widths saved in prior sessions
-  colWidths = JSON.parse(localStorage.getItem('seeandlearn-colWidths') || '{}');
+  // Data columns — widths come from colConfig via initTableKeys() above
 
   tableKeys.forEach(k => {
     // Clamp saved width between min and max
@@ -921,7 +934,7 @@ window.renderTableEditor = function() {
       field: k,
       editor: 'input',
       headerSort: true,
-      width: w,          // explicit — layout:false honours this exactly
+      width: w,          // double-rAF in tableBuilt will re-apply from colConfig after layout
       maxWidth: COL_MAX_PX,
       minWidth: COL_MIN_PX,
       resizable: true,
@@ -1105,44 +1118,45 @@ window.renderTableEditor = function() {
     data: getDataCopy(),
     reactiveData: false,
     columns: cols,
-    layout: false,         // NO layout engine — column widths are exactly what we set, always
+    layout: 'fitData',     // valid Tabulator layout value (layout:false is not valid in Tabulator 6)
     autoResize: false,
     selectableRows: true,
     movableColumns: true,
     history: false,
     height: '100%',
 
-    // Belt-and-suspenders: re-apply saved widths after build in case anything shifted
+    // Apply saved widths AFTER Tabulator's own layout rAF completes.
+    // layout:'fitData' runs its engine inside a requestAnimationFrame.
+    // A single rAF in tableBuilt fires INSIDE that pass and gets overwritten.
+    // Double rAF fires AFTER it — the only reliable timing.
     tableBuilt() {
-      const tbl = window.tabulatorTable;
-      if (!tbl) return;
-      tableKeys.forEach(k => {
-        const w = colWidths[k] !== undefined
-          ? Math.min(Math.max(colWidths[k], COL_MIN_PX), COL_MAX_PX)
-          : COL_DEFAULT_PX;
-        try { tbl.getColumn(k).setWidth(w); } catch(e) {}
-      });
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const tbl = window.tabulatorTable;
+        if (!tbl) return;
+        tableKeys.forEach(k => {
+          const w = Math.min(
+            colWidths[k] !== undefined ? colWidths[k] : COL_DEFAULT_PX,
+            COL_MAX_PX
+          );
+          try { tbl.getColumn(k).setWidth(w); } catch(e) {}
+        });
+      }));
     },
 
-    // Save column width immediately on every resize drag
     columnResized(column) {
       const f = column.getField();
       if (!f || f.startsWith('_')) return;
-      // Clamp to max so accidental over-drag is corrected on next open
       colWidths[f] = Math.min(column.getWidth(), COL_MAX_PX);
-      localStorage.setItem('seeandlearn-colWidths', JSON.stringify(colWidths));
+      saveColConfig();         // single write, single key
       syncFromTabulator();
       saveJsonSilent();
     },
 
-    // When user drags columns to reorder, update tableKeys and persist key order
     columnMoved(column, columns) {
       syncFromTabulator();
-      const newOrder = columns
-        .map(c => c.getField())
-        .filter(f => f && !f.startsWith('_'));
-      tableKeys = newOrder;
+      tableKeys = columns.map(c => c.getField()).filter(f => f && !f.startsWith('_'));
       reorderLinksDataKeys();
+      saveColConfig();         // single write, single key
       saveJsonSilent();
       updateColHeaderStrip();
     },
@@ -1388,11 +1402,10 @@ document.getElementById('jsonPush').addEventListener('pointerup', e => {
 document.getElementById('jsonDl').addEventListener('click', saveJson);
 document.getElementById('jsonCancel').addEventListener('click', closeTableEditor);
 
-// ─── Table horizontal scroll arrows ──────────────────────────────────────────
+// ─── Table horizontal scroll — buttons AND keyboard arrows ───────────────────
 (function() {
-  const SCROLL_AMT = 400; // px per click — aggressive
+  const SCROLL_AMT = 400;
   function getTableScroller() {
-    // Tabulator's scrollable inner element
     const te = document.getElementById('tableEditor');
     if (!te) return null;
     return te.querySelector('.tabulator-tableholder') || te;
@@ -1404,6 +1417,21 @@ document.getElementById('jsonCancel').addEventListener('click', closeTableEditor
   document.getElementById('jsonScrollRight').addEventListener('click', function() {
     const el = getTableScroller();
     if (el) el.scrollBy({ left: SCROLL_AMT, behavior: 'smooth' });
+  });
+
+  // Keyboard left/right arrows scroll the table when the modal is open
+  // and focus is NOT inside a text input (so cell editing still works normally)
+  document.addEventListener('keydown', function(e) {
+    const modal = document.getElementById('jsonModal');
+    if (!modal || !modal.classList.contains('open')) return;
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    const active = document.activeElement;
+    const isEditing = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA'
+      || active.closest('.tabulator-cell.tabulator-editing'));
+    if (isEditing) return;  // let the cell editor handle arrows
+    e.preventDefault();
+    const el = getTableScroller();
+    if (el) el.scrollBy({ left: e.key === 'ArrowRight' ? SCROLL_AMT : -SCROLL_AMT, behavior: 'smooth' });
   });
 })();
 document.getElementById('jsonModal').addEventListener('pointerup', e => e.stopPropagation());
