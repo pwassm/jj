@@ -626,503 +626,402 @@ menuBtn.addEventListener('pointerup', e => {
 menuPanel.addEventListener('pointerup', e => e.stopPropagation());
 document.addEventListener('pointerup', () => { if (menuPanel.classList.contains('open')) closeMenu(); });
 
-// ─── State ───────────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+// TABLE MODULE — clean rewrite
+//
+// Design rules (simple, auditable, no surprises):
+//
+//  1. ONE storage key for column config:  'sal-cols'
+//     Format: { order: ['field',...], widths: { field: px, ... } }
+//     Written only by: colMoved(), colResized()
+//     Read only by:    buildColConfig() at the start of openTable()
+//
+//  2. linksData is MASTER.  Tabulator gets a deep copy.
+//     syncTab() pulls Tabulator → linksData before every save.
+//
+//  3. saveData() is the ONE save function.
+//     It calls syncTab(), writes seeandlearn-links + mlynx-links.
+//     It does NOT touch 'sal-cols'.
+//
+//  4. openTable() rebuilds Tabulator from scratch every time it's called.
+//     It always reads 'sal-cols' fresh.  No stale in-memory state.
+//
+//  5. Column widths are applied with setTimeout(0) + _applyingWidths guard
+//     so Tabulator's layout engine can't overwrite them.
+// ═══════════════════════════════════════════════════════════════════════════
+
 let rawJsonMode = false;
-let tableKeys   = [];
 
-// ─── Column config — SINGLE SOURCE OF TRUTH ──────────────────────────────────
-// One key: 'seeandlearn-colConfig' = { order:[...], widths:{field:px,...} }
-// Written ONLY by user actions (column move / resize).
-// NEVER touched by data loading (init, Load from GitHub, Import).
-// Read at the start of every renderTableEditor() call.
-const COL_DEFAULT_PX = 120;
-const COL_MAX_PX     = 245;  // ~35 chars at 7px/char
-const COL_MIN_PX     = 8;
+const COL_W_DEFAULT = 120;
+const COL_W_MAX     = 245;   // ~35 chars
+const COL_W_MIN     = 8;
 
-function loadColConfig() {
+// ── Column config storage (ONE key, ONE object) ───────────────────────────
+function colConfigLoad() {
   try {
-    const s = localStorage.getItem('seeandlearn-colConfig');
-    if (s) { const c = JSON.parse(s); if (c && Array.isArray(c.order)) return c; }
+    const s = localStorage.getItem('sal-cols');
+    if (!s) return null;
+    const c = JSON.parse(s);
+    if (c && Array.isArray(c.order) && c.order.length) return c;
   } catch(e) {}
   return null;
 }
-function saveColConfig() {
-  localStorage.setItem('seeandlearn-colConfig',
-    JSON.stringify({ order: tableKeys.slice(), widths: Object.assign({}, colWidths) }));
+function colConfigSave(order, widths) {
+  localStorage.setItem('sal-cols', JSON.stringify({ order: order, widths: widths }));
 }
 
-// colWidths and tableKeys are still used internally but colConfig is the store
-let colWidths   = {};
-let recycleData = JSON.parse(localStorage.getItem('seeandlearn-recycle') || '[]');
+// ── Data helpers ──────────────────────────────────────────────────────────
+function deepCopy(x) { return JSON.parse(JSON.stringify(x)); }
 
-// main.js Esc-handler compatibility
-let isColResizing = false;
-window.stopColResize = function() {};
-
-// ─── Focus tracking ───────────────────────────────────────────────────────────
-let activeRow = null;   // Tabulator Row object
-let activeCol = null;   // field name string
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-function initTableKeys() {
-  // All keys present in linksData (union)
-  const allKeys = new Set();
-  linksData.forEach(r => Object.keys(r).forEach(k => { if (!k.startsWith('_')) allKeys.add(k); }));
-
-  // Try saved config first (user's ordering/widths)
-  const saved = loadColConfig();
-  if (saved && saved.order.length) {
-    const extra = [...allKeys].filter(k => !saved.order.includes(k));
-    tableKeys = [...saved.order.filter(k => allKeys.has(k)), ...extra];
-    colWidths  = saved.widths || {};
-  } else {
-    // No saved config — derive order from linksData row key insertion order
-    const seen = new Set();
-    tableKeys = [];
-    linksData.forEach(r => Object.keys(r).forEach(k => {
-      if (!k.startsWith('_') && !seen.has(k)) { seen.add(k); tableKeys.push(k); }
-    }));
-    if (!tableKeys.length)
-      tableKeys = ['show','VidRange','cell','fit','link','cname','sname',
-                   'v.title','v.author','attribution','comment','Mute','Portrait'];
-    colWidths = {};
-  }
-
-  // Scrub _ keys from linksData rows
+// Scrub Tabulator's internal _ fields out of linksData
+function scrubUnderscores() {
   linksData = linksData.map(r => {
-    const c = {};
-    Object.keys(r).forEach(k => { if (!k.startsWith('_')) c[k] = r[k]; });
-    return c;
+    const o = {};
+    Object.keys(r).forEach(k => { if (!k.startsWith('_')) o[k] = r[k]; });
+    return o;
   });
 }
 
-function getDistinctVals(field) {
-  const s = new Set();
-  linksData.forEach(r => {
-    const v = r[field];
-    if (v === undefined || v === null) return;
-    const str = String(v).trim();
-    if (!str) return;
-    if (field === 'cname') {
-      // Split comma-separated cname values into individual terms
-      str.split(',').map(t => t.trim()).filter(Boolean).forEach(t => s.add(t));
-    } else {
-      s.add(str);
-    }
+// Pull Tabulator's current state into linksData
+function syncTab() {
+  if (!window._salTab) return;
+  try {
+    const rows = window._salTab.getData();
+    linksData = rows.map(r => {
+      const o = {};
+      Object.keys(r).forEach(k => { if (!k.startsWith('_')) o[k] = r[k]; });
+      return o;
+    });
+  } catch(e) {}
+}
+
+// Save linksData to localStorage.
+// Pass skipSync=true when linksData has already been updated directly (e.g. after delete)
+// to prevent syncTab() from reading Tabulator's async state and resurrecting deleted rows.
+function saveData(skipSync) {
+  if (!skipSync) syncTab();
+  scrubUnderscores();
+  const s = JSON.stringify(linksData);
+  localStorage.setItem('seeandlearn-links', s);
+  localStorage.setItem('mlynx-links', s);
+  localStorage.setItem('sal-edited', Date.now().toString());
+}
+
+// Alias expected by rest of codebase
+function saveJsonSilent() { saveData(); }
+
+// saveJson: explicit download
+function saveJson() {
+  saveData();
+  const blob = new Blob([JSON.stringify(linksData, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'links.json';
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(a.href);
+}
+
+window.triggerDownload = async function(filename, data) {
+  const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download=filename;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+};
+
+// ── Column order ──────────────────────────────────────────────────────────
+// Build ordered key list from linksData, merged with saved config order
+function buildKeyOrder() {
+  // All real keys in data
+  const allKeys = new Set();
+  linksData.forEach(r => Object.keys(r).forEach(k => {
+    if (!k.startsWith('_')) allKeys.add(k);
+  }));
+
+  const cfg = colConfigLoad();
+  if (cfg) {
+    // Use saved order, append any new keys not yet in it
+    const extra = [...allKeys].filter(k => !cfg.order.includes(k));
+    return [...cfg.order.filter(k => allKeys.has(k)), ...extra];
+  }
+  // No saved order — use data key insertion order
+  const seen = new Set(), order = [];
+  linksData.forEach(r => Object.keys(r).forEach(k => {
+    if (!k.startsWith('_') && !seen.has(k)) { seen.add(k); order.push(k); }
+  }));
+  return order.length ? order :
+    ['show','VidRange','cell','fit','link','cname','sname',
+     'v.title','v.author','attribution','comment','Mute','Portrait'];
+}
+
+// Rewrite every linksData row's key order to match keyOrder array
+function reorderKeys(keyOrder) {
+  linksData = linksData.map(r => {
+    const o = {};
+    keyOrder.forEach(k => { if (k in r) o[k] = r[k]; });
+    Object.keys(r).forEach(k => { if (!(k in o)) o[k] = r[k]; });
+    return o;
   });
-  return Array.from(s).sort();
 }
 
-// THE KEY FIX FOR DOUBLES:
-// Tabulator is the display layer only. linksData is the master store.
-// We NEVER pass linksData by reference to Tabulator — always pass a deep copy.
-// We NEVER manually push to linksData alongside addRow() — getData() is truth.
-function getDataCopy() {
-  return JSON.parse(JSON.stringify(linksData));
-}
+// ── Table state ───────────────────────────────────────────────────────────
+let _colOrder  = [];   // current visual column order (field names)
+let _activeRow = null; // Tabulator Row object
+let _activeCol = null; // field name string
 
-// Reorder every row's keys to match tableKeys order.
-// This is what makes column order sticky through push→reload:
-// JSON.parse preserves insertion order, so if rows are saved with keys in
-// tableKeys order, initTableKeys() recovers that order on next load.
-function reorderLinksDataKeys() {
-  linksData = linksData.map(row => {
-    const out = {};
-    tableKeys.forEach(k => { if (k in row) out[k] = row[k]; });
-    // preserve any keys not yet in tableKeys (shouldn't happen, but be safe)
-    Object.keys(row).forEach(k => { if (!(k in out)) out[k] = row[k]; });
-    return out;
-  });
-}
+window._salTab  = null; // the Tabulator instance
 
-// Pull current state from Tabulator back into linksData (single call before save/push)
-function syncFromTabulator() {
-  if (!window.tabulatorTable) return;
-  const rows = window.tabulatorTable.getData();
-  // Rebuild each row in tableKeys order so column order is preserved in localStorage.
-  // Object.keys(row) from Tabulator returns INSERTION order, not visual order,
-  // so we must manually reorder using tableKeys.
-  linksData = rows.map(r => {
-    const clean = {};
-    // First: add fields in tableKeys order
-    tableKeys.forEach(k => { if (k in r && !k.startsWith('_')) clean[k] = r[k]; });
-    // Then: add any fields not in tableKeys (shouldn't happen, but be safe)
-    Object.keys(r).forEach(k => { if (!k.startsWith('_') && !(k in clean)) clean[k] = r[k]; });
-    return clean;
-  });
-}
-
+// ── Utility ───────────────────────────────────────────────────────────────
 function setStatus(msg, color) {
   const el = document.getElementById('jsonStatus');
   if (!el) return;
-  el.textContent = msg;
-  el.style.color = color || '#8ef';
+  el.textContent = msg; el.style.color = color || '#8ef';
   if (msg) setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, 3000);
 }
-
 function updateFocusIndicator() {
   const el = document.getElementById('focusIndicator');
   if (!el) return;
-  const rStr = activeRow ? 'row ' + activeRow.getPosition() : '—';
-  const cStr = (activeCol && !activeCol.startsWith('_')) ? activeCol : '—';
-  el.textContent = 'Focus: ' + rStr + ' · col: ' + cStr;
+  const r = _activeRow ? 'row ' + _activeRow.getPosition() : '—';
+  const c = (_activeCol && !_activeCol.startsWith('_')) ? _activeCol : '—';
+  el.textContent = 'Focus: ' + r + ' · col: ' + c;
 }
-
-function getFocusedColField() {
-  if (activeCol && !activeCol.startsWith('_') && tableKeys.includes(activeCol)) return activeCol;
-  return tableKeys.length ? tableKeys[tableKeys.length - 1] : null;
+function getFocusedCol() {
+  if (_activeCol && !_activeCol.startsWith('_') && _colOrder.includes(_activeCol)) return _activeCol;
+  return _colOrder.length ? _colOrder[_colOrder.length-1] : null;
 }
-
 function getFocusedRow() {
-  if (activeRow) return activeRow;
-  if (!window.tabulatorTable) return null;
-  const rows = window.tabulatorTable.getRows();
+  if (_activeRow) return _activeRow;
+  if (!window._salTab) return null;
+  const rows = window._salTab.getRows();
   return rows.length ? rows[0] : null;
 }
 
 window.getFirstEmptyCell = function() {
   const occ = new Set();
   linksData.forEach(r => { if (r && r.cell) occ.add(String(r.cell).toLowerCase()); });
-  const letters = 'abcde';
-  for (let r = 1; r <= 5; r++)
-    for (let c = 0; c < 5; c++) {
-      if (!occ.has(r + letters[c])) return r + letters[c];
-    }
+  const L = 'abcde';
+  for (let r=1; r<=5; r++)
+    for (let c=0; c<5; c++)
+      if (!occ.has(r+L[c])) return r+L[c];
   return '';
 };
 
-// ─── Column operations (all operate on linksData + re-render) ─────────────────
-function dupColumn(srcField) {
-  if (!srcField || !tableKeys.includes(srcField)) return;
-  let newK = srcField + '_copy', n = 2;
-  while (tableKeys.includes(newK)) newK = srcField + '_copy' + n++;
-  const idx = tableKeys.indexOf(srcField);
-  tableKeys.splice(idx + 1, 0, newK);
-  linksData.forEach(row => { row[newK] = row[srcField] !== undefined ? String(row[srcField]) : ''; });
-  reorderLinksDataKeys();
-  saveJsonSilent();
-  activeCol = newK;
-  window.renderTableEditor();
-  setStatus('Duplicated "' + srcField + '" → "' + newK + '"');
+function getDistinctVals(field) {
+  const s = new Set();
+  linksData.forEach(r => {
+    const v = String(r[field]||'').trim(); if (!v) return;
+    if (field==='cname'||field==='Topic')
+      v.split(',').map(t=>t.trim()).filter(Boolean).forEach(t=>s.add(t));
+    else s.add(v);
+  });
+  return Array.from(s).sort();
 }
 
+// ── Column operations ─────────────────────────────────────────────────────
+function dupColumn(src) {
+  if (!src || !_colOrder.includes(src)) return;
+  let nk = src+'_copy', n=2;
+  while (_colOrder.includes(nk)) nk = src+'_copy'+n++;
+  const idx = _colOrder.indexOf(src);
+  _colOrder.splice(idx+1, 0, nk);
+  linksData.forEach(r => { r[nk] = r[src]!==undefined ? String(r[src]) : ''; });
+  reorderKeys(_colOrder);
+  saveData();
+  _activeCol = nk;
+  openTable();
+  setStatus('Duplicated "'+src+'" → "'+nk+'"');
+}
 function delColumn(k) {
-  if (!k || !tableKeys.includes(k)) return;
-  if (!confirm('Delete column "' + k + '" from ALL rows?')) return;
-  tableKeys = tableKeys.filter(x => x !== k);
-  linksData.forEach(row => delete row[k]);
-  if (activeCol === k) activeCol = null;
-  saveJsonSilent();
-  window.renderTableEditor();
+  if (!k || !_colOrder.includes(k)) return;
+  if (!confirm('Delete column "'+k+'" from ALL rows?')) return;
+  _colOrder = _colOrder.filter(x => x!==k);
+  linksData.forEach(r => delete r[k]);
+  if (_activeCol===k) _activeCol=null;
+  saveData();
+  openTable();
 }
-
-function addColAfter(afterField) {
-  const newK = prompt('New column name' + (afterField ? ' (inserted after "' + afterField + '")' : '') + ':');
-  if (!newK) return;
-  if (tableKeys.includes(newK)) { alert('"' + newK + '" already exists.'); return; }
-  const idx = afterField ? tableKeys.indexOf(afterField) : tableKeys.length - 1;
-  tableKeys.splice(idx + 1, 0, newK);
-  linksData.forEach(row => { if (row[newK] === undefined) row[newK] = ''; });
-  reorderLinksDataKeys();  // persist column position in key order
-  saveJsonSilent();
-  activeCol = newK;
-  window.renderTableEditor();
+function addColAfter(after) {
+  const nk = prompt('New column name'+(after?' (after "'+after+'")':'')+':');
+  if (!nk) return;
+  if (_colOrder.includes(nk)) { alert('"'+nk+'" already exists.'); return; }
+  const idx = after ? _colOrder.indexOf(after) : _colOrder.length-1;
+  _colOrder.splice(idx+1, 0, nk);
+  linksData.forEach(r => { if (r[nk]===undefined) r[nk]=''; });
+  reorderKeys(_colOrder);
+  saveData();
+  _activeCol = nk;
+  openTable();
 }
-
 function renameColumn(k) {
-  if (!k || !tableKeys.includes(k)) return;
-  const newK = prompt('Rename "' + k + '" to:', k);
-  if (!newK || newK === k) return;
-  if (tableKeys.includes(newK)) { alert('"' + newK + '" already exists.'); return; }
-  tableKeys[tableKeys.indexOf(k)] = newK;
-  linksData.forEach(row => { row[newK] = row[k] !== undefined ? row[k] : ''; delete row[k]; });
-  saveJsonSilent();
-  activeCol = newK;
-  window.renderTableEditor();
+  if (!k || !_colOrder.includes(k)) return;
+  const nk = prompt('Rename "'+k+'" to:', k);
+  if (!nk || nk===k) return;
+  if (_colOrder.includes(nk)) { alert('"'+nk+'" already exists.'); return; }
+  _colOrder[_colOrder.indexOf(k)] = nk;
+  linksData.forEach(r => { r[nk]=r[k]!==undefined?r[k]:''; delete r[k]; });
+  saveData();
+  _activeCol = nk;
+  openTable();
 }
 
-// ─── Main Tabulator init ──────────────────────────────────────────────────────
-window.renderTableEditor = function() {
+// ── autocomplete editors ──────────────────────────────────────────────────
+function makeDatalistEditor(vals) {
+  return function(cell, onRendered, success, cancel) {
+    const dlId = 'dl_'+Math.random().toString(36).slice(2);
+    const dl   = document.createElement('datalist'); dl.id = dlId;
+    vals.forEach(v => { const o=document.createElement('option'); o.value=v; dl.appendChild(o); });
+    const inp = document.createElement('input');
+    inp.type='text'; inp.setAttribute('list',dlId); inp.value=cell.getValue()||'';
+    inp.style.cssText='width:100%;height:100%;border:none;padding:2px 4px;background:#0d1a2a;color:#fff;font-size:13px;outline:none;box-sizing:border-box;';
+    const w = document.createElement('div');
+    w.style.cssText='width:100%;height:100%;display:flex;align-items:center;';
+    w.appendChild(dl); w.appendChild(inp);
+    onRendered(()=>{ inp.focus(); inp.select(); });
+    inp.addEventListener('keydown', e => {
+      e.stopPropagation();
+      if (e.key==='Enter')  { e.preventDefault(); success(inp.value.trim()); }
+      if (e.key==='Escape') { e.preventDefault(); cancel(); }
+      if (e.key==='Tab')    { success(inp.value.trim()); }
+    });
+    inp.addEventListener('blur', ()=>success(inp.value.trim()));
+    return w;
+  };
+}
+
+function makeCommaListEditor(terms) {
+  return function(cell, onRendered, success, cancel) {
+    const inp = document.createElement('input');
+    inp.type='text'; inp.value=cell.getValue()||'';
+    inp.style.cssText='width:100%;height:100%;border:none;padding:2px 4px;background:#0d1a2a;color:#fff;font-size:13px;outline:none;box-sizing:border-box;';
+    const dd = document.createElement('div');
+    dd.style.cssText='position:fixed;z-index:99999;background:#1a2a3a;border:1px solid #4af;border-radius:0 0 6px 6px;max-height:160px;overflow-y:auto;display:none;';
+    document.body.appendChild(dd);
+    function posDD() {
+      const r=inp.getBoundingClientRect();
+      dd.style.left=r.left+'px'; dd.style.top=r.bottom+'px'; dd.style.width=r.width+'px';
+    }
+    function lastToken() { const p=inp.value.split(','); return p[p.length-1].trimStart(); }
+    function showDD() {
+      const tok=lastToken();
+      const hits=tok ? terms.filter(t=>t.toLowerCase().startsWith(tok.toLowerCase())) : terms;
+      dd.innerHTML='';
+      if (!hits.length) { dd.style.display='none'; return; }
+      hits.forEach(t => {
+        const it=document.createElement('div');
+        it.textContent=t; it.style.cssText='padding:6px 10px;cursor:pointer;color:#cef;border-bottom:1px solid #244;';
+        it.addEventListener('mouseenter',()=>it.style.background='#1a3a5a');
+        it.addEventListener('mouseleave',()=>it.style.background='');
+        it.addEventListener('mousedown',e=>{
+          e.preventDefault();
+          const p=inp.value.split(','); p[p.length-1]=' '+t; inp.value=p.join(',')+', ';
+          showDD(); inp.focus();
+        });
+        dd.appendChild(it);
+      });
+      posDD(); dd.style.display='block';
+    }
+    function cleanup() { dd.style.display='none'; if(dd.parentNode) dd.parentNode.removeChild(dd); }
+    const wrap=document.createElement('div');
+    wrap.style.cssText='width:100%;height:100%;display:flex;align-items:center;position:relative;';
+    wrap.appendChild(inp);
+    onRendered(()=>{ inp.focus(); inp.select(); showDD(); });
+    inp.addEventListener('input', showDD);
+    inp.addEventListener('focus', showDD);
+    inp.addEventListener('blur',  ()=>setTimeout(()=>{ cleanup(); success(inp.value.trim()); },150));
+    inp.addEventListener('keydown', e=>{
+      e.stopPropagation();
+      if (e.key==='Enter')  { e.preventDefault(); cleanup(); success(inp.value.trim()); }
+      if (e.key==='Escape') { e.preventDefault(); cleanup(); cancel(); }
+      if (e.key==='Tab')    { cleanup(); success(inp.value.trim()); }
+      if (e.key==='ArrowDown'||e.key==='ArrowUp') {
+        const items=dd.querySelectorAll('div'); if (!items.length) return;
+        e.preventDefault();
+        const cur=dd.querySelector('.dd-hi');
+        let idx=cur?Array.from(items).indexOf(cur):-1;
+        if(cur){cur.classList.remove('dd-hi');cur.style.background='';}
+        idx=e.key==='ArrowDown'?Math.min(idx+1,items.length-1):Math.max(idx-1,0);
+        items[idx].classList.add('dd-hi'); items[idx].style.background='#2a4a6a';
+        items[idx].scrollIntoView({block:'nearest'});
+      }
+    });
+    return wrap;
+  };
+}
+
+// Apply column widths by injecting a <style> tag with CSS selectors.
+// This bypasses Tabulator's layout engine completely — no API calls, no events.
+// Tabulator uses [tabulator-field="fieldname"] on column header and cell elements.
+
+
+// This is the ONLY entry point for (re)building Tabulator.
+// It always reads fresh from linksData and colConfig.
+window.openTable = function() {
   const container = document.getElementById('tableEditor');
   if (!container) return;
 
-  // Always (re)load colConfig — this is the single source of truth
-  // for both column order and column widths.
-  // initTableKeys reads it and populates tableKeys + colWidths.
-  initTableKeys();
-
-  if (window.tabulatorTable) {
-    try { window.tabulatorTable.destroy(); } catch(e) {}
-    window.tabulatorTable = null;
-  }
+  if (window._salTab) { try { window._salTab.destroy(); } catch(e) {} window._salTab = null; }
   container.innerHTML = '';
-  activeRow = null;
-  activeCol = null;
+  _activeRow = null;
+  scrubUnderscores();
+  _colOrder = buildKeyOrder();
 
-  // Build autocomplete value lists fresh from linksData at each render
-  const cnameVals   = getDistinctVals('cname');
-  const snameVals   = getDistinctVals('sname');
-  const vAuthorVals = getDistinctVals('v.author');
-  const topicVals   = getDistinctVals('Topic');
+  const cnameVals  = getDistinctVals('cname');
+  const snameVals  = getDistinctVals('sname');
+  const authorVals = getDistinctVals('v.author');
+  const topicVals  = getDistinctVals('Topic');
 
-  // ── Column definitions ───────────────────────────────────────────────────
   const cols = [];
-
-  // Del column — no title, no menu icon
   cols.push({
-    title: '', field: '_del',
-    width: 26, minWidth: 26, resizable: false,
-    headerSort: false, hozAlign: 'center',
-    formatter: () => "<span style='color:#f55;font-size:14px;cursor:pointer;line-height:1;'>✕</span>",
+    title:'', field:'_del', width:26, minWidth:26, resizable:false, headerSort:false, hozAlign:'center',
+    formatter:()=>"<span style='color:#f55;font-size:14px;cursor:pointer;'>\u2715</span>",
     cellClick(e, cell) {
       if (!confirm('Delete this row?')) return;
-      syncFromTabulator();
       const rowData = cell.getRow().getData();
-      recycleData.push(JSON.parse(JSON.stringify(rowData)));
-      localStorage.setItem('seeandlearn-recycle', JSON.stringify(recycleData));
-      // Match by cell value (unique) or by row position — never by full object
-      // comparison since rowData includes Tabulator internal _del/_sel/_move fields
       const cellVal = rowData.cell;
-      const idx = cellVal
-        ? linksData.findIndex(r => r.cell === cellVal)
-        : window.tabulatorTable.getRows().indexOf(cell.getRow());
-      if (idx > -1) linksData.splice(idx, 1);
-      cell.getRow().delete();
-      saveJsonSilent();
+      const idx = cellVal ? linksData.findIndex(r => r.cell === cellVal) : window._salTab.getRows().indexOf(cell.getRow());
+      if (idx > -1) {
+        const rd = JSON.parse(localStorage.getItem('seeandlearn-recycle')||'[]');
+        rd.push(deepCopy(linksData[idx]));
+        localStorage.setItem('seeandlearn-recycle', JSON.stringify(rd));
+        linksData.splice(idx, 1);
+      }
+      // Save BEFORE Tabulator's async row.delete() so syncTab can't resurrect the row
+      saveData(true);  // skipSync=true — linksData already updated by splice above
+      cell.getRow().delete();  // visual removal only
     }
   });
-
-  // Checkbox selection column — no title, no menu icon
+  cols.push({ title:'', field:'_sel', width:26, minWidth:26, resizable:false, headerSort:false, hozAlign:'center', formatter:'rowSelection', titleFormatter:'rowSelection', cellClick(e,cell){ cell.getRow().toggleSelect(); } });
   cols.push({
-    title: '', field: '_sel',
-    width: 26, minWidth: 26, resizable: false,
-    headerSort: false, hozAlign: 'center',
-    formatter: 'rowSelection',
-    titleFormatter: 'rowSelection',
-    cellClick(e, cell) { cell.getRow().toggleSelect(); }
-  });
-
-  // Move ▲▼ column
-  cols.push({
-    title: '↕', field: '_move',
-    width: 32, minWidth: 32, resizable: false,
-    headerSort: false, hozAlign: 'center',
-    formatter: () => "<span style='cursor:pointer;color:#777;font-size:10px;'>▲▼</span>",
+    title:'\u2195', field:'_move', width:32, minWidth:32, resizable:false, headerSort:false, hozAlign:'center',
+    formatter:()=>"<span style='cursor:pointer;color:#777;font-size:10px;'>\u25b2\u25bc</span>",
     cellClick(e, cell) {
       const rect = cell.getElement().getBoundingClientRect();
-      const dir  = e.clientY < rect.top + rect.height / 2 ? -1 : 1;
-      syncFromTabulator();
-      // Find by content match since references may differ after getData()
-      const rowData = cell.getRow().getData();
-      const pos = window.tabulatorTable.getRows().indexOf(cell.getRow());
+      const dir = e.clientY < rect.top + rect.height/2 ? -1 : 1;
+      syncTab();
+      const pos = window._salTab.getRows().indexOf(cell.getRow());
       const tgt = pos + dir;
-      const rows = window.tabulatorTable.getRows();
-      if (tgt < 0 || tgt >= rows.length) return;
-      // Swap in linksData using position
+      if (tgt < 0 || tgt >= linksData.length) return;
       const tmp = linksData[pos]; linksData[pos] = linksData[tgt]; linksData[tgt] = tmp;
-      saveJsonSilent();
-      window.renderTableEditor();
+      saveData(); window.openTable();
     }
   });
 
-  // Data columns — widths come from colConfig via initTableKeys() above
-
-  tableKeys.forEach(k => {
-    // Clamp saved width between min and max
-    const saved = colWidths[k];
-    const w = saved !== undefined
-      ? Math.min(Math.max(saved, COL_MIN_PX), COL_MAX_PX)
-      : COL_DEFAULT_PX;
-    const colDef = {
-      title: k,
-      field: k,
-      editor: 'input',
-      headerSort: true,
-      width: w,          // double-rAF in tableBuilt will re-apply from colConfig after layout
-      maxWidth: COL_MAX_PX,
-      minWidth: COL_MIN_PX,
-      resizable: true,
-      tooltip: true,
-      cellClick(e, cell) {
-        activeRow = cell.getRow();
-        activeCol = cell.getColumn().getField();
-        updateFocusIndicator();
-      },
-      cellEdited(cell) {
-        // Auto-save every cell edit immediately with correct column order
-        syncFromTabulator();
-        saveJsonSilent();
-      }
+  _colOrder.forEach(k => {
+    const def = { title:k, field:k, editor:'input', headerSort:true, maxWidth:COL_W_MAX, minWidth:COL_W_MIN, resizable:true, tooltip:true,
+      cellClick(e,cell){ _activeRow=cell.getRow(); _activeCol=cell.getColumn().getField(); updateFocusIndicator(); },
+      cellEdited(){ saveData(); }
     };
-
-    // ── makeDatalistEditor: plain autocomplete (sname, v.author) ────────────
-    function makeDatalistEditor(valsList) {
-      return function(cell, onRendered, success, cancel) {
-        const dlId = 'dl_' + Math.random().toString(36).slice(2);
-        const dl   = document.createElement('datalist');
-        dl.id = dlId;
-        valsList.forEach(v => {
-          const opt = document.createElement('option'); opt.value = v; dl.appendChild(opt);
-        });
-        const inp = document.createElement('input');
-        inp.type = 'text';
-        inp.setAttribute('list', dlId);
-        inp.value = cell.getValue() || '';
-        inp.style.cssText = 'width:100%;height:100%;border:none;padding:2px 4px;'
-          + 'background:#0d1a2a;color:#fff;font-size:13px;outline:none;box-sizing:border-box;';
-        const wrap = document.createElement('div');
-        wrap.style.cssText = 'width:100%;height:100%;display:flex;align-items:center;';
-        wrap.appendChild(dl); wrap.appendChild(inp);
-        onRendered(() => { inp.focus(); inp.select(); });
-        inp.addEventListener('change', () => success(inp.value));
-        inp.addEventListener('blur',   () => success(inp.value));
-        inp.addEventListener('keydown', e => {
-          e.stopPropagation();
-          if (e.key === 'Enter')  { e.preventDefault(); success(inp.value); }
-          if (e.key === 'Escape') { e.preventDefault(); cancel(); }
-          if (e.key === 'Tab')    { success(inp.value); }
-        });
-        return wrap;
-      };
-    }
-
-    // ── makeCommaListEditor: comma-separated multi-entry for cname ───────────
-    // After each comma, shows a dropdown filtered to the last token.
-    // Uses a custom dropdown div (not native datalist) so it filters by
-    // last token rather than the whole input value.
-    function makeCommaListEditor(valsList) {
-      return function(cell, onRendered, success, cancel) {
-        // Expand any comma-separated values in valsList into individual terms
-        const termSet = new Set();
-        valsList.forEach(v => {
-          v.split(',').map(s => s.trim()).filter(Boolean).forEach(t => termSet.add(t));
-        });
-        const terms = Array.from(termSet).sort();
-
-        const inp = document.createElement('input');
-        inp.type = 'text';
-        inp.value = cell.getValue() || '';
-        inp.style.cssText = 'width:100%;height:100%;border:none;padding:2px 4px;'
-          + 'background:#0d1a2a;color:#fff;font-size:13px;outline:none;box-sizing:border-box;position:relative;z-index:1;';
-
-        // Custom dropdown — appended to document.body to escape any overflow:hidden parents
-        const dd = document.createElement('div');
-        dd.style.cssText = 'position:fixed;z-index:99999;background:#1a2a3a;border:1px solid #4af;'
-          + 'border-radius:0 0 6px 6px;max-height:160px;overflow-y:auto;display:none;'
-          + 'font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,0.6);';
-        document.body.appendChild(dd);
-
-        function positionDropdown() {
-          const r = inp.getBoundingClientRect();
-          dd.style.left  = r.left + 'px';
-          dd.style.top   = (r.bottom) + 'px';
-          dd.style.width = r.width + 'px';
-        }
-
-        function getLastToken() {
-          const parts = inp.value.split(',');
-          return parts[parts.length - 1].trimStart();
-        }
-
-        function showDropdown() {
-          const token    = getLastToken();
-          const filtered = token
-            ? terms.filter(t => t.toLowerCase().startsWith(token.toLowerCase()))
-            : terms;
-          dd.innerHTML = '';
-          if (!filtered.length) { dd.style.display = 'none'; return; }
-          filtered.forEach(t => {
-            const item = document.createElement('div');
-            item.textContent = t;
-            item.style.cssText = 'padding:7px 10px;cursor:pointer;color:#cef;border-bottom:1px solid #244;';
-            item.addEventListener('mouseenter', () => item.style.background = '#1a3a5a');
-            item.addEventListener('mouseleave', () => item.style.background = '');
-            item.addEventListener('mousedown', e => {
-              e.preventDefault();
-              const parts = inp.value.split(',');
-              parts[parts.length - 1] = ' ' + t;
-              inp.value = parts.join(',') + ', ';
-              dd.style.display = 'none';
-              inp.focus();
-              showDropdown();
-            });
-            dd.appendChild(item);
-          });
-          positionDropdown();
-          dd.style.display = 'block';
-        }
-
-        function hideDropdown() {
-          dd.style.display = 'none';
-        }
-
-        function cleanup() {
-          hideDropdown();
-          if (dd.parentNode) dd.parentNode.removeChild(dd);
-        }
-
-        const wrap = document.createElement('div');
-        wrap.style.cssText = 'width:100%;height:100%;display:flex;align-items:center;position:relative;';
-        wrap.appendChild(inp);
-
-        onRendered(() => { inp.focus(); inp.select(); showDropdown(); });
-
-        inp.addEventListener('input', showDropdown);
-        inp.addEventListener('focus', showDropdown);
-        inp.addEventListener('blur', () => setTimeout(hideDropdown, 150));
-
-        inp.addEventListener('keydown', e => {
-          e.stopPropagation();
-          if (e.key === 'Enter')  { e.preventDefault(); cleanup(); success(inp.value.trim()); }
-          if (e.key === 'Escape') { e.preventDefault(); cleanup(); cancel(); }
-          if (e.key === 'Tab')    { cleanup(); success(inp.value.trim()); }
-          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-            // Navigate dropdown with arrows
-            const items = dd.querySelectorAll('div');
-            if (!items.length) return;
-            e.preventDefault();
-            const focused = dd.querySelector('.dd-focus');
-            let idx = focused ? Array.from(items).indexOf(focused) : -1;
-            if (focused) focused.classList.remove('dd-focus');
-            idx = e.key === 'ArrowDown' ? Math.min(idx + 1, items.length - 1)
-                                        : Math.max(idx - 1, 0);
-            items[idx].classList.add('dd-focus');
-            items[idx].style.background = '#2a4a6a';
-            items[idx].scrollIntoView({ block: 'nearest' });
-          }
-          // Enter on a focused dropdown item
-          if (e.key === 'Enter') {
-            const focused = dd.querySelector('.dd-focus');
-            if (focused) { focused.dispatchEvent(new MouseEvent('mousedown')); }
-          }
-        });
-
-        cell.getElement().addEventListener('keydown', () => cleanup());
-
-        return wrap;
-      };
-    }
-
-    if (k === 'cname') {
-      colDef.editor = makeCommaListEditor(cnameVals);
-    } else if (k === 'sname') {
-      colDef.editor = makeDatalistEditor(snameVals);
-    } else if (k === 'v.author') {
-      colDef.editor = makeDatalistEditor(vAuthorVals);
-    } else if (k === 'Topic') {
-      colDef.editor = makeCommaListEditor(topicVals);
-    }
-
-    cols.push(colDef);
+    if (k==='cname'||k==='Topic') def.editor = makeCommaListEditor(k==='cname'?cnameVals:topicVals);
+    else if (k==='sname')    def.editor = makeDatalistEditor(snameVals);
+    else if (k==='v.author') def.editor = makeDatalistEditor(authorVals);
+    cols.push(def);
   });
 
-  // Guard: suppress columnResized saves while we are programmatically setting widths
-  // (setWidth() inside tableBuilt triggers columnResized — we don't want that)
-  let _applyingWidths = false;
-
-  // ── Instantiate Tabulator ─────────────────────────────────────────────────
-  window.tabulatorTable = new Tabulator(container, {
-    data: getDataCopy(),
+  // Column widths AND order are managed exclusively by Tabulator's built-in persistence module.
+  // It writes/reads localStorage['tabulator-sal-table'] automatically.
+  // It subscribes internally to: column-resized, column-moved, column-width, layout-refreshed.
+  // We do NOT call setWidth(), do NOT inject CSS, do NOT fight the layout engine.
+  window._salTab = new Tabulator(container, {
+    data: deepCopy(linksData),
     reactiveData: false,
     columns: cols,
     layout: 'fitData',
@@ -1131,42 +1030,22 @@ window.renderTableEditor = function() {
     movableColumns: true,
     history: false,
     height: '100%',
+    persistence: { columns: true },
+    persistenceID: 'sal-table',
 
-    // setTimeout(0) fires after ALL of Tabulator's synchronous + rAF layout passes.
-    // We then programmatically set each column to its saved width.
-    // The _applyingWidths flag prevents columnResized from firing spurious saves.
     tableBuilt() {
-      setTimeout(() => {
-        const tbl = window.tabulatorTable;
-        if (!tbl) return;
-        _applyingWidths = true;
-        tableKeys.forEach(k => {
-          const w = Math.min(
-            colWidths[k] !== undefined ? colWidths[k] : COL_DEFAULT_PX,
-            COL_MAX_PX
-          );
-          try { tbl.getColumn(k).setWidth(w); } catch(e) {}
-        });
-        _applyingWidths = false;
-      }, 0);
-    },
-
-    columnResized(column) {
-      if (_applyingWidths) return;          // ignore programmatic setWidth calls
-      const f = column.getField();
-      if (!f || f.startsWith('_')) return;
-      colWidths[f] = Math.min(column.getWidth(), COL_MAX_PX);
-      saveColConfig();
-      syncFromTabulator();
-      saveJsonSilent();
+      if (!window._salTab) return;
+      const actual = window._salTab.getColumns().map(c=>c.getField()).filter(f=>f&&!f.startsWith('_'));
+      if (actual.length) _colOrder = actual;
+      updateColHeaderStrip();
     },
 
     columnMoved(column, columns) {
-      syncFromTabulator();
-      tableKeys = columns.map(c => c.getField()).filter(f => f && !f.startsWith('_'));
-      reorderLinksDataKeys();
-      saveColConfig();
-      saveJsonSilent();
+      syncTab();
+      _colOrder = columns.map(c=>c.getField()).filter(f=>f&&!f.startsWith('_'));
+      reorderKeys(_colOrder);
+      colConfigSave(_colOrder, {});
+      saveData();
       updateColHeaderStrip();
     },
 
@@ -1175,178 +1054,151 @@ window.renderTableEditor = function() {
       if (btn) btn.style.display = rows.length > 0 ? 'inline-block' : 'none';
     },
 
-    rowClick(e, row) {
-      activeRow = row;
-      updateFocusIndicator();
-    }
+    rowClick(e, row) { _activeRow = row; updateFocusIndicator(); }
   });
 
-  // Update the column name strip above the toolbar
   updateColHeaderStrip();
 };
 
-// ─── Toolbar button listeners ─────────────────────────────────────────────────
+// Backwards-compat alias used throughout codebase
+window.renderTableEditor = window.openTable;
 
+// Expose legacy names used by other modules
+window.syncFromTabulator = syncTab;
+let tableKeys = _colOrder; // live reference — updated by openTable
+Object.defineProperty(window, 'tableKeys', { get:()=>_colOrder, set:v=>{ _colOrder=v; } });
+
+// ─── TOOLBAR BUTTONS ───────────────────────────────────────────────────────
 document.getElementById('addTableItem').addEventListener('click', function() {
-  // RowAddNext: insert blank row after focused row
-  if (!window.tabulatorTable) return;
-  const newRow = {}; tableKeys.forEach(k => newRow[k] = '');
-  const focRow = getFocusedRow();
-  if (focRow) {
-    window.tabulatorTable.addRow(newRow, false, focRow);
-  } else {
-    window.tabulatorTable.addRow(newRow, true);
-  }
-  // Sync Tabulator → linksData after structural change
-  syncFromTabulator();
-  saveJsonSilent();
-  setStatus('Row added');
+  if (!window._salTab) return;
+  const newRow = {}; _colOrder.forEach(k => newRow[k]='');
+  const fr = getFocusedRow();
+  if (fr) window._salTab.addRow(newRow, false, fr);
+  else    window._salTab.addRow(newRow, true);
+  saveData(); setStatus('Row added');
 });
 
 document.getElementById('btn-row-add-bottom').addEventListener('click', function() {
-  if (!window.tabulatorTable) return;
-  const newRow = {}; tableKeys.forEach(k => newRow[k] = '');
-  window.tabulatorTable.addRow(newRow, false);
-  syncFromTabulator();
-  saveJsonSilent();
-  setStatus('Row added at bottom');
+  if (!window._salTab) return;
+  const newRow = {}; _colOrder.forEach(k => newRow[k]='');
+  window._salTab.addRow(newRow, false);
+  saveData(); setStatus('Row added at bottom');
 });
 
 document.getElementById('btn-duplicate-row-action').addEventListener('click', function() {
-  if (!window.tabulatorTable) return;
-  const sel = window.tabulatorTable.getSelectedRows();
-  const targets = sel.length ? sel : (activeRow ? [activeRow] : []);
-  if (!targets.length) { setStatus('Click a row first to duplicate it', '#f88'); return; }
-
+  if (!window._salTab) return;
+  const sel = window._salTab.getSelectedRows();
+  const targets = sel.length ? sel : (_activeRow ? [_activeRow] : []);
+  if (!targets.length) { setStatus('Click a row first', '#f88'); return; }
   [...targets].reverse().forEach(row => {
-    const newRow = JSON.parse(JSON.stringify(row.getData()));
-    // Strip internal Tabulator fields
-    Object.keys(newRow).forEach(k => { if (k.startsWith('_tab')) delete newRow[k]; });
-    newRow.cell = window.getFirstEmptyCell();
-    window.tabulatorTable.addRow(newRow, false, row);
+    const nr = deepCopy(row.getData());
+    Object.keys(nr).forEach(k => { if (k.startsWith('_')) delete nr[k]; });
+    nr.cell = window.getFirstEmptyCell();
+    window._salTab.addRow(nr, false, row);
   });
-
-  syncFromTabulator();
-  saveJsonSilent();
-  setStatus('Row(s) duplicated');
+  saveData(); setStatus('Row(s) duplicated');
 });
 
 document.getElementById('deleteSelectedRows').addEventListener('click', function() {
-  if (!window.tabulatorTable) return;
-  const sel = window.tabulatorTable.getSelectedRows();
-  if (!sel.length) { setStatus('Select rows to delete', '#f88'); return; }
-  if (!confirm('Delete ' + sel.length + ' row(s)?')) return;
+  if (!window._salTab) return;
+  const sel = window._salTab.getSelectedRows();
+  if (!sel.length) { setStatus('Select rows first', '#f88'); return; }
+  if (!confirm('Delete '+sel.length+' row(s)?')) return;
+  const rd = JSON.parse(localStorage.getItem('seeandlearn-recycle')||'[]');
+  // Remove from linksData first (by cell value), then delete visually from Tabulator
   sel.forEach(row => {
-    recycleData.push(JSON.parse(JSON.stringify(row.getData())));
-    row.delete();
+    const rowData = row.getData();
+    rd.push(deepCopy(rowData));
+    const cellVal = rowData.cell;
+    const idx = cellVal ? linksData.findIndex(r => r.cell === cellVal) : -1;
+    if (idx > -1) linksData.splice(idx, 1);
+    row.delete(); // visual only
   });
-  localStorage.setItem('seeandlearn-recycle', JSON.stringify(recycleData));
-  syncFromTabulator();
-  saveJsonSilent();
-  activeRow = null;
-  this.style.display = 'none';
-  setStatus('Row(s) deleted');
+  localStorage.setItem('seeandlearn-recycle', JSON.stringify(rd));
+  saveData(true);  // skipSync=true — linksData already updated by splices above
+  _activeRow=null; this.style.display='none'; setStatus('Row(s) deleted');
 });
 
 document.getElementById('btn-col-add').addEventListener('click', function() {
-  syncFromTabulator();
-  addColAfter(getFocusedColField());
+  syncTab(); addColAfter(getFocusedCol());
 });
-
 document.getElementById('btn-duplicate-col-action').addEventListener('click', function() {
-  syncFromTabulator();
-  const src = getFocusedColField();
-  if (!src) { setStatus('Click a cell to choose the column to duplicate', '#f88'); return; }
-  dupColumn(src);
+  syncTab(); const s=getFocusedCol();
+  if (!s) { setStatus('Click a cell first','#f88'); return; } dupColumn(s);
 });
-
 document.getElementById('btn-col-rename').addEventListener('click', function() {
-  syncFromTabulator();
-  const k = getFocusedColField();
-  if (!k) { setStatus('Click a cell to choose the column to rename', '#f88'); return; }
-  renameColumn(k);
+  syncTab(); const k=getFocusedCol();
+  if (!k) { setStatus('Click a cell first','#f88'); return; } renameColumn(k);
 });
-
 document.getElementById('btn-col-delete').addEventListener('click', function() {
-  syncFromTabulator();
-  const k = getFocusedColField();
-  if (!k) { setStatus('Click a cell to choose the column to delete', '#f88'); return; }
-  delColumn(k);
+  syncTab(); const k=getFocusedCol();
+  if (!k) { setStatus('Click a cell first','#f88'); return; } delColumn(k);
 });
 
 document.getElementById('btn-export-chosen').addEventListener('click', function() {
-  syncFromTabulator();
-  const sel = window.tabulatorTable ? window.tabulatorTable.getSelectedRows() : [];
-  const data = sel.length > 0 ? sel.map(r => JSON.parse(JSON.stringify(r.getData()))) : linksData;
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = sel.length > 0 ? 'links_selected.json' : 'links.json';
-  document.body.appendChild(a); a.click();
-  document.body.removeChild(a); URL.revokeObjectURL(a.href);
-  setStatus('Downloaded ' + data.length + ' row(s)');
+  syncTab();
+  const sel = window._salTab ? window._salTab.getSelectedRows() : [];
+  const data = sel.length ? sel.map(r=>deepCopy(r.getData())) : linksData;
+  const blob = new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=sel.length?'links_selected.json':'links.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(a.href);
+  setStatus('Downloaded '+data.length+' row(s)');
 });
 
 document.getElementById('btn-import').addEventListener('click', function() {
-  const inp = document.createElement('input');
-  inp.type = 'file'; inp.accept = '.json,application/json';
-  inp.onchange = function() {
-    const file = this.files[0]; if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => {
+  const inp=document.createElement('input'); inp.type='file'; inp.accept='.json,application/json';
+  inp.onchange=function(){
+    const file=this.files[0]; if(!file) return;
+    const reader=new FileReader();
+    reader.onload=ev=>{
       try {
-        const imported = JSON.parse(ev.target.result);
-        if (!Array.isArray(imported)) { alert('Expected a JSON array.'); return; }
-        const merge = confirm('OK = merge with existing · Cancel = replace all');
-        if (merge) imported.forEach(r => linksData.push(r));
-        else { linksData = imported; }
-        initTableKeys();
-        saveJsonSilent();
-        window.renderTableEditor();
-        setStatus('Imported ' + imported.length + ' rows');
-      } catch(e) { alert('Invalid JSON: ' + e.message); }
+        const imported=JSON.parse(ev.target.result);
+        if (!Array.isArray(imported)) { alert('Expected JSON array'); return; }
+        if (confirm('OK=merge · Cancel=replace')) imported.forEach(r=>linksData.push(r));
+        else linksData=imported;
+        saveData(); window.openTable(); setStatus('Imported '+imported.length+' rows');
+      } catch(e) { alert('Invalid JSON: '+e.message); }
     };
     reader.readAsText(file);
   };
   inp.click();
 });
 
-// Ctrl+D
+// Ctrl+D duplicate row
 window.addEventListener('keydown', function(e) {
-  if (e.ctrlKey && e.key.toLowerCase() === 'd') {
-    const jsonMod = document.getElementById('jsonModal');
-    if (jsonMod && jsonMod.classList.contains('open')) {
+  if (e.ctrlKey && e.key.toLowerCase()==='d') {
+    const m=document.getElementById('jsonModal');
+    if (m && m.classList.contains('open')) {
       e.preventDefault(); e.stopPropagation();
       document.getElementById('btn-duplicate-row-action').click();
     }
   }
 }, true);
 
-// ─── Raw JSON toggle ──────────────────────────────────────────────────────────
+// ─── RAW JSON TOGGLE ───────────────────────────────────────────────────────
 document.getElementById('toggleRawJson').addEventListener('click', function() {
   rawJsonMode = !rawJsonMode;
   this.textContent = rawJsonMode ? 'Show Visual Editor' : 'Show Raw JSON';
   if (rawJsonMode) {
-    syncFromTabulator();
-    document.getElementById('jsonText').value   = JSON.stringify(linksData, null, 2);
+    syncTab();
+    document.getElementById('jsonText').value = JSON.stringify(linksData, null, 2);
     document.getElementById('tableEditor').style.display  = 'none';
     document.getElementById('jsonText').style.display     = 'block';
     document.getElementById('tableToolbar').style.display = 'none';
   } else {
     try { linksData = JSON.parse(document.getElementById('jsonText').value); }
-    catch(e) { alert('Invalid JSON'); rawJsonMode = true; return; }
+    catch(e) { alert('Invalid JSON'); rawJsonMode=true; return; }
     document.getElementById('tableEditor').style.display  = 'block';
     document.getElementById('jsonText').style.display     = 'none';
     document.getElementById('tableToolbar').style.display = 'flex';
-    initTableKeys();
-    window.renderTableEditor();
+    window.openTable();
   }
 });
 
-// ─── Open table editor ────────────────────────────────────────────────────────
+// ─── OPEN / CLOSE TABLE EDITOR ─────────────────────────────────────────────
 document.getElementById('miTables').addEventListener('pointerup', e => {
   e.stopPropagation(); closeMenu();
-  if (typeof isAdmin === 'function' && !isAdmin()) { alert('Admin privileges required.'); return; }
   rawJsonMode = false;
   document.getElementById('toggleRawJson').textContent         = 'Show Raw JSON';
   document.getElementById('tableEditor').style.display         = 'block';
@@ -1355,28 +1207,11 @@ document.getElementById('miTables').addEventListener('pointerup', e => {
   document.getElementById('deleteSelectedRows').style.display  = 'none';
   document.getElementById('jsonStatus').textContent            = '';
   document.getElementById('jsonModal').classList.add('open');
-  // Only rebuild tableKeys if we don't already have a valid order.
-  // Calling initTableKeys() every open resets the user's column ordering.
-  // tableKeys is preserved in memory across opens; it's only stale after a page reload,
-  // in which case it will be empty and initTableKeys() runs correctly below.
-  if (!tableKeys.length) initTableKeys();
-  window.renderTableEditor();
+  window.openTable();
 });
 
-// ─── Apply / Push / Download / Cancel ────────────────────────────────────────
-// Workflow:
-//   Edit table → edits auto-saved to localStorage on every cell change
-//   Apply  → syncs Tabulator→linksData, closes editor, re-renders grid
-//   Push   → same as Apply, then pushes linksData JSON to GitHub
-//   Column widths → saved to localStorage on every drag, survive everything
-// ─── Table auto-save on close ─────────────────────────────────────────────────
-// All cell edits, column moves, and row ops already auto-save to localStorage.
-// On close (Exit/Esc), we do a final sync to catch any in-progress edits.
 function closeTableEditor() {
-  if (!rawJsonMode && window.tabulatorTable) {
-    syncFromTabulator();
-    saveJsonSilent();
-  }
+  saveData();
   document.getElementById('jsonModal').classList.remove('open');
   render();
 }
@@ -1385,98 +1220,54 @@ window.closeTableEditor = closeTableEditor;
 window.applyJsonChanges = function() {
   try {
     if (rawJsonMode) {
-      const d = JSON.parse(document.getElementById('jsonText').value);
+      const d=JSON.parse(document.getElementById('jsonText').value);
       if (!Array.isArray(d)) throw new Error('Expected array');
-      linksData = d;
-      saveJsonSilent();
-    } else {
-      syncFromTabulator();
-      saveJsonSilent();
+      linksData=d;
     }
+    saveData();
     document.getElementById('jsonModal').classList.remove('open');
     render(); return true;
   } catch(e) {
-    document.getElementById('jsonStatus').textContent = 'Error: ' + e.message;
-    return false;
+    document.getElementById('jsonStatus').textContent='Error: '+e.message; return false;
   }
 };
 
 document.getElementById('jsonApply').addEventListener('click', window.applyJsonChanges);
 document.getElementById('jsonPush').addEventListener('pointerup', e => {
   e.preventDefault(); e.stopPropagation();
-  if (!rawJsonMode) syncFromTabulator();
-  saveJsonSilent();
+  saveData();
   window.pushToGitHub();
 });
 document.getElementById('jsonDl').addEventListener('click', saveJson);
 document.getElementById('jsonCancel').addEventListener('click', closeTableEditor);
 
-// ─── Table horizontal scroll — buttons AND keyboard arrows ───────────────────
+// ─── HORIZONTAL SCROLL — buttons + keyboard arrows ─────────────────────────
 (function() {
-  const SCROLL_AMT = 400;
-  function getTableScroller() {
+  const AMT = 400;
+  function scroller() {
     const te = document.getElementById('tableEditor');
-    if (!te) return null;
-    return te.querySelector('.tabulator-tableholder') || te;
+    return te ? (te.querySelector('.tabulator-tableholder')||te) : null;
   }
-  document.getElementById('jsonScrollLeft').addEventListener('click', function() {
-    const el = getTableScroller();
-    if (el) el.scrollBy({ left: -SCROLL_AMT, behavior: 'smooth' });
-  });
-  document.getElementById('jsonScrollRight').addEventListener('click', function() {
-    const el = getTableScroller();
-    if (el) el.scrollBy({ left: SCROLL_AMT, behavior: 'smooth' });
-  });
-
-  // Keyboard left/right arrows scroll the table when the modal is open
-  // and focus is NOT inside a text input (so cell editing still works normally)
+  document.getElementById('jsonScrollLeft').addEventListener('click', ()=>{ const el=scroller(); if(el) el.scrollBy({left:-AMT,behavior:'smooth'}); });
+  document.getElementById('jsonScrollRight').addEventListener('click', ()=>{ const el=scroller(); if(el) el.scrollBy({left:AMT,behavior:'smooth'}); });
   document.addEventListener('keydown', function(e) {
-    const modal = document.getElementById('jsonModal');
-    if (!modal || !modal.classList.contains('open')) return;
-    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-    const active = document.activeElement;
-    const isEditing = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA'
-      || active.closest('.tabulator-cell.tabulator-editing'));
-    if (isEditing) return;  // let the cell editor handle arrows
+    const modal=document.getElementById('jsonModal');
+    if (!modal||!modal.classList.contains('open')) return;
+    if (e.key!=='ArrowLeft'&&e.key!=='ArrowRight') return;
+    const a=document.activeElement;
+    if (a&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.closest('.tabulator-cell.tabulator-editing'))) return;
     e.preventDefault();
-    const el = getTableScroller();
-    if (el) el.scrollBy({ left: e.key === 'ArrowRight' ? SCROLL_AMT : -SCROLL_AMT, behavior: 'smooth' });
+    const el=scroller();
+    if (el) el.scrollBy({left:e.key==='ArrowRight'?AMT:-AMT,behavior:'smooth'});
   });
 })();
 document.getElementById('jsonModal').addEventListener('pointerup', e => e.stopPropagation());
 document.getElementById('jsonText').addEventListener('keydown', e => {
-  if (e.ctrlKey && e.key.toLowerCase() === 's') { e.preventDefault(); window.applyJsonChanges(); }
+  if (e.ctrlKey && e.key.toLowerCase()==='s') { e.preventDefault(); window.applyJsonChanges(); }
 });
 
-// ─── Save JSON ────────────────────────────────────────────────────────────────
-// saveJsonSilent: save to localStorage only — NO file download, no browser notification
-function saveJsonSilent() {
-  localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
-  localStorage.setItem('mlynx-links', JSON.stringify(linksData));
-  // Persist column order so it survives page reload
-  localStorage.setItem('seeandlearn-tableKeys', JSON.stringify(tableKeys));
-}
 
-// saveJson: explicit download (only called by Download button / Ctrl+Alt+S)
-function saveJson() {
-  if (!rawJsonMode) syncFromTabulator();
-  saveJsonSilent();
-  const blob = new Blob([JSON.stringify(linksData, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = 'links.json';
-  document.body.appendChild(a); a.click();
-  document.body.removeChild(a); URL.revokeObjectURL(a.href);
-}
-
-window.triggerDownload = async function(filename, data) {
-  const text = JSON.stringify(data, null, 2);
-  const blob = new Blob([text], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = filename;
-  document.body.appendChild(a); a.click();
-  document.body.removeChild(a); URL.revokeObjectURL(url);
-};
+// (saveJsonSilent, saveJson, triggerDownload defined in table module above)
 
 // ─── Settings ─────────────────────────────────────────────────────────────────
 document.getElementById('miSaveJson').addEventListener('pointerup', e => { e.stopPropagation(); closeMenu(); saveJson(); });
@@ -1579,7 +1370,7 @@ document.getElementById('miLoadGithub').addEventListener('pointerup', async e =>
     linksData.forEach(row => {
       if ('asset' in row && !('VidRange' in row)) { row.VidRange = row.asset; delete row.asset; }
     });
-    saveJsonSilent();
+    saveData();   // writes sal-edited so localStorage stays authoritative
     render();
     alert('Loaded ' + linksData.length + ' rows from GitHub.');
   } catch(err) { alert('Load from GitHub failed:\n' + err.message); }

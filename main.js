@@ -1,48 +1,50 @@
 async function init(){
   setupLayout(); syncFit(); syncAdminUI();
 
-  // Data loading strategy (works for both file:/// and http://):
+  // Data loading — simple timestamp-based priority:
   //
-  // Priority:
-  //   1. fetch('links.json') — works on http/https, gets fresh server copy
-  //   2. window.LINKS_JSON_INLINE — embedded in index.html, always works including file:///
-  //   3. localStorage — saved edits from previous sessions
+  // localStorage is ALWAYS preferred if it has been written by the app
+  // (i.e. the user has opened the table at least once).
+  // We detect this via a 'sal-edited' timestamp written by saveData().
   //
-  // If localStorage has MORE rows than the file, it has unsaved edits → keep localStorage.
-  // This means local edits are never silently discarded, and file:/// always works.
+  // Only fall back to links.json / LINKS_JSON_INLINE on a truly fresh install
+  // (no 'sal-edited' key exists in localStorage).
+  //
+  // This means:
+  //  - Deletions stick (localStorage is shorter → still preferred)
+  //  - Column resizes stick (same row count → still preferred)
+  //  - Fresh install gets links.json content
+  //  - Deploying a new zip never silently overwrites user edits
 
-  let fileData = null;
-  try {
-    const r = await fetch('links.json?v=' + Date.now());
-    if (r.ok) fileData = await r.json();
-  } catch(e) {
-    // fetch() blocked (file:///) or network error
-  }
-  // Fallback: use the data embedded inline in index.html
-  if (!fileData && window.LINKS_JSON_INLINE) {
-    fileData = window.LINKS_JSON_INLINE;
-  }
-
+  const wasEdited = localStorage.getItem('sal-edited');
   const lsRaw = localStorage.getItem('seeandlearn-links') || localStorage.getItem('mlynx-links');
   let lsData = null;
   if (lsRaw) {
     try { lsData = JSON.parse(lsRaw); } catch(e) {}
   }
 
-  if (fileData && Array.isArray(fileData) && fileData.length > 0) {
-    if (lsData && Array.isArray(lsData) && lsData.length > fileData.length) {
-      // localStorage has more rows → user has unsaved edits
-      linksData = lsData;
-    } else {
-      // File data is authoritative
-      linksData = fileData;
-      // Seed localStorage so next load (including file:///) has a copy
-      localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
-    }
-  } else if (lsData && Array.isArray(lsData) && lsData.length > 0) {
+  if (wasEdited && lsData && Array.isArray(lsData)) {
+    // User has edited before — trust localStorage completely
     linksData = lsData;
   } else {
-    linksData = [];
+    // Fresh install — load from file
+    let fileData = null;
+    try {
+      const r = await fetch('links.json?v=' + Date.now());
+      if (r.ok) fileData = await r.json();
+    } catch(e) {}
+    if (!fileData && window.LINKS_JSON_INLINE) fileData = window.LINKS_JSON_INLINE;
+
+    if (fileData && Array.isArray(fileData) && fileData.length > 0) {
+      linksData = fileData;
+      // Seed localStorage and mark as edited so future loads use localStorage
+      localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+      localStorage.setItem('sal-edited', Date.now().toString());
+    } else if (lsData && Array.isArray(lsData)) {
+      linksData = lsData;
+    } else {
+      linksData = [];
+    }
   }
 
   // Migrate legacy field names
