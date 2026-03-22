@@ -433,21 +433,22 @@ window.openFS = function(it) {
   if (!isVidNode) {
     const img = document.createElement('img');
     img.src = it.link;
-    // openFS overlay is position:fixed covering the whole physical screen — always landscape.
-    // Do NOT rotate: the image should fill the screen normally.
     img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;';
     vidHost.appendChild(img);
     vidHost.style.cursor = 'pointer';
     bar.style.display = 'none';
-    // Tap anywhere to close
-    fs.addEventListener('pointerup', e => { e.stopPropagation(); fsClose(); });
+    // Tap anywhere to close — attach to both img and fs for reliability
+    const imgClose = e => { e.stopPropagation(); fs.remove(); };
+    img.addEventListener('pointerup', imgClose);
+    fs.addEventListener('pointerup', imgClose);
     return;
   }
 
-  mountFSPlayer();
+  // ── Duration + playhead polling (video only — declared here so fsClose can see them) ───
+  let durTimer = null;
+  let playTimer = null;
 
-  // Transparent tap-to-close layer over video — sits above the iframe (pointer-events:none)
-  // but below the bottom bar so controls still work
+  mountFSPlayer();
   const tapClose = document.createElement('div');
   tapClose.style.cssText = 'position:absolute;inset:0;z-index:5;cursor:pointer;';
   tapClose.title = 'Tap to close';
@@ -458,7 +459,7 @@ window.openFS = function(it) {
 
   // ── Duration + playhead polling ───────────────────────────────────────────
   let durDone = false;
-  const durTimer = setInterval(function() {
+  durTimer = setInterval(function() {
     const p = getP(); if (!p || durDone) return;
     let d;
     if (typeof p.getDuration === 'function') {
@@ -471,7 +472,7 @@ window.openFS = function(it) {
     }
   }, 400);
 
-  const playTimer = setInterval(function() {
+  playTimer = setInterval(function() {
     const p = getP(); if (!p || isScrubbing) return;
     if (typeof p.getCurrentTime === 'function') {
       try {
@@ -879,9 +880,12 @@ window.renderTableEditor = function() {
       const rowData = cell.getRow().getData();
       recycleData.push(JSON.parse(JSON.stringify(rowData)));
       localStorage.setItem('seeandlearn-recycle', JSON.stringify(recycleData));
-      const idx = linksData.findIndex(r =>
-        Object.keys(rowData).every(k => r[k] === rowData[k])
-      );
+      // Match by cell value (unique) or by row position — never by full object
+      // comparison since rowData includes Tabulator internal _del/_sel/_move fields
+      const cellVal = rowData.cell;
+      const idx = cellVal
+        ? linksData.findIndex(r => r.cell === cellVal)
+        : window.tabulatorTable.getRows().indexOf(cell.getRow());
       if (idx > -1) linksData.splice(idx, 1);
       cell.getRow().delete();
       saveJsonSilent();
@@ -1112,27 +1116,30 @@ window.renderTableEditor = function() {
     cols.push(colDef);
   });
 
+  // Guard: suppress columnResized saves while we are programmatically setting widths
+  // (setWidth() inside tableBuilt triggers columnResized — we don't want that)
+  let _applyingWidths = false;
+
   // ── Instantiate Tabulator ─────────────────────────────────────────────────
-  // CRITICAL: pass getDataCopy() not linksData directly — prevents double-rows
   window.tabulatorTable = new Tabulator(container, {
     data: getDataCopy(),
     reactiveData: false,
     columns: cols,
-    layout: 'fitData',     // valid Tabulator layout value (layout:false is not valid in Tabulator 6)
+    layout: 'fitData',
     autoResize: false,
     selectableRows: true,
     movableColumns: true,
     history: false,
     height: '100%',
 
-    // Apply saved widths AFTER Tabulator's own layout rAF completes.
-    // layout:'fitData' runs its engine inside a requestAnimationFrame.
-    // A single rAF in tableBuilt fires INSIDE that pass and gets overwritten.
-    // Double rAF fires AFTER it — the only reliable timing.
+    // setTimeout(0) fires after ALL of Tabulator's synchronous + rAF layout passes.
+    // We then programmatically set each column to its saved width.
+    // The _applyingWidths flag prevents columnResized from firing spurious saves.
     tableBuilt() {
-      requestAnimationFrame(() => requestAnimationFrame(() => {
+      setTimeout(() => {
         const tbl = window.tabulatorTable;
         if (!tbl) return;
+        _applyingWidths = true;
         tableKeys.forEach(k => {
           const w = Math.min(
             colWidths[k] !== undefined ? colWidths[k] : COL_DEFAULT_PX,
@@ -1140,14 +1147,16 @@ window.renderTableEditor = function() {
           );
           try { tbl.getColumn(k).setWidth(w); } catch(e) {}
         });
-      }));
+        _applyingWidths = false;
+      }, 0);
     },
 
     columnResized(column) {
+      if (_applyingWidths) return;          // ignore programmatic setWidth calls
       const f = column.getField();
       if (!f || f.startsWith('_')) return;
       colWidths[f] = Math.min(column.getWidth(), COL_MAX_PX);
-      saveColConfig();         // single write, single key
+      saveColConfig();
       syncFromTabulator();
       saveJsonSilent();
     },
@@ -1156,7 +1165,7 @@ window.renderTableEditor = function() {
       syncFromTabulator();
       tableKeys = columns.map(c => c.getField()).filter(f => f && !f.startsWith('_'));
       reorderLinksDataKeys();
-      saveColConfig();         // single write, single key
+      saveColConfig();
       saveJsonSilent();
       updateColHeaderStrip();
     },
