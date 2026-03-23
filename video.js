@@ -625,7 +625,11 @@ window.openVideoEditor = function(it) {
     // The interval already reads segs[activeSegIdx] each tick, so it self-corrects.
   }
 
-  var FRAME_SEC = 1 / 30;  // ~33ms per frame
+  // Frame step = 0.1s — one visible "click" step when paused
+  // (1/30 ≈ 0.033 rounds to 0.0 with toFixed(1), so we use 0.1 as the step unit)
+  var FRAME_SEC = 0.1;
+  // Use higher precision for frame arithmetic
+  var fmt2 = function(v) { return parseFloat(Number(v).toFixed(2)); };
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -644,9 +648,9 @@ window.openVideoEditor = function(it) {
     var p = getEditorPlayer();
     if (!p) return;
     if (typeof p.pauseVideo === 'function') {
-      try { p.pauseVideo(); } catch(ex) {}
-      try { p.seekTo(Math.max(0, t), true); } catch(ex) {}
+      try { p._salPaused = true; p.pauseVideo(); p.seekTo(Math.max(0, t), true); } catch(ex) {}
     } else if (p.pause) {
+      p._salPaused = true;
       p.pause().catch(function(){});
       p.setCurrentTime(Math.max(0, t)).catch(function(){});
     }
@@ -659,23 +663,34 @@ window.openVideoEditor = function(it) {
     else if (p.setCurrentTime) p.setCurrentTime(Math.max(0, t)).catch(function(){});
   }
 
-  // playStartLoop: from seg.start, loop for min(3, seg.dur) seconds
+  // playStartLoop: loop from seg.start for min(3, seg.dur) seconds on existing player
   function playStartLoop() {
-    scrubShield.style.display = 'none';  // ensure shield is cleared before mount
+    scrubShield.style.display = 'none';
     readInputs();
     var seg = segs[activeSegIdx];
     var loopDur = Math.min(3, seg.dur);
-    _mountEditorPlayer(seg.start, loopDur, seg.start, true, null);
+    var p = getEditorPlayer();
+    if (p) {
+      // Use existing player — no remount, no "More Videos" flash
+      resumeLoop(p, seg.start, loopDur);
+    } else {
+      _mountEditorPlayer(seg.start, loopDur, seg.start, true, null);
+    }
   }
 
-  // playEndLoop: from max(seg.start, seg.start+seg.dur-3), loop to end
+  // playEndLoop: loop 3s before end of segment on existing player
   function playEndLoop() {
     scrubShield.style.display = 'none';
     readInputs();
     var seg = segs[activeSegIdx];
-    var preview = Math.max(seg.start, seg.start + seg.dur - 3);
-    var previewDur = seg.start + seg.dur - preview;
-    _mountEditorPlayer(preview, previewDur, preview, true, null);
+    var previewStart = Math.max(seg.start, seg.start + seg.dur - 3);
+    var previewDur   = seg.start + seg.dur - previewStart;
+    var p = getEditorPlayer();
+    if (p) {
+      resumeLoop(p, previewStart, previewDur);
+    } else {
+      _mountEditorPlayer(previewStart, previewDur, previewStart, true, null);
+    }
   }
 
   // ── Single Loop Segment button ────────────────────────────────────────────
@@ -685,11 +700,11 @@ window.openVideoEditor = function(it) {
     mountLoop();  // loops entire active segment
   });
 
-  // ── Start carets: freeze (suspendLoop + scrubShield), seek, update number ─
+  // ── Start carets: pause, seek ±0.1s, update number ──────────────────────
   document.getElementById('vs-frame').addEventListener('pointerdown', function(e) {
     e.preventDefault();
     suspendLoop();
-    segs[activeSegIdx].start = fmt(Math.max(0, segs[activeSegIdx].start - FRAME_SEC));
+    segs[activeSegIdx].start = fmt2(Math.max(0, segs[activeSegIdx].start - FRAME_SEC));
     iStart.value = segs[activeSegIdx].start;
     updateSegData();
     editorSeekFreeze(segs[activeSegIdx].start);
@@ -697,7 +712,7 @@ window.openVideoEditor = function(it) {
   document.getElementById('vs+frame').addEventListener('pointerdown', function(e) {
     e.preventDefault();
     suspendLoop();
-    segs[activeSegIdx].start = fmt(segs[activeSegIdx].start + FRAME_SEC);
+    segs[activeSegIdx].start = fmt2(segs[activeSegIdx].start + FRAME_SEC);
     iStart.value = segs[activeSegIdx].start;
     updateSegData();
     editorSeekFreeze(segs[activeSegIdx].start);
@@ -718,11 +733,11 @@ window.openVideoEditor = function(it) {
     });
   });
 
-  // ── Duration carets: freeze, adjust, seek near new end ───────────────────
+  // ── Duration carets: pause, adjust ±0.1s, seek near new end ─────────────
   document.getElementById('vd-frame').addEventListener('pointerdown', function(e) {
     e.preventDefault();
     suspendLoop();
-    segs[activeSegIdx].dur = fmt(Math.max(0.1, segs[activeSegIdx].dur - FRAME_SEC));
+    segs[activeSegIdx].dur = fmt2(Math.max(0.1, segs[activeSegIdx].dur - FRAME_SEC));
     iDur.value = segs[activeSegIdx].dur;
     updateSegData();
     editorSeekFreeze(Math.max(segs[activeSegIdx].start,
@@ -731,7 +746,7 @@ window.openVideoEditor = function(it) {
   document.getElementById('vd+frame').addEventListener('pointerdown', function(e) {
     e.preventDefault();
     suspendLoop();
-    segs[activeSegIdx].dur = fmt(segs[activeSegIdx].dur + FRAME_SEC);
+    segs[activeSegIdx].dur = fmt2(segs[activeSegIdx].dur + FRAME_SEC);
     iDur.value = segs[activeSegIdx].dur;
     updateSegData();
     editorSeekFreeze(Math.max(segs[activeSegIdx].start,
@@ -795,23 +810,25 @@ window.openVideoEditor = function(it) {
     suspendLoop();
     var endT = segStart + segDur;
     if (!p) return;
-    // YT player
     if (typeof p.playVideo === 'function') {
-      try { p.playVideo(); } catch(ex) {}
+      try { p._salPaused = false; p.seekTo(segStart, true); p.playVideo(); } catch(ex) {}
       window.seeLearnVideoTimers['v2host'] = setInterval(function() {
         try {
+          if (p._salPaused) return;
           var t = p.getCurrentTime();
-          if (t >= endT || t < segStart - 0.5) {
+          if (t >= endT - 0.2 || t < segStart - 0.5) {
             p.seekTo(segStart, true); p.playVideo();
           }
         } catch(ex) {}
       }, 100);
-    // Vimeo player
     } else if (typeof p.play === 'function') {
+      p._salPaused = false;
+      p.setCurrentTime(segStart).catch(function(){});
       p.play().catch(function(){});
       window.seeLearnVideoTimers['v2host'] = setInterval(function() {
         p.getCurrentTime().then(function(t) {
-          if (t >= endT || t < segStart - 0.5) {
+          if (p._salPaused) return;
+          if (t >= endT - 0.2 || t < segStart - 0.5) {
             p.setCurrentTime(segStart); p.play();
           }
         }).catch(function(){});
@@ -973,7 +990,7 @@ window.openVideoEditor = function(it) {
           if (currentMute) ev.target.mute(); else ev.target.unMute();
           ev.target.seekTo(seekSec, true);
           ev.target.playVideo();
-          // Fetch total duration once
+          ev.target._salPaused = false;
           if (onDurationReady) {
             try {
               var d = ev.target.getDuration();
@@ -981,12 +998,13 @@ window.openVideoEditor = function(it) {
             } catch(ex) {}
           }
           if (!loopSeg) {
-            // Pause after ~1.5s to show the frame
-            setTimeout(function() { try { ev.target.pauseVideo(); paused = true; } catch(ex) {} }, 1500);
+            setTimeout(function() {
+              try { ev.target.pauseVideo(); ev.target._salPaused = true; paused = true; } catch(ex) {}
+            }, 1500);
           }
         },
         onStateChange: function(ev) {
-          if (paused) return;
+          if (paused || ev.target._salPaused) return;
           if (loopSeg && ev.data === YT.PlayerState.ENDED) {
             ev.target.seekTo(segStart, true); ev.target.playVideo();
           }
@@ -997,12 +1015,11 @@ window.openVideoEditor = function(it) {
     if (loopSeg) {
       window.seeLearnVideoTimers['v2host'] = setInterval(function() {
         try {
-          if (paused) return;
+          if (paused || player._salPaused) return;
           var t = player.getCurrentTime();
-          // Read boundary from segs each tick so keyboard adjustments take effect immediately
           var seg = segs[activeSegIdx];
           var endT2 = seg.start + seg.dur;
-          if (t >= endT2 || t < seg.start - 0.5) {
+          if (t >= endT2 - 0.2 || t < seg.start - 0.5) {
             player.seekTo(seg.start, true); player.playVideo();
           }
         } catch(ex) {}
@@ -1146,12 +1163,22 @@ window.openVideoEditor = function(it) {
     if (e.key === 'Escape') { closeEditor(); return; }
     if (e.key === ' ' || e.key === 'Spacebar') {
       e.preventDefault(); e.stopPropagation();
-      scrubShield.style.display = 'none';  // clear freeze shield
       var p = getEditorPlayer();
       if (!p) return;
-      // Always resume loop from active segment — spacebar = play
-      var seg = segs[activeSegIdx];
-      resumeLoop(p, seg.start, seg.dur);
+      if (p._salPaused) {
+        // Currently paused — resume
+        scrubShield.style.display = 'none';
+        var seg = segs[activeSegIdx];
+        resumeLoop(p, seg.start, seg.dur);
+      } else {
+        // Currently playing — pause
+        suspendLoop();
+        if (typeof p.pauseVideo === 'function') {
+          try { p._salPaused = true; p.pauseVideo(); } catch(ex) {}
+        } else if (p.pause) {
+          p._salPaused = true; p.pause().catch(function(){});
+        }
+      }
       return;
     }
     if (e.key === 'Tab') {
