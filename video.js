@@ -322,39 +322,56 @@ window.openVideoEditor = function(it) {
     // Fine Adjustments title
     + '<div style="font-size:13px;font-weight:bold;color:#ccc;border-bottom:1px solid #444;'
     + 'padding-bottom:5px;">Fine Adjustments</div>'
-    // Start
-    + '<div><div style="font-size:11px;color:#888;margin-bottom:4px;">Start time (sec)</div>'
-    + '<input type="number" id="v2start" class="v2num" min="0" step="0.1" style="margin-bottom:4px;">'
-    // Frame row (top): ◀ ● ▶
-    + '<div style="display:flex;gap:3px;align-items:center;margin-bottom:3px;">'
-    + '<button class="v2btn" id="vs-frame" title="Back 1 frame (freezes)">&#9664;</button>'
-    + '<button class="v2btn" id="vs-set" title="Set start = current position" style="border-color:#4af;color:#8ef;flex:1;">&#9679; set</button>'
-    + '<button class="v2btn" id="vs+frame" title="Forward 1 frame (freezes)">&#9654;</button>'
+    // ── Start ──
+    + '<div style="margin-bottom:6px;">'
+    + '<div style="font-size:11px;color:#888;margin-bottom:2px;">Start (sec)</div>'
+    // 5-col grid: col3 holds number, carets, and 0 button
+    + '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:3px;align-items:center;">'
+    // Row 1: number in col 3 (cols 1-2 empty, col 3 = number, cols 4-5 empty)
+    + '<div></div><div></div>'
+    + '<input type="number" id="v2start" class="v2num" min="0" step="0.1" style="width:100%;text-align:center;grid-column:3;">'
+    + '<div></div><div></div>'
+    // Row 2: carets in col 3
+    + '<div></div><div></div>'
+    + '<div style="display:flex;gap:2px;justify-content:center;">'
+    + '<button class="v2btn" id="vs-frame" title="Start -1 frame, pause">&#9664;</button>'
+    + '<button class="v2btn" id="vs+frame" title="Start +1 frame, pause">&#9654;</button>'
     + '</div>'
-    // Step row (bottom): -5 -1 +1 +5
-    + '<div style="display:flex;gap:3px;">'
-    + '<button class="v2btn" id="vs---" title="-5s">-5</button>'
-    + '<button class="v2btn" id="vs--" title="-1s">-1</button>'
-    + '<button class="v2btn" id="vs++" title="+1s">+1</button>'
-    + '<button class="v2btn" id="vs+++" title="+5s">+5</button>'
-    + '</div></div>'
-    // Duration
-    + '<div><div style="font-size:11px;color:#888;margin-bottom:4px;">Duration (sec)</div>'
-    + '<input type="number" id="v2dur" class="v2num" min="0.1" step="0.1" style="margin-bottom:4px;">'
-    // Frame row (top): ◀ ● ▶
-    + '<div style="display:flex;gap:3px;align-items:center;margin-bottom:3px;">'
-    + '<button class="v2btn" id="vd-frame" title="Shorten 1 frame (freezes)">&#9664;</button>'
-    + '<button class="v2btn" id="vd-set" title="Set end = current position" style="border-color:#4af;color:#8ef;flex:1;">&#9679; set</button>'
-    + '<button class="v2btn" id="vd+frame" title="Extend 1 frame (freezes)">&#9654;</button>'
+    + '<div></div><div></div>'
+    // Row 3: -5 -1 0 +1 +5
+    + '<button class="v2btn" id="vs---">-5</button>'
+    + '<button class="v2btn" id="vs--">-1</button>'
+    + '<button class="v2btn" id="vs-0" style="border-color:#666;color:#aaa;">0</button>'
+    + '<button class="v2btn" id="vs++">+1</button>'
+    + '<button class="v2btn" id="vs+++">+5</button>'
     + '</div>'
-    // Step row (bottom): -5 -1 +1 +5
-    + '<div style="display:flex;gap:3px;">'
-    + '<button class="v2btn" id="vd---" title="-5s">-5</button>'
-    + '<button class="v2btn" id="vd--" title="-1s">-1</button>'
-    + '<button class="v2btn" id="vd++" title="+1s">+1</button>'
-    + '<button class="v2btn" id="vd+++" title="+5s">+5</button>'
-    + '</div></div>'
-    // Segment ops
+    + '</div>'
+    // ── Duration ──
+    + '<div style="margin-bottom:6px;">'
+    + '<div style="font-size:11px;color:#888;margin-bottom:2px;">Duration (sec)</div>'
+    + '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:3px;align-items:center;">'
+    // Row 1: number in col 3
+    + '<div></div><div></div>'
+    + '<input type="number" id="v2dur" class="v2num" min="0.1" step="0.1" style="width:100%;text-align:center;">'
+    + '<div></div><div></div>'
+    // Row 2: carets in col 3
+    + '<div></div><div></div>'
+    + '<div style="display:flex;gap:2px;justify-content:center;">'
+    + '<button class="v2btn" id="vd-frame" title="Dur -1 frame, pause">&#9664;</button>'
+    + '<button class="v2btn" id="vd+frame" title="Dur +1 frame, pause">&#9654;</button>'
+    + '</div>'
+    + '<div></div><div></div>'
+    // Row 3: -5 -1 0 +1 +5
+    + '<button class="v2btn" id="vd---">-5</button>'
+    + '<button class="v2btn" id="vd--">-1</button>'
+    + '<button class="v2btn" id="vd-0" style="border-color:#666;color:#aaa;">0</button>'
+    + '<button class="v2btn" id="vd++">+1</button>'
+    + '<button class="v2btn" id="vd+++">+5</button>'
+    + '</div>'
+    + '</div>'
+    // Segment ops — Loop Segment just above Add/Delete
+    + '<button id="v2-ls" style="width:100%;padding:7px;border-radius:4px;border:1px solid #4af;'
+    + 'background:rgba(0,80,180,0.2);color:#8ef;cursor:pointer;font-size:13px;">&#9654; Loop Segment</button>'
     + '<button id="v2addseg" style="padding:7px;border-radius:4px;border:1px solid #4af;'
     + 'background:rgba(0,80,180,0.2);color:#8ef;cursor:pointer;font-size:13px;">+ Add segment</button>'
     + '<button id="v2delseg" style="padding:7px;border-radius:4px;border:1px solid #f66;'
@@ -608,94 +625,132 @@ window.openVideoEditor = function(it) {
     // The interval already reads segs[activeSegIdx] each tick, so it self-corrects.
   }
 
-  var FRAME_SEC = 1 / 30;
+  var FRAME_SEC = 1 / 30;  // ~33ms per frame
 
-  // applyFrameDelta: freeze play, adjust value, seek to new position (no remount/no loop restart)
-  function applyFrameDelta(type, delta) {
-    suspendLoop();
-    if (type === 'start') {
-      segs[activeSegIdx].start = fmt(Math.max(0, segs[activeSegIdx].start + delta));
-      iStart.value = segs[activeSegIdx].start;
-    } else {
-      segs[activeSegIdx].dur = fmt(Math.max(0.1, segs[activeSegIdx].dur + delta));
-      iDur.value = segs[activeSegIdx].dur;
-    }
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  function updateSegData() {
     vrPrev.textContent = window.serializeSegments(segs);
     updateStats(); renderTimeline(); renderSegTabs();
-    // Seek the player to the new position without restarting play
+  }
+
+  // Freeze the video at a specific frame:
+  // 1. Show shield over host (blocks YouTube iframe pointer events)
+  // 2. Pause the player (PAUSED state does NOT trigger "More Videos" — only ENDED does)
+  // 3. Seek to the new time
+  // Shield stays up until spacebar or a play action clears it.
+  function editorSeekFreeze(t) {
+    scrubShield.style.display = 'block';
     var p = getEditorPlayer();
-    var seekT = type === 'start'
-      ? segs[activeSegIdx].start
-      : segs[activeSegIdx].start + segs[activeSegIdx].dur - 0.1;
-    if (p) {
-      if (typeof p.seekTo === 'function') { try { p.seekTo(Math.max(0, seekT), true); } catch(ex) {} }
-      else if (p.setCurrentTime) p.setCurrentTime(Math.max(0, seekT)).catch(function(){});
+    if (!p) return;
+    if (typeof p.pauseVideo === 'function') {
+      try { p.pauseVideo(); } catch(ex) {}
+      try { p.seekTo(Math.max(0, t), true); } catch(ex) {}
+    } else if (p.pause) {
+      p.pause().catch(function(){});
+      p.setCurrentTime(Math.max(0, t)).catch(function(){});
     }
   }
 
-  // Wire start buttons: -5/-1/+1/+5 use applyDelta (normal remount flow)
-  var startDeltas = { 'vs---': -5, 'vs--': -1, 'vs++': 1, 'vs+++': 5 };
-  Object.keys(startDeltas).forEach(function(id) {
-    document.getElementById(id).addEventListener('pointerdown', function(e) {
-      e.preventDefault(); applyDelta('start', startDeltas[id]);
-    });
-  });
-  // Frame buttons: freeze play, seek to new start
-  document.getElementById('vs-frame').addEventListener('pointerdown', function(e) {
-    e.preventDefault(); applyFrameDelta('start', -FRAME_SEC);
-  });
-  document.getElementById('vs+frame').addEventListener('pointerdown', function(e) {
-    e.preventDefault(); applyFrameDelta('start', FRAME_SEC);
-  });
-  // ● set start to current player position (freeze, then update)
-  document.getElementById('vs-set').addEventListener('pointerdown', function(e) {
-    e.preventDefault();
-    suspendLoop();
+  function editorSeek(t) {
     var p = getEditorPlayer();
-    function doSet(t) {
-      segs[activeSegIdx].start = fmt(Math.max(0, t));
-      iStart.value = segs[activeSegIdx].start;
-      vrPrev.textContent = window.serializeSegments(segs);
-      updateStats(); renderTimeline(); renderSegTabs();
-    }
-    if (p && typeof p.getCurrentTime === 'function') {
-      try { doSet(p.getCurrentTime()); } catch(ex) {}
-    } else if (p && p.getCurrentTime) {
-      p.getCurrentTime().then(doSet).catch(function(){});
-    }
+    if (!p) return;
+    if (typeof p.seekTo === 'function') { try { p.seekTo(Math.max(0, t), true); } catch(ex) {} }
+    else if (p.setCurrentTime) p.setCurrentTime(Math.max(0, t)).catch(function(){});
+  }
+
+  // playStartLoop: from seg.start, loop for min(3, seg.dur) seconds
+  function playStartLoop() {
+    scrubShield.style.display = 'none';  // ensure shield is cleared before mount
+    readInputs();
+    var seg = segs[activeSegIdx];
+    var loopDur = Math.min(3, seg.dur);
+    _mountEditorPlayer(seg.start, loopDur, seg.start, true, null);
+  }
+
+  // playEndLoop: from max(seg.start, seg.start+seg.dur-3), loop to end
+  function playEndLoop() {
+    scrubShield.style.display = 'none';
+    readInputs();
+    var seg = segs[activeSegIdx];
+    var preview = Math.max(seg.start, seg.start + seg.dur - 3);
+    var previewDur = seg.start + seg.dur - preview;
+    _mountEditorPlayer(preview, previewDur, preview, true, null);
+  }
+
+  // ── Single Loop Segment button ────────────────────────────────────────────
+  document.getElementById('v2-ls').addEventListener('pointerdown', function(e) {
+    e.preventDefault();
+    readInputs();
+    mountLoop();  // loops entire active segment
   });
 
-  // Wire dur buttons: -5/-1/+1/+5 use applyDelta (normal remount flow)
-  var durDeltas = { 'vd---': -5, 'vd--': -1, 'vd++': 1, 'vd+++': 5 };
-  Object.keys(durDeltas).forEach(function(id) {
-    document.getElementById(id).addEventListener('pointerdown', function(e) {
-      e.preventDefault(); applyDelta('dur', durDeltas[id]);
-    });
-  });
-  // Frame buttons: freeze play, seek to near new end
-  document.getElementById('vd-frame').addEventListener('pointerdown', function(e) {
-    e.preventDefault(); applyFrameDelta('dur', -FRAME_SEC);
-  });
-  document.getElementById('vd+frame').addEventListener('pointerdown', function(e) {
-    e.preventDefault(); applyFrameDelta('dur', FRAME_SEC);
-  });
-  // ● set duration end to current player position (freeze, then update)
-  document.getElementById('vd-set').addEventListener('pointerdown', function(e) {
+  // ── Start carets: freeze (suspendLoop + scrubShield), seek, update number ─
+  document.getElementById('vs-frame').addEventListener('pointerdown', function(e) {
     e.preventDefault();
     suspendLoop();
-    var p = getEditorPlayer();
-    function doSet(t) {
-      var newDur = fmt(Math.max(0.1, t - segs[activeSegIdx].start));
-      segs[activeSegIdx].dur = newDur;
-      iDur.value = newDur;
-      vrPrev.textContent = window.serializeSegments(segs);
-      updateStats(); renderTimeline(); renderSegTabs();
-    }
-    if (p && typeof p.getCurrentTime === 'function') {
-      try { doSet(p.getCurrentTime()); } catch(ex) {}
-    } else if (p && p.getCurrentTime) {
-      p.getCurrentTime().then(doSet).catch(function(){});
-    }
+    segs[activeSegIdx].start = fmt(Math.max(0, segs[activeSegIdx].start - FRAME_SEC));
+    iStart.value = segs[activeSegIdx].start;
+    updateSegData();
+    editorSeekFreeze(segs[activeSegIdx].start);
+  });
+  document.getElementById('vs+frame').addEventListener('pointerdown', function(e) {
+    e.preventDefault();
+    suspendLoop();
+    segs[activeSegIdx].start = fmt(segs[activeSegIdx].start + FRAME_SEC);
+    iStart.value = segs[activeSegIdx].start;
+    updateSegData();
+    editorSeekFreeze(segs[activeSegIdx].start);
+  });
+
+  // -5 -1 0 +1 +5: adjust start, play from new start for min(3, dur) then loop
+  var startDeltas = { 'vs---': -5, 'vs--': -1, 'vs-0': 0, 'vs++': 1, 'vs+++': 5 };
+  Object.keys(startDeltas).forEach(function(id) {
+    document.getElementById(id).addEventListener('pointerdown', function(e) {
+      e.preventDefault();
+      var delta = startDeltas[id];
+      if (delta !== 0) {
+        segs[activeSegIdx].start = fmt(Math.max(0, segs[activeSegIdx].start + delta));
+        iStart.value = segs[activeSegIdx].start;
+        updateSegData();
+      }
+      playStartLoop();
+    });
+  });
+
+  // ── Duration carets: freeze, adjust, seek near new end ───────────────────
+  document.getElementById('vd-frame').addEventListener('pointerdown', function(e) {
+    e.preventDefault();
+    suspendLoop();
+    segs[activeSegIdx].dur = fmt(Math.max(0.1, segs[activeSegIdx].dur - FRAME_SEC));
+    iDur.value = segs[activeSegIdx].dur;
+    updateSegData();
+    editorSeekFreeze(Math.max(segs[activeSegIdx].start,
+      segs[activeSegIdx].start + segs[activeSegIdx].dur - 0.1));
+  });
+  document.getElementById('vd+frame').addEventListener('pointerdown', function(e) {
+    e.preventDefault();
+    suspendLoop();
+    segs[activeSegIdx].dur = fmt(segs[activeSegIdx].dur + FRAME_SEC);
+    iDur.value = segs[activeSegIdx].dur;
+    updateSegData();
+    editorSeekFreeze(Math.max(segs[activeSegIdx].start,
+      segs[activeSegIdx].start + segs[activeSegIdx].dur - 0.1));
+  });
+
+  // -5 -1 0 +1 +5: adjust duration, play from 3s before new end, loop
+  var durDeltas = { 'vd---': -5, 'vd--': -1, 'vd-0': 0, 'vd++': 1, 'vd+++': 5 };
+  Object.keys(durDeltas).forEach(function(id) {
+    document.getElementById(id).addEventListener('pointerdown', function(e) {
+      e.preventDefault();
+      var delta = durDeltas[id];
+      if (delta !== 0) {
+        segs[activeSegIdx].dur = fmt(Math.max(0.1, segs[activeSegIdx].dur + delta));
+        iDur.value = segs[activeSegIdx].dur;
+        updateSegData();
+      }
+      playEndLoop();
+    });
   });
 
   // Input field changes
@@ -771,13 +826,14 @@ window.openVideoEditor = function(it) {
     return (x / rect.width) * calcEnd();
   }
 
-  // ── Scrub shield: covers entire overlay during scrub, blocks YouTube iframe ──
-  // Appended to overlay at z-index:200000 so it sits above the YouTube iframe.
-  // Shown on pointerdown, hidden on pointerup.
+  // ── Scrub shield: covers only the VIDEO HOST area, not the right panel ──────
+  // This blocks YouTube iframe pointer events (hover triggers "More videos" UI)
+  // without blocking the right-panel buttons.
   var scrubShield = document.createElement('div');
   scrubShield.style.cssText = 'position:absolute;inset:0;z-index:200000;display:none;'
     + 'background:transparent;cursor:crosshair;pointer-events:auto;';
-  overlay.appendChild(scrubShield);
+  // Append to host div (not overlay) so it only covers the video, not the panel
+  host.appendChild(scrubShield);
 
   // scrubToSec: mirrors VideoShow's fsSeek exactly.
   // Just seek — no pause, no suspendLoop, no player state changes.
@@ -1090,21 +1146,12 @@ window.openVideoEditor = function(it) {
     if (e.key === 'Escape') { closeEditor(); return; }
     if (e.key === ' ' || e.key === 'Spacebar') {
       e.preventDefault(); e.stopPropagation();
+      scrubShield.style.display = 'none';  // clear freeze shield
       var p = getEditorPlayer();
       if (!p) return;
-      // Toggle play/pause
-      if (typeof p.getPlayerState === 'function') {
-        try {
-          var state = p.getPlayerState();
-          if (state === 1 /* playing */) { suspendLoop(); p.pauseVideo(); }
-          else { var seg = segs[activeSegIdx]; resumeLoop(p, seg.start, seg.dur); }
-        } catch(ex) {}
-      } else if (p.getPaused) {
-        p.getPaused().then(function(paused) {
-          if (paused) { var seg = segs[activeSegIdx]; resumeLoop(p, seg.start, seg.dur); }
-          else { suspendLoop(); p.pause().catch(function(){}); }
-        }).catch(function(){});
-      }
+      // Always resume loop from active segment — spacebar = play
+      var seg = segs[activeSegIdx];
+      resumeLoop(p, seg.start, seg.dur);
       return;
     }
     if (e.key === 'Tab') {

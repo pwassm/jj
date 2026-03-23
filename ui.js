@@ -1175,7 +1175,7 @@ window.openTable = function() {
     columns: cols,
     layout: 'fitData',
     autoResize: false,
-    rowHeight: 58,
+    rowHeight: window._thumbEnabled ? 58 : 24,
     selectableRows: true,
     movableColumns: true,
     history: false,
