@@ -155,7 +155,10 @@ function flParseAndImport() {
     document.getElementById('fastLinkStatus').textContent = 'No URLs found.';
     return;
   }
-  if (window.saveData) window.saveData();
+  // skipSync=true — we already pushed to linksData directly;
+  // calling saveData() without it would run syncTab() which reads stale Tabulator
+  // state and overwrites our new entries, causing duplicate cells on retry.
+  if (window.saveData) window.saveData(true);
   else localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
   render();
   const msg = `✓ Imported ${imported} URL${imported !== 1 ? 's' : ''}` +

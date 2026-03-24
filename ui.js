@@ -521,11 +521,81 @@ window.openFS = function(it) {
   let playTimer = null;
 
   mountFSPlayer();
+
+  // ── Landscape enforcement (mobile) ────────────────────────────────────────
+  // On Android Chrome, lock to landscape so video fills the screen properly.
+  // On iOS Safari, screen.orientation.lock is not available; apply CSS rotation fallback.
+  if (ISMOBILE) {
+    if (screen.orientation && screen.orientation.lock) {
+      screen.orientation.lock('landscape').catch(function() {
+        // Lock failed (iOS / permission denied) — apply CSS rotation
+        _applyPortraitRotation();
+      });
+    } else {
+      _applyPortraitRotation();
+    }
+  }
+  function _applyPortraitRotation() {
+    // Only rotate if currently portrait
+    if (window.innerWidth < window.innerHeight) {
+      fs.style.transformOrigin = 'center center';
+      fs.style.width  = window.innerHeight + 'px';
+      fs.style.height = window.innerWidth  + 'px';
+      fs.style.left   = -((window.innerHeight - window.innerWidth) / 2) + 'px';
+      fs.style.top    = -((window.innerWidth - window.innerHeight) / 2) + 'px';  
+      fs.style.transform = 'rotate(90deg)';
+    }
+  }
+
+  // ── Swipe detection on the video area ────────────────────────────────────
+  // Works on both desktop (mouse) and mobile (touch/pointer).
+  // Swipe LEFT  → close VideoShow (same as ✕)
+  // Swipe RIGHT → close (go back to grid) — symmetrical
+  // Swipe DOWN  → close
+  // The transparent tapClose div can't intercept Vimeo iframe touches reliably,
+  // so we also add a permanent close strip at top of vidHost.
+  let swipeStartX = 0, swipeStartY = 0, swipeActive = false;
+  const SWIPE_THRESHOLD = 50;
+
+  vidHost.addEventListener('pointerdown', function(e) {
+    swipeStartX = e.clientX; swipeStartY = e.clientY; swipeActive = true;
+  });
+  vidHost.addEventListener('pointerup', function(e) {
+    if (!swipeActive) return; swipeActive = false;
+    const dx = e.clientX - swipeStartX;
+    const dy = e.clientY - swipeStartY;
+    const absDx = Math.abs(dx), absDy = Math.abs(dy);
+    if (absDx > SWIPE_THRESHOLD && absDx > absDy * 1.2) {
+      // Horizontal swipe — close
+      e.stopPropagation(); fsClose();
+    } else if (dy > SWIPE_THRESHOLD && absDy > absDx * 1.2) {
+      // Swipe down — close
+      e.stopPropagation(); fsClose();
+    }
+  });
+  vidHost.addEventListener('pointercancel', function() { swipeActive = false; });
+
+  // ── Close strip at TOP of vidHost — always visible, Vimeo-proof ──────────
+  // A thin visible strip with ✕ that sits above the iframe (z-index:10).
+  // Tapping anywhere on this strip closes VideoShow.
+  // This is the reliable close mechanism on mobile where iframe absorbs taps.
+  const closeStrip = document.createElement('div');
+  closeStrip.style.cssText = 'position:absolute;top:0;left:0;right:0;height:36px;'
+    + 'z-index:10;display:flex;align-items:center;justify-content:flex-end;'
+    + 'padding:0 10px;cursor:pointer;background:linear-gradient(rgba(0,0,0,0.5),transparent);';
+  closeStrip.innerHTML = '<span style="color:#fff;font-size:22px;line-height:1;opacity:0.7;'
+    + 'text-shadow:0 1px 4px rgba(0,0,0,0.8);">✕</span>';
+  closeStrip.addEventListener('pointerup', function(e) { e.stopPropagation(); fsClose(); });
+  vidHost.appendChild(closeStrip);
+
+  // Legacy tapClose — kept for desktop, lower z-index (sits under iframes on mobile)
   const tapClose = document.createElement('div');
-  tapClose.style.cssText = 'position:absolute;inset:0;z-index:5;cursor:pointer;';
-  tapClose.title = 'Tap to close';
+  tapClose.style.cssText = 'position:absolute;inset:0;z-index:3;cursor:pointer;';
   tapClose.addEventListener('pointerup', function(e) {
-    e.stopPropagation(); fsClose();
+    // Only fire if not a swipe
+    const dx = Math.abs(e.clientX - swipeStartX);
+    const dy = Math.abs(e.clientY - swipeStartY);
+    if (dx < 10 && dy < 10) { e.stopPropagation(); fsClose(); }
   });
   vidHost.appendChild(tapClose);
 
@@ -831,6 +901,10 @@ window.openFS = function(it) {
     document.removeEventListener('keydown', fsKeyHandler);
     fs.removeEventListener('keydown', fsKeyHandler);
     window.stopCellVideoLoop(vidHost.id);
+    // Restore orientation on mobile
+    if (ISMOBILE && screen.orientation && screen.orientation.unlock) {
+      try { screen.orientation.unlock(); } catch(ex) {}
+    }
     fs.remove();
   }
 };
