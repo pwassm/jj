@@ -134,7 +134,8 @@ function buildOverlays(){
       const swipeDist = isPortrait ? dy : dx;
       const swipePerp = isPortrait ? dx : dy;
 
-      // Swipe to open fullscreen
+      // Swipe to open fullscreen — on mobile always open VideoShow (V screen)
+      // On desktop only image/video cells respond to swipe
       if (swipeDist > 25 && Math.abs(swipePerp) < Math.abs(swipeDist) * 1.5) {
          e.stopPropagation();
          window.openFS(it);
@@ -149,8 +150,13 @@ function buildOverlays(){
             if (window.rKeyDown || e.shiftKey) {
                window.openFS(it);
             } else {
-               if (window.openVideoEditor) window.openVideoEditor(it);
+               if (!ISMOBILE && window.openVideoEditor) window.openVideoEditor(it);
+               else window.openFS(it);  // no VideoEdit on mobile
             }
+          } else if (ISMOBILE) {
+            // Plain tap on video cell opens VideoShow on mobile
+            e.stopPropagation();
+            window.openFS(it);
           }
         } else if (assetVal === 'i') {
           e.stopPropagation();

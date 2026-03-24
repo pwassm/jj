@@ -383,17 +383,26 @@ window.addEventListener('keyup', e => { if (e.key.toLowerCase() === 'r') window.
       }
       if (window.openFS) window.openFS(entry2);
     }
+    else if (key === 'l') {
+      // L = Links / FastPaste screen
+      var miFL = document.getElementById('miFastLinks');
+      if (miFL) miFL.dispatchEvent(new Event('pointerup', {bubbles:true}));
+    }
   }
 
   // ── Floating button bar ─────────────────────────────────────────────────────
+  // Mobile: G T L V  (L = Links/FastLink, no E since editor not used on phone)
+  // Desktop: G T E V
   var bar = document.createElement('div');
   bar.id = 'sal-switcher-bar';
   bar.style.cssText = 'position:fixed;bottom:58px;right:18px;z-index:9999998;'
     + 'display:flex;gap:6px;';
-  ['G','T','E','V'].forEach(function(lbl) {
+  var barLabels = ISMOBILE ? ['G','T','L','V'] : ['G','T','E','V'];
+  var barTitles = {G:'Grid view',T:'Table view',E:'VideoEdit',V:'VideoShow (play)',L:'Links (Fast Paste)'};
+  barLabels.forEach(function(lbl) {
     var btn = document.createElement('button');
     btn.textContent = lbl;
-    btn.title = {G:'Grid view',T:'Table view',E:'VideoEdit',V:'VideoShow (play)'}[lbl];
+    btn.title = barTitles[lbl] || lbl;
     btn.style.cssText = 'width:34px;height:34px;border-radius:6px;border:1px solid #4af;'
       + 'background:rgba(0,20,50,0.85);color:#8ef;font-size:13px;font-weight:bold;'
       + 'cursor:pointer;font-family:sans-serif;';
@@ -403,7 +412,6 @@ window.addEventListener('keyup', e => { if (e.key.toLowerCase() === 'r') window.
     });
     bar.appendChild(btn);
   });
-  // Append after DOM ready
   if (document.body) document.body.appendChild(bar);
   else window.addEventListener('DOMContentLoaded', function() { document.body.appendChild(bar); });
 

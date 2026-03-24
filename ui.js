@@ -509,8 +509,34 @@ window.openFS = function(it) {
     vidHost.appendChild(img);
     vidHost.style.cursor = 'pointer';
     bar.style.display = 'none';
-    // Tap anywhere to close — attach to both img and fs for reliability
-    const imgClose = e => { e.stopPropagation(); fs.remove(); };
+
+    // Apply landscape on mobile (same as video path)
+    if (ISMOBILE) {
+      if (screen.orientation && screen.orientation.lock) {
+        screen.orientation.lock('landscape').catch(function() { _imgRotate(); });
+      } else {
+        _imgRotate();
+      }
+    }
+    function _imgRotate() {
+      if (window.innerWidth < window.innerHeight) {
+        fs.style.transformOrigin = 'center center';
+        fs.style.width  = window.innerHeight + 'px';
+        fs.style.height = window.innerWidth  + 'px';
+        fs.style.left   = -((window.innerHeight - window.innerWidth) / 2) + 'px';
+        fs.style.top    = -((window.innerWidth  - window.innerHeight) / 2) + 'px';
+        fs.style.transform = 'rotate(90deg)';
+      }
+    }
+
+    // Tap to close — works for images (no iframe to block)
+    const imgClose = function(e) {
+      e.stopPropagation();
+      if (ISMOBILE && screen.orientation && screen.orientation.unlock) {
+        try { screen.orientation.unlock(); } catch(ex) {}
+      }
+      fs.remove();
+    };
     img.addEventListener('pointerup', imgClose);
     fs.addEventListener('pointerup', imgClose);
     return;
