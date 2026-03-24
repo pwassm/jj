@@ -162,9 +162,8 @@ window.mountYouTubeClip = async function(hostEl, url, startSec, dur, isMuted, cu
           try {
             var t   = e.target.getCurrentTime();
             var seg = segs[segIdx];
-            // Seek back 0.2s before end to prevent YouTube reaching ENDED state
-            // (ENDED triggers the suggestions overlay)
-            if (t >= seg.start + seg.dur - 0.2 || t < seg.start - 0.5) {
+            // UPPER-BOUND ONLY — no lower-bound snap to prevent "goes to beginning"
+            if (t >= seg.start + seg.dur - 0.2) {
               segIdx = (segIdx + 1) % segs.length;
               e.target.seekTo(segs[segIdx].start, allowSeek);
               e.target.playVideo();
@@ -173,11 +172,8 @@ window.mountYouTubeClip = async function(hostEl, url, startSec, dur, isMuted, cu
         }, 100);
       },
       onStateChange: function(e) {
-        if (e.data === YT.PlayerState.ENDED) {
-          segIdx = (segIdx + 1) % segs.length;
-          e.target.seekTo(segs[segIdx].start, !window.keyframeOnly);
-          e.target.playVideo();
-        }
+        // Interval handles end-of-segment looping at -0.2s.
+        // No ENDED handler here — it would reset to seg[0].start using stale segIdx.
       }
     }
   });
@@ -244,6 +240,7 @@ window.cleanupAllVideos = function() {
 
 // ─── VIDEO EDITOR (multi-segment) ────────────────────────────────────────────
 window.openVideoEditor = function(it) {
+  window._lastVideoShown = it;  // remember for EE/VV/floating buttons
   var rawSegs = window.parseVideoAsset(it.VidRange);
   // Load VidComment labels (comma-delimited, one per segment)
   var rawComments = (it.VidComment || '').split(',').map(function(s) { return s.trim(); });
@@ -256,10 +253,11 @@ window.openVideoEditor = function(it) {
 
   var overlay = document.createElement('div');
   overlay.id  = 'video-editor-overlay';
+  overlay.setAttribute('tabindex', '-1');
   overlay.style.cssText = 'position:fixed;z-index:99999;left:5%;top:5%;width:90%;height:90%;'
     + 'background:#1a1a1a;border:2px solid #8ef;display:flex;flex-direction:column;'
     + 'box-shadow:0 10px 40px rgba(0,0,0,0.9);font-family:sans-serif;color:#fff;'
-    + 'border-radius:10px;overflow:hidden;';
+    + 'border-radius:10px;overflow:hidden;outline:none;';
 
   overlay.innerHTML = '<style>'
     + '.v2btn{min-width:38px;height:34px;font-size:12px;font-weight:bold;'
@@ -292,6 +290,15 @@ window.openVideoEditor = function(it) {
     + '<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">'
     + '<input type="checkbox" id="v2mute" style="width:15px;height:15px;"'
     + (currentMute?' checked':'') + '> Muted</label>'
+    + '<button id="v2cc" title="Toggle captions (English)" '
+    + 'style="padding:5px 9px;background:rgba(0,60,0,0.3);color:#8a8;border:1px solid #8a8;'
+    + 'border-radius:5px;cursor:pointer;font-size:12px;">CC</button>'
+    + '<button id="v2ffmpeg" title="Download Windows .bat + concat list for frame-accurate ffmpeg merge" '
+    + 'style="padding:5px 9px;background:rgba(60,40,0,0.3);color:#fa8;border:1px solid #fa8;'
+    + 'border-radius:5px;cursor:pointer;font-size:12px;">&#128229; ffmpeg</button>'
+    + '<button id="v2llc" title="Download LosslessCut .llc project file" '
+    + 'style="padding:5px 9px;background:rgba(0,40,80,0.3);color:#6af;border:1px solid #6af;'
+    + 'border-radius:5px;cursor:pointer;font-size:12px;">&#128229; LLC</button>'
     + '<button id="v2save" style="padding:8px 20px;background:#8ef;color:#000;border:none;'
     + 'border-radius:5px;font-weight:bold;cursor:pointer;font-size:14px;">Save (^S)</button>'
     + '<button id="v2close" style="padding:8px 14px;background:none;border:1px solid #f66;'
@@ -378,13 +385,24 @@ window.openVideoEditor = function(it) {
     + 'background:rgba(180,0,0,0.2);color:#f88;cursor:pointer;font-size:13px;">'
     + '&#10005; Delete this segment</button>'
     // VidRange
-    + '<div><div style="font-size:11px;color:#888;margin-bottom:4px;">VidRange value</div>'
+    + '<div>'
+    + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">'
+    + '<span style="font-size:11px;color:#888;">VidRange value</span>'
+    + '<button id="v2reorder" style="padding:2px 7px;font-size:10px;border-radius:3px;'
+    + 'border:1px solid #8a8;background:rgba(0,60,0,0.2);color:#8a8;cursor:pointer;" '
+    + 'title="Re-order segments by start time (earliest first), also reorders VidComment labels">Re-order</button>'
+    + '</div>'
     + '<div id="v2vrprev" style="font-size:12px;color:#8ef;word-break:break-all;'
     + 'background:#111;padding:5px;border-radius:4px;border:1px solid #333;'
     + 'font-family:monospace;min-height:20px;"></div></div>'
     + '</div></div>';
 
   document.body.appendChild(overlay);
+  // Focus overlay immediately; refocus when right panel clicked (YouTube steals focus)
+  setTimeout(function() { overlay.focus(); }, 100);
+  overlay.addEventListener('pointerup', function(e) {
+    if (!e.target.closest('#v2host')) overlay.focus();
+  });
 
   // ── Element refs ────────────────────────────────────────────────────────
   var host        = document.getElementById('v2host');
@@ -465,7 +483,7 @@ window.openVideoEditor = function(it) {
       // Ctrl+right-click band = open VidComment mini-editor
       band.addEventListener('contextmenu', function(ev) {
         ev.preventDefault(); ev.stopPropagation();
-        openCommentEditor(i, band);
+        openCommentEditor(i);
       });
       timeline.appendChild(band);
     });
@@ -505,78 +523,124 @@ window.openVideoEditor = function(it) {
     mountLoop();    // switch loop to new active segment
   }
 
-  // ── VidComment mini-editor (right-click on segment band) ─────────────────
-  function openCommentEditor(segIdx, anchorEl) {
+  // ── Shared: persist VidComment to linksData + Tabulator + localStorage ──────
+  function persistComment() {
+    var newVidComment = segs.map(function(s) { return s.comment || ''; }).join(', ');
+    it.VidComment = newVidComment;
+    var idx = linksData ? linksData.indexOf(it) : -1;
+    if (idx === -1 && linksData) {
+      idx = linksData.findIndex(function(r) {
+        return r.link === it.link && r.cell === it.cell;
+      });
+    }
+    if (idx !== -1 && linksData) linksData[idx].VidComment = newVidComment;
+    if (window._salTab) {
+      try {
+        var rows = window._salTab.getRows();
+        for (var ri = 0; ri < rows.length; ri++) {
+          var rd = rows[ri].getData();
+          if (rd.link === it.link && rd.cell === it.cell) {
+            rows[ri].update({ VidComment: newVidComment }); break;
+          }
+        }
+      } catch(ex) {}
+    }
+    if (window.saveData) window.saveData(true);
+    else {
+      localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+      localStorage.setItem('sal-edited', Date.now().toString());
+    }
+  }
+
+  // ── VidComment mini-editor: all segments in one screen ──────────────────
+  // Triggered by right-click on any segment band.
+  // Shows one input per segment; Tab/Shift-Tab cycle; ^S saves all + closes.
+  function openCommentEditor(focusSegIdx) {
     var existing = document.getElementById('v2comment-popup');
     if (existing) existing.remove();
 
     var popup = document.createElement('div');
     popup.id = 'v2comment-popup';
-    var rect = anchorEl ? anchorEl.getBoundingClientRect() : { left: 200, bottom: 200 };
     popup.style.cssText = 'position:fixed;z-index:999999;'
-      + 'left:' + Math.min(rect.left, window.innerWidth - 320) + 'px;'
-      + 'top:' + (rect.bottom + 4) + 'px;'
-      + 'width:300px;background:#1a2a3a;border:1px solid #4af;border-radius:8px;'
-      + 'padding:12px;box-shadow:0 4px 20px rgba(0,0,0,0.8);font-family:sans-serif;color:#fff;';
+      + 'left:50%;top:50%;transform:translate(-50%,-50%);'
+      + 'min-width:320px;max-width:480px;width:90vw;'
+      + 'background:#1a2a3a;border:1px solid #4af;border-radius:8px;'
+      + 'padding:14px;box-shadow:0 8px 32px rgba(0,0,0,0.9);font-family:sans-serif;color:#fff;';
 
-    popup.innerHTML = '<div style="font-size:13px;font-weight:bold;margin-bottom:8px;color:#8ef;">'
-      + 'Segment ' + (segIdx + 1) + ' Label (VidComment)</div>'
-      + '<textarea id="v2comment-inp" rows="2" style="width:100%;box-sizing:border-box;'
-      + 'background:#0d1a2a;color:#fff;border:1px solid #4af;border-radius:4px;padding:6px;'
-      + 'font-size:13px;resize:vertical;outline:none;">'
-      + (segs[segIdx].comment || '')
-      + '</textarea>'
-      + '<div style="font-size:10px;color:#666;margin:4px 0 8px;">One label per segment. Stored as comma-delimited VidComment.</div>'
-      + '<div style="display:flex;gap:8px;">'
-      + '<button id="v2comment-save" style="flex:1;padding:7px;border-radius:4px;border:1px solid #4af;'
-      + 'background:rgba(0,80,180,0.3);color:#8ef;cursor:pointer;font-size:13px;font-weight:bold;">Save</button>'
-      + '<button id="v2comment-cancel" style="padding:7px 14px;border-radius:4px;border:1px solid #555;'
+    var html = '<div style="font-size:13px;font-weight:bold;margin-bottom:10px;color:#8ef;">'
+      + 'Segment Labels — VidComment &nbsp;<span style="font-weight:normal;font-size:11px;color:#666;">'
+      + 'Tab / Shift-Tab to move &nbsp;·&nbsp; ^S saves &nbsp;·&nbsp; Esc cancels</span></div>';
+
+    segs.forEach(function(seg, i) {
+      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">'
+        + '<span style="font-size:11px;color:#8ef;min-width:48px;flex-shrink:0;">Seg ' + (i+1) + '</span>'
+        + '<input id="v2ci-' + i + '" type="text" value="' + (seg.comment || '').replace(/"/g,'&quot;') + '" '
+        + 'style="flex:1;background:#0d1a2a;color:#fff;border:1px solid #4af;border-radius:4px;'
+        + 'padding:5px 7px;font-size:13px;outline:none;" '
+        + 'placeholder="Label for segment ' + (i+1) + '" />'
+        + '</div>';
+    });
+
+    html += '<div style="display:flex;gap:8px;margin-top:10px;">'
+      + '<button id="v2cs-save" style="flex:1;padding:7px;border-radius:4px;border:1px solid #4af;'
+      + 'background:rgba(0,80,180,0.3);color:#8ef;cursor:pointer;font-size:13px;font-weight:bold;">Save (^S)</button>'
+      + '<button id="v2cs-cancel" style="padding:7px 14px;border-radius:4px;border:1px solid #555;'
       + 'background:#222;color:#aaa;cursor:pointer;font-size:13px;">Cancel</button>'
       + '</div>';
 
+    popup.innerHTML = html;
     document.body.appendChild(popup);
 
-    var inp = document.getElementById('v2comment-inp');
-    setTimeout(function() { inp.focus(); inp.select(); }, 50);
+    // Focus the segment that was right-clicked
+    var firstInp = document.getElementById('v2ci-' + focusSegIdx);
+    if (firstInp) setTimeout(function() { firstInp.focus(); firstInp.select(); }, 50);
 
-    document.getElementById('v2comment-save').addEventListener('click', function() {
-      segs[segIdx].comment = inp.value.trim();
+    function saveComments() {
+      segs.forEach(function(seg, i) {
+        var inp = document.getElementById('v2ci-' + i);
+        if (inp) seg.comment = inp.value.trim();
+      });
       popup.remove();
       renderTimeline();
       renderSegTabs();
-      // Persist comment immediately — don't wait for main Save button
-      it.VidComment = segs.map(function(s) { return s.comment || ''; }).join(', ');
-      if (window.saveData) window.saveData(true);
-      else {
-        localStorage.setItem('seeandlearn-links', JSON.stringify(window.linksData));
-        localStorage.setItem('sal-edited', Date.now().toString());
-      }
-    });
-    document.getElementById('v2comment-cancel').addEventListener('click', function() {
-      popup.remove();
-    });
-    // Escape closes
-    inp.addEventListener('keydown', function(e) {
-      if (e.key === 'Escape') { e.stopPropagation(); popup.remove(); }
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault(); e.stopPropagation();
-        segs[segIdx].comment = inp.value.trim();
-        popup.remove(); renderTimeline(); renderSegTabs();
-        // Persist comment immediately
-        it.VidComment = segs.map(function(s) { return s.comment || ''; }).join(', ');
-        if (window.saveData) window.saveData(true);
-        else {
-          localStorage.setItem('seeandlearn-links', JSON.stringify(window.linksData));
-          localStorage.setItem('sal-edited', Date.now().toString());
-        }
-      }
-    });
-    // Click outside closes
-    setTimeout(function() {
-      document.addEventListener('pointerdown', function closePopup(ev) {
-        if (!popup.contains(ev.target)) { popup.remove(); document.removeEventListener('pointerdown', closePopup); }
+      persistComment();
+    }
+
+    // Live-update: persist to linksData + Tabulator + localStorage as user types
+    segs.forEach(function(seg, i) {
+      var inp = document.getElementById('v2ci-' + i);
+      if (!inp) return;
+      inp.addEventListener('input', function() {
+        seg.comment = inp.value;
+        renderTimeline(); renderSegTabs();
+        persistEditorState();  // live-push VidComment to T and localStorage
       });
-    }, 100);
+    });
+
+    document.getElementById('v2cs-save').addEventListener('click', saveComments);
+    document.getElementById('v2cs-cancel').addEventListener('click', function() { popup.remove(); });
+
+    // Tab / Shift-Tab cycle between inputs and buttons; ^S saves; Escape cancels
+    popup.addEventListener('keydown', function(e) {
+      e.stopPropagation();
+      if (e.ctrlKey && e.key.toLowerCase() === 's') { e.preventDefault(); saveComments(); return; }
+      if (e.key === 'Escape') { popup.remove(); return; }
+      // Space or Enter activates a focused button
+      if ((e.key === ' ' || e.key === 'Enter') && document.activeElement &&
+          document.activeElement.tagName === 'BUTTON') {
+        e.preventDefault(); document.activeElement.click(); return;
+      }
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        var focusables = Array.from(popup.querySelectorAll('input, button'));
+        var cur = document.activeElement;
+        var idx = focusables.indexOf(cur);
+        if (e.shiftKey) idx = (idx - 1 + focusables.length) % focusables.length;
+        else            idx = (idx + 1) % focusables.length;
+        focusables[idx].focus();
+        if (focusables[idx].tagName === 'INPUT') focusables[idx].select();
+      }
+    });
   }
 
   // ── Input / delta helpers ─────────────────────────────────────────────────
@@ -633,24 +697,61 @@ window.openVideoEditor = function(it) {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
+  // ── Live persist: push current segs state to linksData + Tabulator + localStorage ──
+  // Called any time segs change (comment edits, caret adjustments, etc.)
+  // Does NOT close the editor. linksData now works since linksData is var.
+  function persistEditorState() {
+    var newVidRange   = window.serializeSegments(segs);
+    var newVidComment = segs.map(function(s) { return s.comment || ''; }).join(', ');
+    it.VidRange   = newVidRange;
+    it.VidComment = newVidComment;
+    // Update linksData by index
+    var idx = linksData.indexOf(it);
+    if (idx === -1) idx = linksData.findIndex(function(r) {
+      return r.link === it.link && r.cell === it.cell;
+    });
+    if (idx !== -1) {
+      linksData[idx].VidRange   = newVidRange;
+      linksData[idx].VidComment = newVidComment;
+    }
+    // Update Tabulator row
+    if (window._salTab) {
+      try {
+        var rows = window._salTab.getRows();
+        for (var ri = 0; ri < rows.length; ri++) {
+          var rd = rows[ri].getData();
+          if (rd.link === it.link && rd.cell === it.cell) {
+            rows[ri].update({ VidRange: newVidRange, VidComment: newVidComment });
+            break;
+          }
+        }
+      } catch(ex) {}
+    }
+    // Write to localStorage without going through syncTab (skipSync=true)
+    if (window.saveData) window.saveData(true);
+    else {
+      var s = JSON.stringify(linksData);
+      localStorage.setItem('seeandlearn-links', s);
+      localStorage.setItem('sal-edited', Date.now().toString());
+    }
+  }
+
   function updateSegData() {
     vrPrev.textContent = window.serializeSegments(segs);
     updateStats(); renderTimeline(); renderSegTabs();
+    persistEditorState();  // live-push to T and localStorage
   }
 
-  // Freeze the video at a specific frame:
-  // 1. Show shield over host (blocks YouTube iframe pointer events)
-  // 2. Pause the player (PAUSED state does NOT trigger "More Videos" — only ENDED does)
-  // 3. Seek to the new time
-  // Shield stays up until spacebar or a play action clears it.
+  // Freeze at a specific frame: suspend interval, shield the iframe, pause, seek.
   function editorSeekFreeze(t) {
+    suspendLoop();
     scrubShield.style.display = 'block';
     var p = getEditorPlayer();
     if (!p) return;
+    p._salPaused = true;
     if (typeof p.pauseVideo === 'function') {
-      try { p._salPaused = true; p.pauseVideo(); p.seekTo(Math.max(0, t), true); } catch(ex) {}
-    } else if (p.pause) {
-      p._salPaused = true;
+      try { p.pauseVideo(); p.seekTo(Math.max(0, t), true); } catch(ex) {}
+    } else if (p.setCurrentTime) {
       p.pause().catch(function(){});
       p.setCurrentTime(Math.max(0, t)).catch(function(){});
     }
@@ -829,6 +930,39 @@ window.openVideoEditor = function(it) {
         p.getCurrentTime().then(function(t) {
           if (p._salPaused) return;
           if (t >= endT - 0.2 || t < segStart - 0.5) {
+            p.setCurrentTime(segStart); p.play();
+          }
+        }).catch(function(){});
+      }, 100);
+    }
+  }
+
+  // Resume playing from current position — no seek to start.
+  // Only checks upper bound so it loops when the segment ends.
+  // No lower-bound check — if paused before segStart (e.g. after caret adjustment),
+  // just play from there without snapping back to segment start.
+  function resumeFromCurrent(p, segStart, segDur) {
+    suspendLoop();
+    var endT = segStart + segDur;
+    if (!p) return;
+    if (typeof p.playVideo === 'function') {
+      try { p._salPaused = false; p.playVideo(); } catch(ex) {}
+      window.seeLearnVideoTimers['v2host'] = setInterval(function() {
+        try {
+          if (p._salPaused) return;
+          var t = p.getCurrentTime();
+          if (t >= endT - 0.2) {
+            p.seekTo(segStart, true); p.playVideo();
+          }
+        } catch(ex) {}
+      }, 100);
+    } else if (typeof p.play === 'function') {
+      p._salPaused = false;
+      p.play().catch(function(){});
+      window.seeLearnVideoTimers['v2host'] = setInterval(function() {
+        p.getCurrentTime().then(function(t) {
+          if (p._salPaused) return;
+          if (t >= endT - 0.2) {
             p.setCurrentTime(segStart); p.play();
           }
         }).catch(function(){});
@@ -1019,7 +1153,8 @@ window.openVideoEditor = function(it) {
           var t = player.getCurrentTime();
           var seg = segs[activeSegIdx];
           var endT2 = seg.start + seg.dur;
-          if (t >= endT2 - 0.2 || t < seg.start - 0.5) {
+          // UPPER-BOUND ONLY — removing lower-bound prevents snap-to-start on spacebar resume
+          if (t >= endT2 - 0.2) {
             player.seekTo(seg.start, true); player.playVideo();
           }
         } catch(ex) {}
@@ -1060,7 +1195,8 @@ window.openVideoEditor = function(it) {
           player.getCurrentTime().then(function(t) {
             var seg = segs[activeSegIdx];
             var endT2 = seg.start + seg.dur;
-            if (t >= endT2 || t < seg.start - 0.5) {
+            // UPPER-BOUND ONLY
+            if (t >= endT2 - 0.2) {
               player.setCurrentTime(seg.start); player.play();
             }
           }).catch(function(){});
@@ -1109,15 +1245,51 @@ window.openVideoEditor = function(it) {
 
   function saveEditor() {
     readInputs();
-    it.VidRange   = window.serializeSegments(segs);
-    it.VidComment = segs.map(function(s) { return s.comment || ''; }).join(', ');
-    it.Mute       = iMute.checked ? '1' : '0';
-    // Use saveData() if available (writes sal-edited + both storage keys)
-    // Fallback for safety if called before ui.js initialises saveData
+    var newVidRange   = window.serializeSegments(segs);
+    var newVidComment = segs.map(function(s) { return s.comment || ''; }).join(', ');
+    var newMute       = iMute.checked ? '1' : '0';
+
+    // Update it (the linksData object reference) directly
+    it.VidRange   = newVidRange;
+    it.VidComment = newVidComment;
+    it.Mute       = newMute;
+
+    // CRITICAL: scrubUnderscores() in saveData() reassigns linksData to a NEW array,
+    // orphaning the 'it' reference. So we must find the entry by index in linksData
+    // and update it there BEFORE anything reassigns linksData.
+    var idx = linksData ? linksData.indexOf(it) : -1;
+    if (idx === -1 && linksData) {
+      // Fallback: find by link+cell identity
+      idx = linksData.findIndex(function(r) {
+        return r.link === it.link && r.cell === it.cell;
+      });
+    }
+    if (idx !== -1 && linksData) {
+      linksData[idx].VidRange   = newVidRange;
+      linksData[idx].VidComment = newVidComment;
+      linksData[idx].Mute       = newMute;
+    }
+
+    // Also update Tabulator row so syncTab() doesn't overwrite
+    if (window._salTab) {
+      try {
+        var rows = window._salTab.getRows();
+        for (var ri = 0; ri < rows.length; ri++) {
+          var rd = rows[ri].getData();
+          if (rd.link === it.link && rd.cell === it.cell) {
+            rows[ri].update({ VidRange: newVidRange, VidComment: newVidComment, Mute: newMute });
+            break;
+          }
+        }
+      } catch(ex) {}
+    }
+
+    // Write directly to localStorage (skipSync=true avoids syncTab overwriting,
+    // and we've already updated linksData[idx] above before any reassignment)
     if (window.saveData) {
-      window.saveData(true);  // skipSync — we've already updated linksData via it.*
+      window.saveData(true);
     } else {
-      var s = JSON.stringify(window.linksData);
+      var s = JSON.stringify(linksData);
       localStorage.setItem('seeandlearn-links', s);
       localStorage.setItem('mlynx-links', s);
       localStorage.setItem('sal-edited', Date.now().toString());
@@ -1130,6 +1302,150 @@ window.openVideoEditor = function(it) {
 
   document.getElementById('v2save').addEventListener('click',  saveEditor);
   document.getElementById('v2close').addEventListener('click', closeEditor);
+
+  // ── Re-order segments by start time, preserving comment alignment ─────────
+  document.getElementById('v2reorder').addEventListener('click', function() {
+    if (segs.length < 2) return;  // nothing to reorder
+    // Sort by start time
+    var sorted = segs.slice().sort(function(a, b) { return a.start - b.start; });
+    // Check if already ordered
+    var changed = sorted.some(function(s, i) { return s !== segs[i]; });
+    if (!changed) { return; }  // already in order, nothing to do
+    segs.splice(0, segs.length);
+    sorted.forEach(function(s) { segs.push(s); });
+    activeSegIdx = 0;
+    iStart.value = segs[0].start;
+    iDur.value   = segs[0].dur;
+    updateSegData();
+    renderSegTabs();
+    mountLoop();
+  });
+
+  // Shared download helper — appends to overlay (not body) to avoid z-index issues
+  function downloadText(filename, content) {
+    var blob = new Blob([content], {type:'text/plain'});
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.style.display = 'none';
+    overlay.appendChild(a);
+    a.click();
+    setTimeout(function() { overlay.removeChild(a); URL.revokeObjectURL(a.href); }, 1000);
+  }
+
+  // Sanitize cname for use in filenames
+  function safeFilename(s) {
+    return (s || 'video').replace(/[^a-zA-Z0-9_\-]/g, '_').replace(/_+/g, '_').slice(0, 40);
+  }
+
+  // ── ffmpeg Windows .bat — frame-accurate (re-encode) + concat, all in one file ──
+  document.getElementById('v2ffmpeg').addEventListener('click', function() {
+    if (!segs.length) return;
+    var cname = safeFilename(it.cname || it.cell || 'video');
+    var ytMatch = it.link.match(/(?:v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+    var inputFile = ytMatch ? (ytMatch[1] + '.mp4') : 'input.mp4';
+    var outputFile = cname + '_merged.mp4';
+    var concatFile = 'concat_' + cname + '.txt';
+
+    var bat = [];
+    bat.push('@echo off');
+    bat.push('setlocal');
+    bat.push('rem ─── ffmpeg frame-accurate segment merge ───');
+    bat.push('rem cname:  ' + (it.cname || ''));
+    bat.push('rem source: ' + inputFile + '   (place in same folder as this .bat)');
+    bat.push('rem output: ' + outputFile);
+    bat.push('rem Uses -c:v libx264 -crf 18 for frame-accurate cuts (re-encode, high quality)');
+    bat.push('');
+    bat.push('set INPUT=' + inputFile);
+    bat.push('set OUTPUT=' + outputFile);
+    bat.push('');
+
+    // Step 1: extract each segment (frame-accurate via re-encode)
+    var tempFiles = [];
+    segs.forEach(function(seg, i) {
+      var end = parseFloat((seg.start + seg.dur).toFixed(3));
+      var tmp = cname + '_seg' + String(i+1).padStart(2,'0') + '.mp4';
+      var label = seg.comment ? '  rem ' + seg.comment : '';
+      tempFiles.push(tmp);
+      bat.push('echo Extracting segment ' + (i+1) + ' of ' + segs.length +
+        (seg.comment ? ' (' + seg.comment + ')' : '') + '...');
+      bat.push('ffmpeg -y -ss ' + seg.start + ' -to ' + end +
+        ' -i "%INPUT%" -c:v libx264 -crf 18 -c:a aac "' + tmp + '"' + label);
+    });
+
+    bat.push('');
+    bat.push('echo Writing concat list...');
+    bat.push('(');
+    tempFiles.forEach(function(f) { bat.push("  echo file '" + f + "'"); });
+    bat.push(') > "' + concatFile + '"');
+
+    bat.push('');
+    bat.push('echo Joining segments...');
+    bat.push('ffmpeg -y -f concat -safe 0 -i "' + concatFile + '" -c copy "%OUTPUT%"');
+
+    bat.push('');
+    bat.push('echo Cleaning up...');
+    bat.push('del "' + concatFile + '"');
+    tempFiles.forEach(function(f) { bat.push('del "' + f + '"'); });
+
+    bat.push('');
+    bat.push('echo.');
+    bat.push('echo Done: %OUTPUT%');
+    bat.push('pause');
+    bat.push('endlocal');
+
+    downloadText(cname + '.bat', bat.join('\r\n'));
+  });
+
+  // ── LosslessCut .llc project file ─────────────────────────────────────────
+  document.getElementById('v2llc').addEventListener('click', function() {
+    if (!segs.length) return;
+    var cname = safeFilename(it.cname || it.cell || 'video');
+    var ytMatch = it.link.match(/(?:v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+    var mediaFile = ytMatch ? (ytMatch[1] + '.mp4') : (cname + '.mp4');
+
+    // JSON5 format that LosslessCut expects
+    var lines = [];
+    lines.push('{');
+    lines.push('  version: 1,');
+    lines.push('  mediaFileName: "' + mediaFile + '",');
+    lines.push('  cutSegments: [');
+    segs.forEach(function(seg, i) {
+      var end = parseFloat((seg.start + seg.dur).toFixed(6));
+      var name = (seg.comment || '').replace(/"/g, '\\"');
+      var comma = (i < segs.length - 1) ? ',' : '';
+      lines.push('    {');
+      lines.push('      start: ' + seg.start + ',');
+      lines.push('      end: ' + end + ',');
+      lines.push('      name: "' + name + '",');
+      lines.push('    }' + comma);
+    });
+    lines.push('  ],');
+    lines.push('}');
+
+    downloadText(cname + '.llc', lines.join('\n'));
+  });
+
+  // Caption toggle for VideoEdit
+  var ccOnEdit = false;
+  document.getElementById('v2cc').addEventListener('click', function() {
+    ccOnEdit = !ccOnEdit;
+    this.style.background = ccOnEdit ? 'rgba(0,100,0,0.5)' : 'rgba(0,60,0,0.3)';
+    this.style.color = ccOnEdit ? '#4f8' : '#8a8';
+    var p = getEditorPlayer();
+    if (!p) return;
+    if (typeof p.loadModule === 'function') {
+      try {
+        if (ccOnEdit) { p.loadModule('captions'); p.setOption('captions', 'track', {languageCode:'en'}); }
+        else p.unloadModule('captions');
+      } catch(ex) {}
+    } else if (p.enableTextTrack) {
+      try {
+        if (ccOnEdit) p.enableTextTrack('en').catch(function(){});
+        else p.disableTextTrack().catch(function(){});
+      } catch(ex) {}
+    }
+  });
 
   // ── Ctrl+click on video panel → insert new segment at current time ────────
   host.addEventListener('click', function(e) {
@@ -1157,43 +1473,51 @@ window.openVideoEditor = function(it) {
 
   // ── Keyboard ──────────────────────────────────────────────────────────────
   function handleKey(e) {
+    // Never intercept keys when focus is in an input or textarea
+    var isInp = document.activeElement &&
+      (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA');
+
     if (e.ctrlKey && e.key.toLowerCase() === 's') {
+      // If mini comment editor is open, let it handle ^S (its listener saves+closes the popup)
+      if (document.getElementById('v2comment-popup')) return;
       e.preventDefault(); e.stopPropagation(); saveEditor(); return;
     }
-    if (e.key === 'Escape') { closeEditor(); return; }
-    if (e.key === ' ' || e.key === 'Spacebar') {
+    if (e.key === 'Escape') {
+      // If mini comment editor is open, close just that
+      var commentPop = document.getElementById('v2comment-popup');
+      if (commentPop) { commentPop.remove(); return; }
+      closeEditor(); return;
+    }
+    if ((e.key === ' ' || e.key === 'Spacebar') && !isInp) {
       e.preventDefault(); e.stopPropagation();
       var p = getEditorPlayer();
       if (!p) return;
       if (p._salPaused) {
-        // Currently paused — resume
+        // Resume from current frame — no seekTo so no snap to start
         scrubShield.style.display = 'none';
         var seg = segs[activeSegIdx];
-        resumeLoop(p, seg.start, seg.dur);
+        resumeFromCurrent(p, seg.start, seg.dur);
       } else {
-        // Currently playing — pause
+        // Pause: suspend interval, show shield, call pauseVideo
+        p._salPaused = true;
         suspendLoop();
+        scrubShield.style.display = 'block';
         if (typeof p.pauseVideo === 'function') {
-          try { p._salPaused = true; p.pauseVideo(); } catch(ex) {}
+          try { p.pauseVideo(); } catch(ex) {}
         } else if (p.pause) {
-          p._salPaused = true; p.pause().catch(function(){});
+          p.pause().catch(function(){});
         }
       }
       return;
     }
-    if (e.key === 'Tab') {
+    if (e.key === 'Tab' && !isInp) {
       e.preventDefault(); e.stopPropagation();
       setActiveSeg((activeSegIdx + 1) % segs.length); return;
     }
 
-    // Arrow keys adjust start (left/right) and duration (up/down) — no remount
-    // L and R letter keys are NOT bound here — only arrow keys
-    var isInp = document.activeElement &&
-      (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA');
     var k = e.key;
-
     if (k==='ArrowLeft'||k==='ArrowRight'||k==='ArrowUp'||k==='ArrowDown') {
-      if (isInp) return;  // don't intercept arrow keys when typing in an input
+      if (isInp) return;
       e.preventDefault();
       if (k==='ArrowLeft')  applyDeltaNoRemount('start', -0.1);
       if (k==='ArrowRight') applyDeltaNoRemount('start',  0.1);

@@ -14,7 +14,7 @@ function syncAdminUI() {
 let GW=0, GH=0, cellW=0, cellH=0, isPortrait=false, bgColor='#c8ddf0';
 let fitMode = localStorage.getItem("mlynx-fit")||"fc";
 let showCellLbl=false, showCname=true;
-let linksData=[];
+var linksData=[];  // var (not let) so window.linksData works from all scripts
 
 // Keyframe-only seek — when true, YouTube seekTo uses allowSeekAhead=false (faster on slow machines)
 window.keyframeOnly = localStorage.getItem('seeandlearn-keyframeOnly') === '1';

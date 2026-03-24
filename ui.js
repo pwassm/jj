@@ -3,11 +3,22 @@
 // ─── VideoShow (fullscreen) ───────────────────────────────────────────────────
 window.openFS = function(it) {
   if (!it.link) return;
+  // Only track as last video if it's actually a video (not an image)
+  const isVid = it.VidRange && window.parseVideoAsset &&
+    window.parseVideoAsset(String(it.VidRange)) !== null;
+  const isYT  = window.isYouTubeLink && window.isYouTubeLink(it.link);
+  const isVim = window.isVimeoLink && window.isVimeoLink(it.link);
+  if (isVid || isYT || isVim) {
+    window._lastVideoShown = it;
+  }
 
   const isVidNode = window.parseVideoAsset && window.parseVideoAsset(it.VidRange) !== null;
   const parsed    = isVidNode ? window.parseVideoAsset(it.VidRange) : null;
   const vidComments = (it.VidComment || '').split(',').map(s => s.trim());
-  function segLabel(i) { return vidComments[i] || String(i + 1); }
+  function segLabel(i) {
+    if (window._fsShowComments === false) return String(i + 1);
+    return vidComments[i] || String(i + 1);
+  }
 
   function selectedDurSec() {
     return parsed ? parsed.reduce((s, seg) => s + seg.dur, 0) : 0;
@@ -36,8 +47,9 @@ window.openFS = function(it) {
   // ── Build DOM ──────────────────────────────────────────────────────────────
   const fs = document.createElement('div');
   fs.id = 'fs-overlay';
+  fs.setAttribute('tabindex', '-1');  // focusable so keydown fires when focus returns here
   fs.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:#000;'
-    + 'z-index:99999;display:flex;flex-direction:column;font-family:sans-serif;';
+    + 'z-index:99999;display:flex;flex-direction:column;font-family:sans-serif;outline:none;';
 
   // Upper info bar (absolute, overlays video)
   const topBar = document.createElement('div');
@@ -133,31 +145,54 @@ window.openFS = function(it) {
           tl.appendChild(band);
           xPx += wPx + 1;
         });
-        // Playhead in selected mode: map video time → position within compressed bar
+        // Playhead in selected mode
         if (curT !== undefined) {
           const totalSel = selectedDurSec() || 1;
-          let pxPos = 0, xAcc = 0, selAcc = 0, placed = false;
+          let pxPos = 0, xAcc = 0, placed = false;
           if (parsed) {
             parsed.forEach(function(seg, i) {
               const wPx = Math.max(Math.round((seg.dur / totalSel) * W), 3);
               if (!placed) {
                 if (curT >= seg.start && curT < seg.start + seg.dur) {
-                  // Inside this segment
                   pxPos = xAcc + Math.round(((curT - seg.start) / seg.dur) * wPx);
                   placed = true;
                 } else if (curT < seg.start) {
-                  // Between previous segment and this one — snap to start of this band
-                  pxPos = xAcc;
-                  placed = true;
+                  pxPos = xAcc; placed = true;
                 }
               }
               xAcc += wPx + 1;
-              selAcc += seg.dur;
             });
-            if (!placed) pxPos = xAcc; // past all segments — right edge
+            if (!placed) pxPos = xAcc;
           }
           addPlayhead(pxPos);
           timeLbl.textContent = curT.toFixed(1) + 's';
+        }
+        // A/B markers in selected mode (map to compressed position)
+        function abPosPx(t) {
+          if (!parsed || !totalVidDur) return -1;
+          const totalSel = selectedDurSec() || 1;
+          let xAcc = 0;
+          for (let i = 0; i < parsed.length; i++) {
+            const seg = parsed[i];
+            const wPx = Math.max(Math.round((seg.dur / totalSel) * W), 3);
+            if (t >= seg.start && t < seg.start + seg.dur) {
+              return xAcc + Math.round(((t - seg.start) / seg.dur) * wPx);
+            }
+            xAcc += wPx + 1;
+          }
+          return -1;
+        }
+        if (abA !== null) {
+          const px = abPosPx(abA);
+          if (px >= 0) tl.insertAdjacentHTML('beforeend',
+            '<div style="position:absolute;top:0;bottom:0;left:' + px + 'px;width:3px;background:#ff0;pointer-events:none;z-index:4;">'
+            + '<div style="font-size:8px;background:#ff0;color:#000;font-weight:bold;line-height:1;padding:1px 2px;">A</div></div>');
+        }
+        if (abB !== null) {
+          const px = abPosPx(abB);
+          if (px >= 0) tl.insertAdjacentHTML('beforeend',
+            '<div style="position:absolute;top:0;bottom:0;left:' + px + 'px;width:3px;background:#f80;pointer-events:none;z-index:4;">'
+            + '<div style="font-size:8px;background:#f80;color:#000;font-weight:bold;line-height:1;padding:1px 2px;">B</div></div>');
         }
       }
     } else {
@@ -313,38 +348,58 @@ window.openFS = function(it) {
   const closBtn = mkBtn('✕', 'Close (tap video)',
     'margin-left:auto;border-color:#f66;color:#f88;background:rgba(80,0,0,0.4);');
 
+  const btnCC = mkBtn('CC', 'Toggle captions/subtitles',
+    'border-color:#8a8;color:#8a8;background:rgba(0,60,0,0.3);');
+  let ccOn = false;
+
   ctrlRow.appendChild(btnStepL); ctrlRow.appendChild(btnStepR);
   ctrlRow.appendChild(timeLbl);
   ctrlRow.appendChild(speedWrap);
   ctrlRow.appendChild(playModeBtn);
+  ctrlRow.appendChild(btnCC);
+  // A/B fine-adjustment buttons — created before ctrlRow assembly
+  function mkAb(label, title, col) {
+    const b = document.createElement('button');
+    b.innerHTML = label; b.title = title;
+    b.style.cssText = 'padding:2px 5px;font-size:11px;border-radius:3px;cursor:pointer;'
+      + 'border:1px solid #666;background:#222;color:' + col + ';flex-shrink:0;';
+    return b;
+  }
+  const abAdjRow = document.createElement('div');
+  abAdjRow.style.cssText = 'display:none;align-items:center;gap:3px;font-size:11px;flex-shrink:0;';
+  const btnA1m = mkAb('-1s','A start -1s','#ff0');
+  const btnAfm = mkAb('&#9664;','A start -1 frame','#ff0');
+  const btnAfp = mkAb('&#9654;','A start +1 frame','#ff0');
+  const btnA1p = mkAb('+1s','A start +1s','#ff0');
+  const abSep  = document.createElement('span');
+  abSep.style.cssText = 'color:#555;padding:0 3px;flex-shrink:0;';  abSep.textContent = '|';
+  const btnB1m = mkAb('-1s','B end -1s','#f80');
+  const btnBfm = mkAb('&#9664;','B end -1 frame','#f80');
+  const btnBfp = mkAb('&#9654;','B end +1 frame','#f80');
+  const btnB1p = mkAb('+1s','B end +1s','#f80');
+  const btnAbSave = mkAb('💾','Save A/B for this video','#8ef');
+  abAdjRow.appendChild(document.createTextNode('A '));
+  [btnA1m,btnAfm,btnAfp,btnA1p,abSep,document.createTextNode(' B '),btnB1m,btnBfm,btnBfp,btnB1p,btnAbSave]
+    .forEach(function(el){ abAdjRow.appendChild(el); });
+
   ctrlRow.appendChild(audioBtn);
   ctrlRow.appendChild(btnA); ctrlRow.appendChild(btnB);
   ctrlRow.appendChild(abLbl);
+  ctrlRow.appendChild(abAdjRow);  // inline in same row, hidden until A+B set
   ctrlRow.appendChild(closBtn);
 
   bar.appendChild(tl);
-
-  // A/B frame adjustment row — only shown when A/B marks are set
-  const abAdjRow = document.createElement('div');
-  abAdjRow.style.cssText = 'display:none;align-items:center;gap:4px;padding:2px 0;font-size:11px;';
-  abAdjRow.innerHTML = '<span style="color:#ff0;min-width:12px;">A</span>'
-    + '<button id="fs-a-prev" title="A start -1 frame" style="padding:2px 6px;font-size:12px;border-radius:3px;'
-    + 'border:1px solid #666;background:#222;color:#ff0;cursor:pointer;">&#9664;</button>'
-    + '<button id="fs-a-next" title="A start +1 frame" style="padding:2px 6px;font-size:12px;border-radius:3px;'
-    + 'border:1px solid #666;background:#222;color:#ff0;cursor:pointer;">&#9654;</button>'
-    + '<span style="color:#555;padding:0 4px;">|</span>'
-    + '<span style="color:#f80;min-width:12px;">B</span>'
-    + '<button id="fs-b-prev" title="B end -1 frame" style="padding:2px 6px;font-size:12px;border-radius:3px;'
-    + 'border:1px solid #666;background:#222;color:#f80;cursor:pointer;">&#9664;</button>'
-    + '<button id="fs-b-next" title="B end +1 frame" style="padding:2px 6px;font-size:12px;border-radius:3px;'
-    + 'border:1px solid #666;background:#222;color:#f80;cursor:pointer;">&#9654;</button>';
-  bar.appendChild(abAdjRow);
-
   bar.appendChild(ctrlRow);
   fs.appendChild(topBar);
   fs.appendChild(vidHost);
   fs.appendChild(bar);
   document.body.appendChild(fs);
+
+  // Focus the overlay immediately so keydown events (double-tap switcher) fire here.
+  // Clicking the control bar re-focuses the overlay (YouTube iframe steals focus on load).
+  setTimeout(function() { fs.focus(); }, 100);
+  bar.addEventListener('pointerup', function() { fs.focus(); });
+  topBar.addEventListener('pointerup', function() { fs.focus(); });
 
   // Initial render
   renderTL(undefined);
@@ -419,7 +474,7 @@ window.openFS = function(it) {
         try {
           const t = p.getCurrentTime();
           const seg = segsArg[segIdx];
-          if (t >= seg.start + seg.dur - 0.2 || t < seg.start - 0.5) {
+          if (t >= seg.start + seg.dur - 0.2) {
             segIdx = (segIdx + 1) % segsArg.length;
             p.seekTo(segsArg[segIdx].start, !window.keyframeOnly);
             p.playVideo();
@@ -434,7 +489,7 @@ window.openFS = function(it) {
       window.seeLearnVideoTimers[vidHost.id] = setInterval(function() {
         p.getCurrentTime().then(function(t) {
           const seg = segsArg[segIdx];
-          if (t >= seg.start + seg.dur - 0.2 || t < seg.start - 0.5) {
+          if (t >= seg.start + seg.dur - 0.2) {
             segIdx = (segIdx + 1) % segsArg.length;
             p.setCurrentTime(segsArg[segIdx].start);
             p.play();
@@ -530,14 +585,23 @@ window.openFS = function(it) {
     const segsArg = playMode === 'selected'
       ? parsed
       : [{ start: 0, dur: totalVidDur || 9999 }];
+    // Find which segment current position is in (avoid immediate snap-to-start)
     let segIdx = 0;
+    if (lastCurT !== undefined && segsArg) {
+      for (let i = 0; i < segsArg.length; i++) {
+        if (lastCurT >= segsArg[i].start && lastCurT < segsArg[i].start + segsArg[i].dur) {
+          segIdx = i; break;
+        }
+      }
+    }
     if (typeof p.seekTo === 'function') {
       try { p.playVideo(); } catch(ex) {}
       window.seeLearnVideoTimers[vidHost.id] = setInterval(function() {
         try {
           const t = p.getCurrentTime();
           const seg = segsArg[segIdx];
-          if (t >= seg.start + seg.dur - 0.2 || t < seg.start - 0.5) {
+          // UPPER-BOUND ONLY — never snap back on lower bound (causes "goes to beginning")
+          if (t >= seg.start + seg.dur - 0.2) {
             segIdx = (segIdx + 1) % segsArg.length;
             p.seekTo(segsArg[segIdx].start, !window.keyframeOnly);
             p.playVideo();
@@ -549,7 +613,7 @@ window.openFS = function(it) {
       window.seeLearnVideoTimers[vidHost.id] = setInterval(function() {
         p.getCurrentTime().then(function(t) {
           const seg = segsArg[segIdx];
-          if (t >= seg.start + seg.dur - 0.2 || t < seg.start - 0.5) {
+          if (t >= seg.start + seg.dur - 0.2) {
             segIdx = (segIdx + 1) % segsArg.length;
             p.setCurrentTime(segsArg[segIdx].start);
             p.play();
@@ -583,42 +647,59 @@ window.openFS = function(it) {
   tl.addEventListener('pointercancel', function() { isScrubbing = false; });
 
   // ── A/B ───────────────────────────────────────────────────────────────────
+  // A/B localStorage persistence — keyed by video URL
+  const abStorageKey = 'sal-ab:' + (it.link || '').split('?')[0];
+  function saveAbMarks() {
+    if (abA !== null && abB !== null)
+      localStorage.setItem(abStorageKey, JSON.stringify({a:abA,b:abB}));
+    else
+      localStorage.removeItem(abStorageKey);
+  }
+  function loadAbMarks() {
+    try {
+      const v = localStorage.getItem(abStorageKey);
+      if (v) { const d = JSON.parse(v); abA = d.a; abB = d.b; }
+    } catch(ex) {}
+  }
+  loadAbMarks();  // restore saved A/B on open
+
   function updateAbLbl() {
     abLbl.textContent = abA !== null ? ('A:' + abA.toFixed(1) + (abB !== null ? ' B:' + abB.toFixed(1) : '')) : '';
-    // Show/hide the A/B frame adjustment row
     abAdjRow.style.display = (abA !== null && abB !== null) ? 'flex' : 'none';
+    // Update A/B button highlight states
+    btnA.style.background = abA !== null ? 'rgba(180,180,0,0.5)' : 'rgba(80,80,0,0.3)';
+    btnB.style.background = abB !== null ? 'rgba(180,80,0,0.5)' : 'rgba(80,40,0,0.3)';
   }
 
-  // Wire A/B frame adjustment buttons (appear when both A and B are set)
-  const FS_FRAME = 1 / 30;
-  document.getElementById('fs-a-prev').addEventListener('click', function(e) {
-    e.stopPropagation();
-    if (abA === null) return;
-    abA = Math.max(0, abA - FS_FRAME);
+  const FS_FRAME = 1/30;
+  function abStep(which, delta) {
+    if (which === 'a') {
+      if (abA === null) return;
+      abA = Math.max(0, abA + delta);
+      if (abB !== null && abA >= abB) abB = abA + 0.1;
+    } else {
+      if (abB === null) return;
+      abB = Math.max((abA || 0) + 0.1, abB + delta);
+    }
+    // Seek to the adjusted mark so user can see the frame — no pause call
+    const seekT = (which === 'a') ? abA : abB;
+    fsSeek(seekT);
     if (abB !== null) startAbLoop();
+    saveAbMarks();
     updateAbLbl(); renderTL(lastCurT);
-  });
-  document.getElementById('fs-a-next').addEventListener('click', function(e) {
-    e.stopPropagation();
-    if (abA === null) return;
-    abA = abA + FS_FRAME;
-    if (abB !== null && abA >= abB) abB = abA + FS_FRAME;
-    if (abB !== null) startAbLoop();
-    updateAbLbl(); renderTL(lastCurT);
-  });
-  document.getElementById('fs-b-prev').addEventListener('click', function(e) {
-    e.stopPropagation();
-    if (abB === null) return;
-    abB = Math.max(abA + FS_FRAME, abB - FS_FRAME);
-    startAbLoop();
-    updateAbLbl(); renderTL(lastCurT);
-  });
-  document.getElementById('fs-b-next').addEventListener('click', function(e) {
-    e.stopPropagation();
-    if (abB === null) return;
-    abB = abB + FS_FRAME;
-    startAbLoop();
-    updateAbLbl(); renderTL(lastCurT);
+  }
+  btnA1m.addEventListener('click', function(e){ e.stopPropagation(); abStep('a',-1); });
+  btnAfm.addEventListener('click', function(e){ e.stopPropagation(); abStep('a',-FS_FRAME); });
+  btnAfp.addEventListener('click', function(e){ e.stopPropagation(); abStep('a', FS_FRAME); });
+  btnA1p.addEventListener('click', function(e){ e.stopPropagation(); abStep('a', 1); });
+  btnB1m.addEventListener('click', function(e){ e.stopPropagation(); abStep('b',-1); });
+  btnBfm.addEventListener('click', function(e){ e.stopPropagation(); abStep('b',-FS_FRAME); });
+  btnBfp.addEventListener('click', function(e){ e.stopPropagation(); abStep('b', FS_FRAME); });
+  btnB1p.addEventListener('click', function(e){ e.stopPropagation(); abStep('b', 1); });
+  btnAbSave.addEventListener('click', function(e){
+    e.stopPropagation(); saveAbMarks();
+    btnAbSave.style.color = '#4f8';
+    setTimeout(function(){ btnAbSave.style.color = '#8ef'; }, 1200);
   });
 
   function startAbLoop() {
@@ -683,6 +764,33 @@ window.openFS = function(it) {
     this.textContent = audioLabels[audioMode];
     mountFSPlayer();
   });
+
+  // Caption/subtitle toggle
+  btnCC.addEventListener('click', function(e) {
+    e.stopPropagation();
+    ccOn = !ccOn;
+    btnCC.style.background = ccOn ? 'rgba(0,100,0,0.5)' : 'rgba(0,60,0,0.3)';
+    btnCC.style.color = ccOn ? '#4f8' : '#8a8';
+    const p = getP();
+    if (!p) return;
+    if (typeof p.loadModule === 'function') {
+      // YouTube IFrame API: load captions module and set language
+      try {
+        if (ccOn) {
+          p.loadModule('captions');
+          p.setOption('captions', 'track', { languageCode: 'en' });
+        } else {
+          p.unloadModule('captions');
+        }
+      } catch(ex) {}
+    } else if (p.enableTextTrack) {
+      // Vimeo
+      try {
+        if (ccOn) p.enableTextTrack('en').catch(function(){});
+        else p.disableTextTrack().catch(function(){});
+      } catch(ex) {}
+    }
+  });
   closBtn.addEventListener('click', function(e) { e.stopPropagation(); fsClose(); });
 
   // Escape closes VideoShow
@@ -691,14 +799,37 @@ window.openFS = function(it) {
     if (e.key === ' ' || e.key === 'Spacebar') {
       e.preventDefault(); e.stopPropagation();
       if (isPlayingFS) fsPause(); else fsPlay();
+      return;
     }
+    // M = toggle mute
+    if (e.key.toLowerCase() === 'm') {
+      e.stopPropagation();
+      audioMode = (audioMode === 0) ? 1 : 0;
+      audioBtn.textContent = audioLabels[audioMode];
+      sessionStorage.setItem('fs-audio', audioMode);
+      const p = getP();
+      if (p) {
+        if (typeof p.mute === 'function') { if (audioMode === 0) { try { p.mute(); } catch(x){} } else { try { p.unMute(); } catch(x){} } }
+        else if (p.setVolume) { p.setVolume(audioMode === 0 ? 0 : 1).catch(function(){}); }
+      }
+    }
+    // C = toggle comment labels on timeline bands
+    if (e.key.toLowerCase() === 'c') {
+      e.stopPropagation();
+      window._fsShowComments = !window._fsShowComments;
+      renderTL(lastCurT);
+    }
+    // G/T/E/V double-tap works when overlay has focus — forward to switcher
+    // (The document-level handler handles it when document has focus)
   }
   document.addEventListener('keydown', fsKeyHandler);
+  fs.addEventListener('keydown', fsKeyHandler);  // also on fs for when it holds focus
 
   function fsClose() {
     clearInterval(durTimer); clearInterval(playTimer);
     if (abLoopTimer) clearInterval(abLoopTimer);
     document.removeEventListener('keydown', fsKeyHandler);
+    fs.removeEventListener('keydown', fsKeyHandler);
     window.stopCellVideoLoop(vidHost.id);
     fs.remove();
   }
@@ -724,9 +855,14 @@ function positionMenuPanel() {
   menuPanel.style.overflowY = 'scroll';
   menuPanel.style.bottom    = (PAD + 48 + 6) + 'px'; // just above the button
   if (isPortrait) {
-    // Button is at bottom-left in portrait
+    // Button is at bottom-left in portrait — shift panel 80px left of right edge
     menuPanel.style.left  = PAD + 'px';
     menuPanel.style.right = 'auto';
+    // On mobile portrait, nudge panel left by 80px so it doesn't hug the edge
+    if (ISMOBILE) {
+      menuPanel.style.left  = 'auto';
+      menuPanel.style.right = (viewW - PAD - 48 - 80) + 'px';
+    }
   } else {
     // Button is at bottom-right in landscape
     menuPanel.style.right = PAD + 'px';
@@ -884,6 +1020,11 @@ function reorderKeys(keyOrder) {
 // ── Table state ───────────────────────────────────────────────────────────
 let _colOrder  = [];   // current visual column order (field names)
 let _activeRow = null; // Tabulator Row object
+Object.defineProperty(window, '_activeRow', {
+  get() { return _activeRow; },
+  set(v) { _activeRow = v; },
+  configurable: true
+});
 let _activeCol = null; // field name string
 
 window._salTab  = null; // the Tabulator instance
@@ -1018,6 +1159,11 @@ function makeCommaListEditor(terms) {
       dd.style.left=r.left+'px'; dd.style.top=r.bottom+'px'; dd.style.width=r.width+'px';
     }
     function lastToken() { const p=inp.value.split(','); return p[p.length-1].trimStart(); }
+    function chooseItem(t) {
+      // Replace last token with chosen term, append a space (not comma) as separator
+      const p = inp.value.split(','); p[p.length-1] = ' ' + t; inp.value = p.join(',') + ' ';
+      dd.style.display = 'none'; inp.focus();
+    }
     function showDD() {
       const tok=lastToken();
       const hits=tok ? terms.filter(t=>t.toLowerCase().startsWith(tok.toLowerCase())) : terms;
@@ -1030,8 +1176,7 @@ function makeCommaListEditor(terms) {
         it.addEventListener('mouseleave',()=>it.style.background='');
         it.addEventListener('mousedown',e=>{
           e.preventDefault();
-          const p=inp.value.split(','); p[p.length-1]=' '+t; inp.value=p.join(',')+', ';
-          showDD(); inp.focus();
+          chooseItem(t);
         });
         dd.appendChild(it);
       });
@@ -1047,9 +1192,6 @@ function makeCommaListEditor(terms) {
     inp.addEventListener('blur',  ()=>setTimeout(()=>{ cleanup(); success(inp.value.trim()); },150));
     inp.addEventListener('keydown', e=>{
       e.stopPropagation();
-      if (e.key==='Enter')  { e.preventDefault(); cleanup(); success(inp.value.trim()); }
-      if (e.key==='Escape') { e.preventDefault(); cleanup(); cancel(); }
-      if (e.key==='Tab')    { cleanup(); success(inp.value.trim()); }
       if (e.key==='ArrowDown'||e.key==='ArrowUp') {
         const items=dd.querySelectorAll('div'); if (!items.length) return;
         e.preventDefault();
@@ -1059,7 +1201,21 @@ function makeCommaListEditor(terms) {
         idx=e.key==='ArrowDown'?Math.min(idx+1,items.length-1):Math.max(idx-1,0);
         items[idx].classList.add('dd-hi'); items[idx].style.background='#2a4a6a';
         items[idx].scrollIntoView({block:'nearest'});
+        return;
       }
+      if (e.key==='Enter') {
+        e.preventDefault();
+        const hi = dd.querySelector('.dd-hi');
+        if (hi && dd.style.display !== 'none') {
+          // Choose the highlighted dropdown item
+          chooseItem(hi.textContent);
+        } else {
+          cleanup(); success(inp.value.trim());
+        }
+        return;
+      }
+      if (e.key==='Escape') { e.preventDefault(); cleanup(); cancel(); }
+      if (e.key==='Tab')    { cleanup(); success(inp.value.trim()); }
     });
     return wrap;
   };
@@ -1126,8 +1282,18 @@ window.openTable = function() {
 
   _colOrder.forEach(k => {
     const def = { title:k, field:k, editor:'input', headerSort:true, maxWidth:COL_W_MAX, minWidth:COL_W_MIN, resizable:true, tooltip:true,
-      cellClick(e,cell){ _activeRow=cell.getRow(); _activeCol=cell.getColumn().getField(); updateFocusIndicator();
-        if (typeof showThumbForRow === 'function') showThumbForRow(cell.getRow().getData(), cell.getRow().getElement());
+      cellClick(e, cell) {
+        _activeRow = cell.getRow(); _activeCol = cell.getColumn().getField(); updateFocusIndicator();
+        // Ctrl+click anywhere on row → open VideoEdit (if row has valid VidRange)
+        if (e.ctrlKey) {
+          const data = cell.getRow().getData();
+          if (data.link && data.VidRange && window.parseVideoAsset &&
+              window.parseVideoAsset(String(data.VidRange)) !== null) {
+            syncFromTabulator();
+            const entry = linksData.find(r => r.link === data.link && r.cell === data.cell);
+            if (entry && window.openVideoEditor) window.openVideoEditor(entry);
+          }
+        }
       },
       cellEdited(){ saveData(); }
     };
@@ -1562,8 +1728,8 @@ document.getElementById('miLoadGithub').addEventListener('pointerup', async e =>
 // Shows a small floating thumbnail panel whenever a row is clicked.
 // Dismissed by clicking the panel or clicking away.
 let _thumbPanel = null;
-let _thumbEnabled = true;  // toggled by Ctrl+I
-window._thumbEnabled = true; // expose for Tabulator formatter
+let _thumbEnabled = false; // OFF by default — toggle with Ctrl+I
+window._thumbEnabled = false;
 
 // Vimeo thumbnail cache: url → thumbnail src (async pre-fetched)
 const _vimeoThumbCache = {};
@@ -1683,7 +1849,7 @@ document.getElementById('btn-show-thumb').addEventListener('click', function() {
 });
 // Update button label to show hint
 document.getElementById('btn-show-thumb').title = 'Ctrl+I to toggle thumbnail preview';
-document.getElementById('btn-show-thumb').textContent = 'Thumb ON';
+document.getElementById('btn-show-thumb').textContent = 'Thumb OFF';
 
 // ─── MakeJsonFromTopic stub ───────────────────────────────────────────────────
 document.getElementById('btn-make-json-topic').addEventListener('click', function() {
@@ -1700,7 +1866,6 @@ document.getElementById('btn-video-edit').addEventListener('click', function() {
   if (!data.link) { setStatus('Active row has no link', '#f88'); return; }
   const isVid = data.VidRange && window.parseVideoAsset && window.parseVideoAsset(String(data.VidRange)) !== null;
   if (!isVid) { setStatus('Active row is not a video (VidRange must be numeric start time)', '#f88'); return; }
-  // Find the matching linksData entry by syncing first
   syncFromTabulator();
   const entry = linksData.find(r => r.link === data.link && r.cell === data.cell);
   if (entry && window.openVideoEditor) {
@@ -1708,6 +1873,27 @@ document.getElementById('btn-video-edit').addEventListener('click', function() {
   } else {
     setStatus('Could not open VideoEdit for this row', '#f88');
   }
+});
+
+// Clear the 'cell' field on selected rows (or all rows if none selected)
+// so FastLink Bulk can re-assign grid positions 1a→5e sequentially.
+document.getElementById('btn-clear-cells').addEventListener('click', function() {
+  if (!window._salTab) return;
+  const sel = window._salTab.getSelectedRows();
+  const targets = sel.length ? sel : window._salTab.getRows();
+  if (!targets.length) return;
+  const label = sel.length ? sel.length + ' selected row' + (sel.length>1?'s':'') : 'all rows';
+  if (!confirm('Clear the "cell" field on ' + label + '?\nThis removes them from the grid until FastLink reassigns cells.')) return;
+  syncTab();
+  targets.forEach(function(row) {
+    const d = row.getData();
+    const idx = linksData.findIndex(function(r) { return r.link === d.link && r.cell === d.cell; });
+    if (idx !== -1) linksData[idx].cell = '';
+    row.update({ cell: '' });
+  });
+  saveData(true);
+  setStatus('Cleared cell field on ' + label, '#fa8');
+  if (window.renderGrid) window.renderGrid();
 });
 
 // ─── Column header strip ──────────────────────────────────────────────────────
