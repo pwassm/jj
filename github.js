@@ -46,7 +46,7 @@ window.pushToGitHub = async function() {
   setGhStatus('Pushing to GitHub...', '#8ef');
 
   try {
-    var path   = 'links.json';
+    var path   = 'masterlinks.json';
     var apiUrl = 'https://api.github.com/repos/' + owner + '/' + repo + '/contents/' + path;
     var headers = {
       'Authorization': 'Bearer ' + token,
@@ -79,7 +79,7 @@ window.pushToGitHub = async function() {
     var putRes = await fetch(apiUrl, {
       method: 'PUT',
       headers: headers,
-      body: JSON.stringify({ message: 'Update links.json ' + stamp, content: contentB64, sha: sha })
+      body: JSON.stringify({ message: 'Update masterlinks.json ' + stamp, content: contentB64, sha: sha })
     });
 
     if (putRes.ok) {

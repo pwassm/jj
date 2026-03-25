@@ -1069,7 +1069,7 @@ function saveJson() {
   saveData();
   const blob = new Blob([JSON.stringify(linksData, null, 2)], {type:'application/json'});
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = 'links.json';
+  a.href = URL.createObjectURL(blob); a.download = 'masterlinks.json';
   document.body.appendChild(a); a.click();
   document.body.removeChild(a); URL.revokeObjectURL(a.href);
 }
@@ -1164,9 +1164,10 @@ window.getFirstEmptyCell = function() {
   return '';
 };
 
-function getDistinctVals(field) {
+function getDistinctVals(field, data) {
+  const src = data || linksData;
   const s = new Set();
-  linksData.forEach(r => {
+  src.forEach(r => {
     const v = String(r[field]||'').trim(); if (!v) return;
     if (field==='cname'||field==='Topic')
       v.split(',').map(t=>t.trim()).filter(Boolean).forEach(t=>s.add(t));
@@ -1177,6 +1178,7 @@ function getDistinctVals(field) {
 
 // ── Column operations ─────────────────────────────────────────────────────
 function dupColumn(src) {
+  if (window._addGridActive) { setStatus('Column editing not available in staging mode', '#f88'); return; }
   if (!src || !_colOrder.includes(src)) return;
   let nk = src+'_copy', n=2;
   while (_colOrder.includes(nk)) nk = src+'_copy'+n++;
@@ -1190,6 +1192,7 @@ function dupColumn(src) {
   setStatus('Duplicated "'+src+'" → "'+nk+'"');
 }
 function delColumn(k) {
+  if (window._addGridActive) { setStatus('Column editing not available in staging mode', '#f88'); return; }
   if (!k || !_colOrder.includes(k)) return;
   if (!confirm('Delete column "'+k+'" from ALL rows?')) return;
   _colOrder = _colOrder.filter(x => x!==k);
@@ -1199,6 +1202,7 @@ function delColumn(k) {
   openTable();
 }
 function addColAfter(after) {
+  if (window._addGridActive) { setStatus('Column editing not available in staging mode', '#f88'); return; }
   const nk = prompt('New column name'+(after?' (after "'+after+'")':'')+':');
   if (!nk) return;
   if (_colOrder.includes(nk)) { alert('"'+nk+'" already exists.'); return; }
@@ -1211,6 +1215,7 @@ function addColAfter(after) {
   openTable();
 }
 function renameColumn(k) {
+  if (window._addGridActive) { setStatus('Column editing not available in staging mode', '#f88'); return; }
   if (!k || !_colOrder.includes(k)) return;
   const nk = prompt('Rename "'+k+'" to:', k);
   if (!nk || nk===k) return;
@@ -1332,17 +1337,25 @@ window.openTable = function() {
   const container = document.getElementById('tableEditor');
   if (!container) return;
 
+  // When GAdd overlay is active, show addingData instead of linksData
+  const isAddMode = !!window._addGridActive;
+  const tableData = isAddMode ? (window.addingData || []) : linksData;
+  const titleEl = document.getElementById('jsonTitle');
+  if (titleEl) titleEl.textContent = isAddMode
+    ? '📋 Table Editor: adding.json (staging)'
+    : '📋 Table Editor: masterlinks.json';
+
   if (window._salTab) { try { window._salTab.destroy(); } catch(e) {} window._salTab = null; }
   container.innerHTML = '';
   _activeRow = null;
   scrubUnderscores();
   _colOrder = buildKeyOrder();
-  prefetchVimeoThumbs();  // async pre-fetch Vimeo thumbnails for the Thumb column
+  prefetchVimeoThumbs();
 
-  const cnameVals  = getDistinctVals('cname');
-  const snameVals  = getDistinctVals('sname');
-  const authorVals = getDistinctVals('v.author');
-  const topicVals  = getDistinctVals('Topic');
+  const cnameVals  = getDistinctVals('cname',  tableData);
+  const snameVals  = getDistinctVals('sname',  tableData);
+  const authorVals = getDistinctVals('v.author',tableData);
+  const topicVals  = getDistinctVals('Topic',  tableData);
 
   const cols = [];
   cols.push({
@@ -1352,16 +1365,25 @@ window.openTable = function() {
       if (!confirm('Delete this row?')) return;
       const rowData = cell.getRow().getData();
       const cellVal = rowData.cell;
-      const idx = cellVal ? linksData.findIndex(r => r.cell === cellVal) : window._salTab.getRows().indexOf(cell.getRow());
+      const activeData = isAddMode ? (window.addingData || []) : linksData;
+      const idx = cellVal
+        ? activeData.findIndex(r => r.cell === cellVal && r.link === rowData.link)
+        : -1;
       if (idx > -1) {
-        const rd = JSON.parse(localStorage.getItem('seeandlearn-recycle')||'[]');
-        rd.push(deepCopy(linksData[idx]));
-        localStorage.setItem('seeandlearn-recycle', JSON.stringify(rd));
-        linksData.splice(idx, 1);
+        if (!isAddMode) {
+          const rd = JSON.parse(localStorage.getItem('seeandlearn-recycle')||'[]');
+          rd.push(deepCopy(activeData[idx]));
+          localStorage.setItem('seeandlearn-recycle', JSON.stringify(rd));
+        }
+        activeData.splice(idx, 1);
       }
-      // Save BEFORE Tabulator's async row.delete() so syncTab can't resurrect the row
-      saveData(true);  // skipSync=true — linksData already updated by splice above
-      cell.getRow().delete();  // visual removal only
+      if (isAddMode) {
+        if (typeof saveAdding === 'function') saveAdding();
+        if (typeof renderAddGrid === 'function') renderAddGrid();
+      } else {
+        saveData(true);
+      }
+      cell.getRow().delete();
     }
   });
   cols.push({ title:'', field:'_sel', width:26, minWidth:26, resizable:false, headerSort:false, hozAlign:'center', formatter:'rowSelection', titleFormatter:'rowSelection', cellClick(e,cell){ cell.getRow().toggleSelect(); } });
@@ -1371,12 +1393,15 @@ window.openTable = function() {
     cellClick(e, cell) {
       const rect = cell.getElement().getBoundingClientRect();
       const dir = e.clientY < rect.top + rect.height/2 ? -1 : 1;
-      syncTab();
+      const activeData = isAddMode ? (window.addingData || []) : linksData;
+      if (!isAddMode) syncTab();
       const pos = window._salTab.getRows().indexOf(cell.getRow());
       const tgt = pos + dir;
-      if (tgt < 0 || tgt >= linksData.length) return;
-      const tmp = linksData[pos]; linksData[pos] = linksData[tgt]; linksData[tgt] = tmp;
-      saveData(); window.openTable();
+      if (tgt < 0 || tgt >= activeData.length) return;
+      const tmp = activeData[pos]; activeData[pos] = activeData[tgt]; activeData[tgt] = tmp;
+      if (isAddMode) { if (typeof saveAdding === 'function') saveAdding(); }
+      else saveData();
+      window.openTable();
     }
   });
 
@@ -1395,7 +1420,23 @@ window.openTable = function() {
           }
         }
       },
-      cellEdited(){ saveData(); }
+      cellEdited(){
+        if (isAddMode) {
+          // Sync addingData from Tabulator and save
+          if (window._salTab && window.addingData) {
+            try {
+              const rows = window._salTab.getData();
+              window.addingData = rows.map(r => {
+                const o = {}; Object.keys(r).forEach(k => { if (!k.startsWith('_')) o[k] = r[k]; });
+                return o;
+              });
+            } catch(e) {}
+          }
+          if (typeof saveAdding === 'function') saveAdding();
+        } else {
+          saveData();
+        }
+      }
     };
     // Thumb column: show tiny inline thumbnail image derived from row's link
     if (k === 'Thumb') {
@@ -1436,7 +1477,7 @@ window.openTable = function() {
   // It subscribes internally to: column-resized, column-moved, column-width, layout-refreshed.
   // We do NOT call setWidth(), do NOT inject CSS, do NOT fight the layout engine.
   window._salTab = new Tabulator(container, {
-    data: deepCopy(linksData),
+    data: deepCopy(tableData),
     reactiveData: false,
     columns: cols,
     layout: 'fitData',
@@ -1564,7 +1605,7 @@ document.getElementById('btn-export-chosen').addEventListener('click', function(
   const data = sel.length ? sel.map(r=>deepCopy(r.getData())) : linksData;
   const blob = new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
-  a.download=sel.length?'links_selected.json':'links.json';
+  a.download=sel.length?'masterlinks_selected.json':'masterlinks.json';
   document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(a.href);
   setStatus('Downloaded '+data.length+' row(s)');
 });
@@ -1634,7 +1675,23 @@ document.getElementById('miTables').addEventListener('pointerup', e => {
 });
 
 function closeTableEditor() {
-  saveData();
+  // When GAdd is active, Tabulator holds addingData — DO NOT call saveData()
+  // which would call syncTab() and overwrite linksData with addingData rows.
+  if (window._addGridActive) {
+    // Sync addingData from Tabulator and save staging
+    if (window._salTab && window.addingData) {
+      try {
+        const rows = window._salTab.getData();
+        window.addingData = rows.map(r => {
+          const o = {}; Object.keys(r).forEach(k => { if (!k.startsWith('_')) o[k] = r[k]; });
+          return o;
+        });
+      } catch(e) {}
+    }
+    if (typeof saveAdding === 'function') saveAdding();
+  } else {
+    saveData();
+  }
   document.getElementById('jsonModal').classList.remove('open');
   render();
 }
@@ -1789,10 +1846,10 @@ document.getElementById('miLoadGithub').addEventListener('pointerup', async e =>
     alert('GitHub owner/repo not set.\nOpen Settings → GitHub Sync to configure, or do a Push first.');
     return;
   }
-  if (!confirm('Load links.json from GitHub?\n\nThis REPLACES your current data.\nAlso downloads links.json so your local file is updated.')) return;
+  if (!confirm('Load masterlinks.json from GitHub?\n\nThis REPLACES your current data.\nAlso downloads masterlinks.json so your local file is updated.')) return;
   try {
     const headers = token ? { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json' } : {};
-    const rawUrl = 'https://raw.githubusercontent.com/' + owner + '/' + repo + '/main/links.json?v=' + Date.now();
+    const rawUrl = 'https://raw.githubusercontent.com/' + owner + '/' + repo + '/main/masterlinks.json?v=' + Date.now();
     const res = await fetch(rawUrl, { headers });
     if (!res.ok) throw new Error('HTTP ' + res.status + ': ' + res.statusText);
     const raw = await res.json();
@@ -1814,13 +1871,13 @@ document.getElementById('miLoadGithub').addEventListener('pointerup', async e =>
     localStorage.setItem('mlynx-links', s);
     localStorage.setItem('sal-edited', pushTime > 0 ? String(pushTime) : Date.now().toString());
     render();
-    // Auto-download links.json so the local file at m:\jj is updated too
+    // Auto-download masterlinks.json so the local file at m:\jj is updated too
     const blob = new Blob([JSON.stringify(linksData, null, 2)], {type:'application/json'});
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob); a.download = 'links.json';
+    a.href = URL.createObjectURL(blob); a.download = 'masterlinks.json';
     document.body.appendChild(a); a.click();
     document.body.removeChild(a); URL.revokeObjectURL(a.href);
-    alert('✓ Loaded ' + linksData.length + ' rows from GitHub.\nlinks.json downloaded — replace your local copy in m:\\jj');
+    alert('✓ Loaded ' + linksData.length + ' rows from GitHub.\nmasterlinks.json downloaded — replace your local copy in m:\\jj');
   } catch(err) { alert('Load from GitHub failed:\n' + err.message); }
 });
 

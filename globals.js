@@ -27,3 +27,8 @@ const menuBtn   = document.getElementById('menuBtn');
 const menuPanel = document.getElementById('menuPanel');
 
 // helpers
+
+// ── Adding grid — separate staging area for new links ────────────────────────
+var addingData = [];   // var so window.addingData works cross-file
+var _addGridActive = false;   // true when GAdd overlay is shown
+window._addGridActive = false;

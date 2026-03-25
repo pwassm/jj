@@ -22,7 +22,7 @@ async function init(){
   let fileData = null;
   let fileTime = 0;
   try {
-    const r = await fetch('links.json?v=' + Date.now());
+    const r = await fetch('masterlinks.json?v=' + Date.now());
     if (r.ok) {
       const raw = await r.json();
       if (Array.isArray(raw)) {
@@ -128,26 +128,40 @@ function flParseAndImport() {
   const lines = raw.split(/\r?\n/).map(l => l.trim());
   const da    = flDateStamp();
 
+  // If GAdd overlay is active, import into addingData instead of linksData
+  const target = (typeof window.flImportTarget === 'function') ? window.flImportTarget() : 'master';
+  const isAdding = target === 'adding';
+
   let cname = '', topic = '', nonUrlCount = 0;
   let imported = 0, skipped = 0;
 
   lines.forEach(line => {
     if (!line) {
-      // Blank line resets the group
-      cname = ''; topic = ''; nonUrlCount = 0;
-      return;
+      cname = ''; topic = ''; nonUrlCount = 0; return;
     }
     if (!flIsURL(line)) {
-      // First non-URL = cname, second non-URL = topic
       if (nonUrlCount === 0) { cname = line; topic = ''; nonUrlCount = 1; }
       else                   { topic = line; nonUrlCount = 2; }
       return;
     }
-    // It's a URL
-    const nextCell = flNextFreeCell();
+    // It's a URL — assign to next free cell in the appropriate grid
+    let nextCell = '';
+    if (isAdding) {
+      nextCell = (typeof nextFreeAddCell === 'function') ? nextFreeAddCell() : '';
+    } else {
+      nextCell = flNextFreeCell();
+    }
     if (!nextCell) { skipped++; return; }
-    linksData.push({ show:'1', VidRange:'i', cell:nextCell, fit:'fc',
-      link:line, cname, Topic:topic, sname:'', attribution:'', comment:'', DateAdded:da, Mute:'1' });
+
+    const entry = { show:'1', VidRange:'i', cell:nextCell, fit:'fc',
+      link:line, cname, Topic:topic, sname:'', attribution:'', comment:'', DateAdded:da, Mute:'1' };
+
+    if (isAdding) {
+      addingData.push(entry);
+      if (typeof saveAdding === 'function') saveAdding();
+    } else {
+      linksData.push(entry);
+    }
     imported++;
   });
 
@@ -155,13 +169,17 @@ function flParseAndImport() {
     document.getElementById('fastLinkStatus').textContent = 'No URLs found.';
     return;
   }
-  // skipSync=true — we already pushed to linksData directly;
-  // calling saveData() without it would run syncTab() which reads stale Tabulator
-  // state and overwrites our new entries, causing duplicate cells on retry.
-  if (window.saveData) window.saveData(true);
-  else localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+
+  if (!isAdding) {
+    if (window.saveData) window.saveData(true);
+    else localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+  }
+
+  if (typeof renderAddGrid === 'function') renderAddGrid();
   render();
-  const msg = `✓ Imported ${imported} URL${imported !== 1 ? 's' : ''}` +
+
+  const dest = isAdding ? 'staging grid (GAdd)' : 'masterlinks';
+  const msg = `✓ Pushed ${imported} URL${imported !== 1 ? 's' : ''} to ${dest}` +
               (skipped ? ` (${skipped} skipped — no empty cells)` : '');
   document.getElementById('fastLinkStatus').textContent = msg;
   document.getElementById('fastLinkInput').value = '';
@@ -400,30 +418,87 @@ window.addEventListener('keyup', e => { if (e.key.toLowerCase() === 'r') window.
       var miFL = document.getElementById('miFastLinks');
       if (miFL) miFL.dispatchEvent(new Event('pointerup', {bubbles:true}));
     }
+    else if (key === 'a') {
+      if (window.toggleAddGrid) window.toggleAddGrid();
+    }
   }
 
   // ── Floating button bar ─────────────────────────────────────────────────────
-  // Mobile: G T L V  (L = Links/FastLink, no E since editor not used on phone)
-  // Desktop: G T E V
+  // Layout (both desktop and mobile):
+  //   Top row:    G  T  L       (Grid, Table/Master, Links)
+  //   Bottom row: E  V  A       (VideoEdit [desktop only], VideoShow, Add grid)
+  //   S stub: small button above T (Subjects — future)
+  // On mobile E is hidden (replaced by nothing, or just V A remain)
+
   var bar = document.createElement('div');
   bar.id = 'sal-switcher-bar';
-  bar.style.cssText = 'position:fixed;bottom:58px;right:18px;z-index:9999998;'
-    + 'display:flex;gap:6px;';
-  var barLabels = ISMOBILE ? ['G','T','L','V'] : ['G','T','E','V'];
-  var barTitles = {G:'Grid view',T:'Table view',E:'VideoEdit',V:'VideoShow (play)',L:'Links (Fast Paste)'};
-  barLabels.forEach(function(lbl) {
+  bar.style.cssText = 'position:fixed;bottom:18px;right:18px;z-index:9999998;'
+    + 'display:grid;grid-template-columns:repeat(3,34px);grid-template-rows:auto auto;'
+    + 'gap:5px;';
+
+  var btnStyle = 'width:34px;height:34px;border-radius:6px;border:1px solid #4af;'
+    + 'background:rgba(0,20,50,0.85);color:#8ef;font-size:13px;font-weight:bold;'
+    + 'cursor:pointer;font-family:sans-serif;';
+  var btnTitles = {
+    G:'Grid view (masterlinks)',
+    T:'Table view (masterlinks)',
+    L:'Links — fast paste screen',
+    E:'VideoEdit',
+    V:'VideoShow (play)',
+    A:'Toggle GAdd staging grid'
+  };
+
+  function mkBarBtn(lbl, extraStyle) {
     var btn = document.createElement('button');
     btn.textContent = lbl;
-    btn.title = barTitles[lbl] || lbl;
-    btn.style.cssText = 'width:34px;height:34px;border-radius:6px;border:1px solid #4af;'
-      + 'background:rgba(0,20,50,0.85);color:#8ef;font-size:13px;font-weight:bold;'
-      + 'cursor:pointer;font-family:sans-serif;';
+    btn.title = btnTitles[lbl] || lbl;
+    btn.style.cssText = btnStyle + (extraStyle || '');
     btn.addEventListener('click', function(e) {
-      e.stopPropagation();
-      doSwitch(lbl.toLowerCase());
+      e.stopPropagation(); doSwitch(lbl.toLowerCase());
     });
-    bar.appendChild(btn);
+    return btn;
+  }
+
+  // S stub — small, sits above T (column 2, row 1)
+  var sBtn = document.createElement('button');
+  sBtn.textContent = 'S';
+  sBtn.title = 'Subjects grid — coming soon';
+  sBtn.style.cssText = 'width:34px;height:20px;border-radius:4px;border:1px solid #888;'
+    + 'background:rgba(0,20,50,0.7);color:#888;font-size:10px;font-weight:bold;'
+    + 'cursor:pointer;font-family:sans-serif;grid-column:2;';
+  sBtn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    if (typeof showToast === 'function') showToast('Subjects grid — coming soon');
   });
+
+  // S stub row (spans full width, only S visible)
+  var sRow = document.createElement('div');
+  sRow.style.cssText = 'grid-column:1/4;display:flex;justify-content:center;';
+  sRow.appendChild(sBtn);
+  bar.appendChild(sRow);
+
+  // Top row: G T L
+  bar.appendChild(mkBarBtn('G'));
+  bar.appendChild(mkBarBtn('T'));
+  bar.appendChild(mkBarBtn('L'));
+
+  // Bottom row: E V A  (E hidden on mobile)
+  var eBtn = mkBarBtn('E');
+  if (ISMOBILE) eBtn.style.visibility = 'hidden';
+  bar.appendChild(eBtn);
+  bar.appendChild(mkBarBtn('V'));
+
+  // A button
+  var aBtn = document.createElement('button');
+  aBtn.id = 'sal-add-btn';
+  aBtn.textContent = 'A';
+  aBtn.title = btnTitles['A'];
+  aBtn.style.cssText = btnStyle;
+  aBtn.addEventListener('click', function(e) {
+    e.stopPropagation(); doSwitch('a');
+  });
+  bar.appendChild(aBtn);
+
   if (document.body) document.body.appendChild(bar);
   else window.addEventListener('DOMContentLoaded', function() { document.body.appendChild(bar); });
 
