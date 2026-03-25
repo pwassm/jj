@@ -338,14 +338,27 @@ window.addEventListener('keyup', e => { if (e.key.toLowerCase() === 'r') window.
     }
   }
 
+  // Close FastLink modal (optionally importing pending content first)
+  function closeFastLink(andImport) {
+    var modal = document.getElementById('fastLinkModal');
+    if (!modal || modal.style.display === 'none') return;
+    if (andImport) {
+      var ta = document.getElementById('fastLinkInput');
+      if (ta && ta.value.trim()) flParseAndImport();
+    }
+    modal.style.display = 'none';
+  }
+
   function doSwitch(key) {
     if (window.saveData) window.saveData();
 
     if (key === 'g') {
+      closeFastLink(true);   // push pending links then go to grid
       if (window.closeTableEditor) window.closeTableEditor();
       closeAllOverlays();
     }
     else if (key === 't') {
+      closeFastLink(true);   // push pending links then go to table
       closeAllOverlays();
       var modal = document.getElementById('jsonModal');
       if (modal && !modal.classList.contains('open')) {
@@ -354,13 +367,13 @@ window.addEventListener('keyup', e => { if (e.key.toLowerCase() === 'r') window.
       }
     }
     else if (key === 'e') {
+      closeFastLink(false);
       var entry = resolveEntry();
       if (!entry) { showToast('No video selected — click a row or open a video first'); return; }
       if (!entry.VidRange || !window.parseVideoAsset ||
           window.parseVideoAsset(String(entry.VidRange)) === null) {
         showToast('Row has no video segment (VidRange)'); return;
       }
-      // Close VideoShow before opening VideoEdit
       var fs = document.getElementById('fs-overlay');
       if (fs) {
         if (window.seeLearnVideoPlayers) {
@@ -373,9 +386,9 @@ window.addEventListener('keyup', e => { if (e.key.toLowerCase() === 'r') window.
       if (window.openVideoEditor) window.openVideoEditor(entry);
     }
     else if (key === 'v') {
+      closeFastLink(true);   // push pending links then play video
       var entry2 = resolveEntry();
       if (!entry2) { showToast('No video selected — click a row or open a video first'); return; }
-      // Close VideoEdit before opening VideoShow
       var ov = document.getElementById('video-editor-overlay');
       if (ov) {
         if (window.stopCellVideoLoop) window.stopCellVideoLoop('v2host');
@@ -384,7 +397,6 @@ window.addEventListener('keyup', e => { if (e.key.toLowerCase() === 'r') window.
       if (window.openFS) window.openFS(entry2);
     }
     else if (key === 'l') {
-      // L = Links / FastPaste screen
       var miFL = document.getElementById('miFastLinks');
       if (miFL) miFL.dispatchEvent(new Event('pointerup', {bubbles:true}));
     }

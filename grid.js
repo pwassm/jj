@@ -107,6 +107,36 @@ function buildOverlays(){
 
     const isVidNode = !isIg && window.parseVideoAsset && window.parseVideoAsset(assetVal) !== null;
 
+    // On mobile, add a transparent interceptor div over video cells.
+    // YouTube iframes absorb all pointer events, so pointerdown on `div` never
+    // fires when touching the iframe area. The interceptor sits above the iframe
+    // (z-index:10) and routes swipes → openFS. It's invisible and passes taps through
+    // on desktop (display:none when not ISMOBILE).
+    if (ISMOBILE && isVidNode) {
+      const swipeInt = document.createElement('div');
+      swipeInt.style.cssText = 'position:absolute;inset:0;z-index:10;touch-action:none;'
+        + 'background:transparent;cursor:pointer;';
+      let siStartX = 0, siStartY = 0;
+      swipeInt.addEventListener('pointerdown', function(e) {
+        siStartX = e.clientX; siStartY = e.clientY;
+        try { swipeInt.setPointerCapture(e.pointerId); } catch(ex) {}
+      });
+      swipeInt.addEventListener('pointerup', function(e) {
+        const dx = e.clientX - siStartX;
+        const dy = e.clientY - siStartY;
+        const swipeDist = isPortrait ? dy : dx;
+        const swipePerp = isPortrait ? dx : dy;
+        if (swipeDist > 25 && Math.abs(swipePerp) < Math.abs(swipeDist) * 1.5) {
+          // Swipe → open VideoShow
+          e.stopPropagation(); window.openFS(it);
+        } else if (Math.abs(dx) < 15 && Math.abs(dy) < 15) {
+          // Tap → also open VideoShow on mobile
+          e.stopPropagation(); window.openFS(it);
+        }
+      });
+      div.appendChild(swipeInt);
+    }
+
     let startX = 0, startY = 0, isDragging = false;
 
     div.addEventListener('pointerdown', e => {
