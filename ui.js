@@ -1041,6 +1041,11 @@ function syncTab() {
   if (!window._salTab) return;
   try {
     const rows = window._salTab.getData();
+    // CRITICAL GUARD: if Tabulator currently holds addingData rows (cell names like a1a, a2b),
+    // NEVER write them into linksData. This is the root cause of GM/TM corruption.
+    const isHoldingAddingData = window._addGridActive
+      || rows.slice(0, 5).some(r => r.cell && /^a\d[a-e]$/.test(String(r.cell)));
+    if (isHoldingAddingData) return;
     linksData = rows.map(r => {
       const o = {};
       Object.keys(r).forEach(k => { if (!k.startsWith('_')) o[k] = r[k]; });
@@ -1053,7 +1058,8 @@ function syncTab() {
 // Pass skipSync=true when linksData has already been updated directly (e.g. after delete)
 // to prevent syncTab() from reading Tabulator's async state and resurrecting deleted rows.
 function saveData(skipSync) {
-  if (!skipSync) syncTab();
+  // Never sync from Tabulator while it holds addingData
+  if (!skipSync && !window._addGridActive) syncTab();
   scrubUnderscores();
   const s = JSON.stringify(linksData);
   localStorage.setItem('seeandlearn-links', s);
@@ -1408,16 +1414,34 @@ window.openTable = function() {
   _colOrder.forEach(k => {
     const def = { title:k, field:k, editor:'input', headerSort:true, maxWidth:COL_W_MAX, minWidth:COL_W_MIN, resizable:true, tooltip:true,
       cellClick(e, cell) {
-        _activeRow = cell.getRow(); _activeCol = cell.getColumn().getField(); updateFocusIndicator();
-        // Ctrl+click anywhere on row → open VideoEdit (if row has valid VidRange)
+        const field = cell.getColumn().getField();
+        const row   = cell.getRow();
+        _activeRow = row; _activeCol = field; updateFocusIndicator();
+
         if (e.ctrlKey) {
-          const data = cell.getRow().getData();
-          if (data.link && data.VidRange && window.parseVideoAsset &&
-              window.parseVideoAsset(String(data.VidRange)) !== null) {
-            syncFromTabulator();
-            const entry = linksData.find(r => r.link === data.link && r.cell === data.cell);
-            if (entry && window.openVideoEditor) window.openVideoEditor(entry);
+          // Ctrl+click = column range selection for bulk rename
+          if (window._colRangeAnchor && window._colRangeAnchor.field === field) {
+            const allRows = window._salTab.getRows();
+            const anchorIdx = allRows.indexOf(window._colRangeAnchor.row);
+            const clickIdx  = allRows.indexOf(row);
+            if (anchorIdx !== -1 && clickIdx !== -1) {
+              const lo = Math.min(anchorIdx, clickIdx);
+              const hi = Math.max(anchorIdx, clickIdx);
+              const rangeRows = allRows.slice(lo, hi + 1);
+              window._salTab.deselectRow();
+              rangeRows.forEach(r => r.select());
+              window._colRangeAnchor = null;
+              openBulkRename(field, rangeRows);
+              return;
+            }
           }
+          // Set anchor for range selection
+          window._colRangeAnchor = { field, row };
+          window._salTab.deselectRow();
+          row.select();
+          setStatus('Ctrl+click another cell in "' + field + '" to select range for bulk rename — Ctrl+Alt+L to launch video', '#8ef');
+        } else {
+          window._colRangeAnchor = null;
         }
       },
       cellEdited(){
@@ -1488,7 +1512,7 @@ window.openTable = function() {
     history: false,
     height: '100%',
     persistence: { columns: true },
-    persistenceID: 'sal-table',
+    persistenceID: isAddMode ? 'sal-table-add' : 'sal-table',
 
     tableBuilt() {
       if (!window._salTab) return;
@@ -1675,10 +1699,8 @@ document.getElementById('miTables').addEventListener('pointerup', e => {
 });
 
 function closeTableEditor() {
-  // When GAdd is active, Tabulator holds addingData — DO NOT call saveData()
-  // which would call syncTab() and overwrite linksData with addingData rows.
   if (window._addGridActive) {
-    // Sync addingData from Tabulator and save staging
+    // Tabulator holds addingData — sync and save staging only, never touch linksData
     if (window._salTab && window.addingData) {
       try {
         const rows = window._salTab.getData();
@@ -1690,7 +1712,16 @@ function closeTableEditor() {
     }
     if (typeof saveAdding === 'function') saveAdding();
   } else {
-    saveData();
+    // Extra safety: if Tabulator has addingData-style cells (a1a, a2b…), skip save
+    let tabHasAddingRows = false;
+    if (window._salTab) {
+      try {
+        const sample = window._salTab.getData().slice(0, 3);
+        tabHasAddingRows = sample.some(r => r.cell && /^a\d[a-e]$/.test(String(r.cell)));
+      } catch(e) {}
+    }
+    if (!tabHasAddingRows) saveData();
+    else console.warn('closeTableEditor: skipped saveData — Tabulator contained addingData rows');
   }
   document.getElementById('jsonModal').classList.remove('open');
   render();
@@ -1792,6 +1823,27 @@ document.getElementById('togAutopause').addEventListener('change', function() {
 
 document.addEventListener('keydown', e => {
   if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 's') { e.preventDefault(); saveJson(); }
+  // Ctrl+Alt+L — launch video from focused table row
+  // If row has VidRange → open VideoEdit; otherwise open VideoShow
+  if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'l') {
+    e.preventDefault();
+    const modal = document.getElementById('jsonModal');
+    if (!modal || !modal.classList.contains('open')) return;
+    if (!_activeRow) { setStatus('Click a row first', '#f88'); return; }
+    const data = _activeRow.getData();
+    if (!data.link) { setStatus('Row has no link', '#f88'); return; }
+    const isVid = data.VidRange && window.parseVideoAsset &&
+      window.parseVideoAsset(String(data.VidRange)) !== null;
+    if (isVid) {
+      syncFromTabulator();
+      const entry = linksData.find(r => r.link === data.link && r.cell === data.cell);
+      if (entry && window.openVideoEditor) window.openVideoEditor(entry);
+    } else {
+      // Image or plain link — open VideoShow
+      const entry = linksData.find(r => r.link === data.link && r.cell === data.cell) || data;
+      if (window.openFS) window.openFS(entry);
+    }
+  }
 });
 
 // ─── Quick-fill ───────────────────────────────────────────────────────────────
@@ -1879,6 +1931,37 @@ document.getElementById('miLoadGithub').addEventListener('pointerup', async e =>
     document.body.removeChild(a); URL.revokeObjectURL(a.href);
     alert('✓ Loaded ' + linksData.length + ' rows from GitHub.\nmasterlinks.json downloaded — replace your local copy in m:\\jj');
   } catch(err) { alert('Load from GitHub failed:\n' + err.message); }
+});
+
+// Reload masterlinks.json from local server — clears corrupted localStorage first
+document.getElementById('miReloadML').addEventListener('pointerup', async e => {
+  e.stopPropagation(); closeMenu();
+  if (!confirm('Reload data from the local masterlinks.json file?\n\nThis clears localStorage and re-reads the file.\nUse this if the grid/table appear empty after an error.')) return;
+  try {
+    const r = await fetch('masterlinks.json?v=' + Date.now());
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const raw = await r.json();
+    if (!Array.isArray(raw)) throw new Error('Not a JSON array');
+    let data = raw;
+    let pushTime = 0;
+    if (raw.length > 0 && raw[0]._salMeta) {
+      pushTime = parseInt(raw[0]._salPushTime || '0', 10);
+      data = raw.slice(1);
+    }
+    // Clear all localStorage data so we start fresh
+    localStorage.removeItem('seeandlearn-links');
+    localStorage.removeItem('mlynx-links');
+    localStorage.removeItem('sal-edited');
+    linksData = data;
+    linksData.forEach(row => {
+      if ('asset' in row && !('VidRange' in row)) { row.VidRange = row.asset; delete row.asset; }
+    });
+    const s = JSON.stringify(linksData);
+    localStorage.setItem('seeandlearn-links', s);
+    localStorage.setItem('sal-edited', pushTime > 0 ? String(pushTime) : '1');  // '1' = very old, so future file pushes win
+    render();
+    alert('✓ Reloaded ' + linksData.length + ' rows from masterlinks.json.');
+  } catch(err) { alert('Reload failed: ' + err.message + '\n\nMake sure masterlinks.json is in m:\\jj and the local server is running.'); }
 });
 
 // ─── ShowThumb — auto thumbnail preview on row focus ─────────────────────────
@@ -2054,6 +2137,103 @@ document.getElementById('btn-clear-cells').addEventListener('click', function() 
 });
 
 // ─── Column header strip ──────────────────────────────────────────────────────
+// ─── Bulk column rename ────────────────────────────────────────────
+// Ctrl+click sets anchor row in a column; Ctrl+click another row in same column
+// selects the range and opens a rename popup with dictionary autocomplete.
+function openBulkRename(field, rangeRows) {
+  const existing = document.getElementById('bulk-rename-popup');
+  if (existing) existing.remove();
+  const dictVals = Array.from(new Set(
+    linksData.map(r => String(r[field] || '').trim()).filter(Boolean)
+  )).sort();
+  const count = rangeRows.length;
+  const popup = document.createElement('div');
+  popup.id = 'bulk-rename-popup';
+  popup.style.cssText = 'position:fixed;z-index:999999;top:50%;left:50%;'
+    + 'transform:translate(-50%,-50%);min-width:320px;max-width:460px;'
+    + 'background:#1a2a3a;border:1px solid #4af;border-radius:8px;'
+    + 'padding:14px;box-shadow:0 8px 32px rgba(0,0,0,0.9);font-family:sans-serif;color:#fff;';
+  popup.innerHTML = '<div style="font-size:13px;font-weight:bold;color:#8ef;margin-bottom:8px;">'
+    + 'Bulk rename &nbsp;<span style="font-weight:normal;color:#888;font-size:11px;">'
+    + count + ' row' + (count>1?'s':'') + ' · column: ' + field + '</span></div>'
+    + '<div style="position:relative;">'
+    + '<input id="brn-inp" type="text" autocomplete="off" placeholder="New value…" '
+    + 'style="width:100%;box-sizing:border-box;padding:7px 8px;font-size:13px;border-radius:5px;'
+    + 'border:1px solid #4af;background:#0d1a2a;color:#fff;outline:none;">'
+    + '<div id="brn-dd" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:10;'
+    + 'background:#1a2a3a;border:1px solid #4af;border-top:none;border-radius:0 0 6px 6px;'
+    + 'max-height:160px;overflow-y:auto;"></div>'
+    + '</div>'
+    + '<div style="font-size:10px;color:#666;margin:5px 0 10px;">Enter/Tab applies. Arrow keys navigate list. Esc cancels.</div>'
+    + '<div style="display:flex;gap:8px;">'
+    + '<button id="brn-apply" style="flex:1;padding:8px;border-radius:5px;border:1px solid #4af;'
+    + 'background:rgba(0,80,180,0.3);color:#8ef;cursor:pointer;font-size:13px;font-weight:bold;">Apply to ' + count + ' rows</button>'
+    + '<button id="brn-cancel" style="padding:8px 14px;border-radius:5px;border:1px solid #555;'
+    + 'background:#222;color:#aaa;cursor:pointer;font-size:13px;">Cancel</button>'
+    + '</div>';
+  document.body.appendChild(popup);
+  const inp = document.getElementById('brn-inp');
+  const dd  = document.getElementById('brn-dd');
+  function showDD() {
+    const q = inp.value.trim().toLowerCase();
+    const hits = q ? dictVals.filter(v => v.toLowerCase().includes(q)) : dictVals;
+    dd.innerHTML = '';
+    if (!hits.length) { dd.style.display = 'none'; return; }
+    hits.slice(0, 20).forEach(v => {
+      const item = document.createElement('div');
+      item.textContent = v;
+      item.style.cssText = 'padding:6px 10px;cursor:pointer;font-size:12px;color:#cef;border-bottom:1px solid #244;';
+      item.addEventListener('mouseenter', () => item.style.background = '#1a3a5a');
+      item.addEventListener('mouseleave', () => item.style.background = '');
+      item.addEventListener('mousedown', ev => {
+        ev.preventDefault(); inp.value = v; dd.style.display = 'none'; inp.focus();
+      });
+      dd.appendChild(item);
+    });
+    dd.style.display = 'block';
+  }
+  function applyRename() {
+    const val = inp.value.trim();
+    if (val === '') { alert('Enter a value first.'); return; }
+    const activeData = window._addGridActive ? (window.addingData || []) : linksData;
+    rangeRows.forEach(row => {
+      const data = row.getData();
+      const idx = activeData.findIndex(r => r.link === data.link && r.cell === data.cell);
+      if (idx !== -1) activeData[idx][field] = val;
+      const upd = {}; upd[field] = val; row.update(upd);
+    });
+    if (window._addGridActive) { if (typeof saveAdding === 'function') saveAdding(); }
+    else saveData(true);
+    window._salTab.deselectRow();
+    popup.remove();
+    setStatus('Set "' + field + '" = "' + val + '" on ' + count + ' rows', '#5f5');
+  }
+  inp.addEventListener('input', showDD);
+  inp.addEventListener('focus', showDD);
+  inp.addEventListener('blur', () => setTimeout(() => { dd.style.display = 'none'; }, 150));
+  inp.addEventListener('keydown', e => {
+    e.stopPropagation();
+    if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); applyRename(); return; }
+    if (e.key === 'Escape') { popup.remove(); window._salTab.deselectRow(); return; }
+    if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && dd.style.display !== 'none') {
+      e.preventDefault();
+      const items = Array.from(dd.querySelectorAll('div'));
+      const cur = dd.querySelector('.brn-hi');
+      let idx = cur ? items.indexOf(cur) : -1;
+      if (cur) { cur.classList.remove('brn-hi'); cur.style.background = ''; }
+      idx = e.key === 'ArrowDown' ? Math.min(idx+1, items.length-1) : Math.max(idx-1, 0);
+      items[idx].classList.add('brn-hi'); items[idx].style.background = '#2a4a6a';
+      items[idx].scrollIntoView({block:'nearest'});
+      inp.value = items[idx].textContent;
+    }
+  });
+  document.getElementById('brn-apply').addEventListener('click', applyRename);
+  document.getElementById('brn-cancel').addEventListener('click', () => {
+    popup.remove(); window._salTab.deselectRow();
+  });
+  setTimeout(() => { inp.focus(); showDD(); }, 50);
+}
+
 function updateColHeaderStrip() {
   const el = document.getElementById('colHeaderStrip');
   if (!el) return;

@@ -368,20 +368,42 @@ window.addEventListener('keyup', e => { if (e.key.toLowerCase() === 'r') window.
   }
 
   function doSwitch(key) {
-    if (window.saveData) window.saveData();
+    // Save the CORRECT dataset — never call saveData() while Tabulator holds addingData
+    function safeSave() {
+      if (window._addGridActive) {
+        // Tabulator may hold addingData rows — save only the staging data, not linksData
+        if (typeof saveAdding === 'function') saveAdding();
+      } else {
+        if (window.saveData) window.saveData();
+      }
+    }
 
     if (key === 'g') {
-      closeFastLink(true);   // push pending links then go to grid
+      closeFastLink(true);
+      // closeTableEditor handles its own save correctly (already guarded for addMode)
       if (window.closeTableEditor) window.closeTableEditor();
+      else safeSave();
       closeAllOverlays();
     }
     else if (key === 't') {
-      closeFastLink(true);   // push pending links then go to table
+      closeFastLink(true);
+      safeSave();   // save before touching Tabulator
       closeAllOverlays();
       var modal = document.getElementById('jsonModal');
-      if (modal && !modal.classList.contains('open')) {
-        var miT = document.getElementById('miTables');
-        if (miT) miT.dispatchEvent(new Event('pointerup', {bubbles:true}));
+      // Always open/refresh table — don't skip if modal was already open
+      if (modal) {
+        if (!modal.classList.contains('open')) {
+          // Set up modal display
+          var rawJ = document.getElementById('toggleRawJson');
+          if (rawJ) rawJ.textContent = 'Show Raw JSON';
+          var te = document.getElementById('tableEditor'); if (te) te.style.display = 'block';
+          var jt = document.getElementById('jsonText'); if (jt) jt.style.display = 'none';
+          var tb = document.getElementById('tableToolbar'); if (tb) tb.style.display = 'flex';
+          var ds = document.getElementById('deleteSelectedRows'); if (ds) ds.style.display = 'none';
+          var js = document.getElementById('jsonStatus'); if (js) js.textContent = '';
+          modal.classList.add('open');
+        }
+        if (window.openTable) window.openTable();
       }
     }
     else if (key === 'e') {
@@ -404,7 +426,8 @@ window.addEventListener('keyup', e => { if (e.key.toLowerCase() === 'r') window.
       if (window.openVideoEditor) window.openVideoEditor(entry);
     }
     else if (key === 'v') {
-      closeFastLink(true);   // push pending links then play video
+      closeFastLink(true);
+      safeSave();
       var entry2 = resolveEntry();
       if (!entry2) { showToast('No video selected — click a row or open a video first'); return; }
       var ov = document.getElementById('video-editor-overlay');
@@ -502,38 +525,7 @@ window.addEventListener('keyup', e => { if (e.key.toLowerCase() === 'r') window.
   if (document.body) document.body.appendChild(bar);
   else window.addEventListener('DOMContentLoaded', function() { document.body.appendChild(bar); });
 
-  // Ctrl+right-click on any table cell → open VideoEdit for that row
-  document.addEventListener('contextmenu', function(e) {
-    if (!e.ctrlKey) return;
-    var modal = document.getElementById('jsonModal');
-    if (!modal || !modal.classList.contains('open')) return;
-    // Find if click landed inside a Tabulator row
-    var rowEl = e.target && e.target.closest && e.target.closest('.tabulator-row');
-    if (!rowEl) return;
-    e.preventDefault(); e.stopPropagation();
-    // Find matching linksData entry from row's data
-    if (window._salTab) {
-      try {
-        var rows = window._salTab.getRows();
-        for (var i = 0; i < rows.length; i++) {
-          if (rows[i].getElement() === rowEl) {
-            var data = rows[i].getData();
-            if (data.link && data.VidRange && window.parseVideoAsset &&
-                window.parseVideoAsset(String(data.VidRange)) !== null) {
-              if (window.syncFromTabulator) window.syncFromTabulator();
-              var entry = (window.linksData || []).find(function(r) {
-                return r.link === data.link && r.cell === data.cell;
-              });
-              if (entry && window.openVideoEditor) window.openVideoEditor(entry);
-            }
-            break;
-          }
-        }
-      } catch(ex) {}
-    }
-  });
-
-  var rmbDown = false;
+    var rmbDown = false;
   var switcherFired = false;
 
   // mousedown/mouseup capture so we detect RMB even inside iframes
