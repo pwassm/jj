@@ -319,7 +319,10 @@ window.toggleAddGrid = function() {
 // When the user is in GAdd and presses L, the FastLink paste modal opens.
 // On "Push →" it imports into addingData (not linksData) if GAdd is active.
 window.flImportTarget = function() {
-  return _addGridActive ? 'adding' : 'master';
+  // 'adding' if GAdd overlay is active OR if table is open in add mode
+  if (_addGridActive) return 'adding';
+  if (window._addGridActive) return 'adding';
+  return 'master';
 };
 
 // ── Window resize ─────────────────────────────────────────────────────────────

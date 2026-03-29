@@ -254,6 +254,7 @@ window.openVideoEditor = function(it) {
 
   var overlay = document.createElement('div');
   overlay.id  = 'video-editor-overlay';
+  if (window.menuWrap) window.menuWrap.style.display = 'none';  // hide HM in editor
   overlay.setAttribute('tabindex', '-1');
   overlay.style.cssText = 'position:fixed;z-index:99999;left:5%;top:5%;width:90%;height:90%;'
     + 'background:#1a1a1a;border:2px solid #8ef;display:flex;flex-direction:column;'
@@ -1241,6 +1242,7 @@ window.openVideoEditor = function(it) {
     clearInterval(scrubTimer);
     clearTimeout(mountDebounce);
     window.stopCellVideoLoop('v2host');
+    if (window.menuWrap) window.menuWrap.style.display = '';  // restore HM
     overlay.remove();
     document.removeEventListener('keydown', handleKey, true);
   }

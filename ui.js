@@ -51,6 +51,9 @@ window.openFS = function(it) {
   fs.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:#000;'
     + 'z-index:99999;display:flex;flex-direction:column;font-family:sans-serif;outline:none;';
 
+  // Hide hamburger while fullscreen video is open
+  if (menuWrap) menuWrap.style.display = 'none';
+
   // Upper info bar (absolute, overlays video)
   const topBar = document.createElement('div');
   topBar.style.cssText = 'position:absolute;top:0;left:0;right:0;z-index:20;'
@@ -931,6 +934,7 @@ window.openFS = function(it) {
     if (ISMOBILE && screen.orientation && screen.orientation.unlock) {
       try { screen.orientation.unlock(); } catch(ex) {}
     }
+    if (menuWrap) menuWrap.style.display = '';
     fs.remove();
   }
 };
@@ -2262,14 +2266,14 @@ document.getElementById('btn-video-edit').addEventListener('click', function() {
 });
 
 // Clear the 'cell' field on selected rows (or all rows if none selected)
-// so FastLink Bulk can re-assign grid positions 1a→5e sequentially.
+// so LinkPaste Bulk can re-assign grid positions 1a→5e sequentially.
 document.getElementById('btn-clear-cells').addEventListener('click', function() {
   if (!window._salTab) return;
   const sel = window._salTab.getSelectedRows();
   const targets = sel.length ? sel : window._salTab.getRows();
   if (!targets.length) return;
   const label = sel.length ? sel.length + ' selected row' + (sel.length>1?'s':'') : 'all rows';
-  if (!confirm('Clear the "cell" field on ' + label + '?\nThis removes them from the grid until FastLink reassigns cells.')) return;
+  if (!confirm('Clear the "cell" field on ' + label + '?\nThis removes them from the grid until LinkPaste reassigns cells.')) return;
   syncTab();
   targets.forEach(function(row) {
     const d = row.getData();

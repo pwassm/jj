@@ -289,7 +289,7 @@ async function flParseAndImport() {
   document.getElementById('fastLinkInput').value = '';
 }
 
-document.getElementById('miFastLinks').addEventListener('pointerup', e => {
+document.getElementById('miLinkPastes').addEventListener('pointerup', e => {
   e.stopPropagation(); closeMenu();
   if (typeof isAdmin === 'function' && !isAdmin()) { alert('Admin privileges required.'); return; }
   document.getElementById('fastLinkModal').style.display = 'flex';
@@ -378,9 +378,9 @@ window.addEventListener('keydown', e => {
   if (!e.ctrlKey && !e.altKey && !e.metaKey && e.key.toLowerCase() === 'l') {
     const menuPanel = document.getElementById('menuPanel');
     if (menuPanel && menuPanel.classList.contains('open')) {
-      // If hamburger is open, trigger FastLinks
+      // If hamburger is open, trigger LinkPastes
       e.preventDefault();
-      const miFast = document.getElementById('miFastLinks');
+      const miFast = document.getElementById('miLinkPastes');
       if (miFast) {
         const ev = new PointerEvent('pointerup', { bubbles: true, cancelable: true });
         miFast.dispatchEvent(ev);
@@ -460,8 +460,8 @@ window.addEventListener('keyup', e => { if (e.key.toLowerCase() === 'r') window.
     }
   }
 
-  // Close FastLink modal (optionally importing pending content first)
-  function closeFastLink(andImport) {
+  // Close LinkPaste modal (optionally importing pending content first)
+  function closeLinkPaste(andImport) {
     var modal = document.getElementById('fastLinkModal');
     if (!modal || modal.style.display === 'none') return;
     if (andImport) {
@@ -483,14 +483,14 @@ window.addEventListener('keyup', e => { if (e.key.toLowerCase() === 'r') window.
     }
 
     if (key === 'g') {
-      closeFastLink(true);
+      closeLinkPaste(true);
       // closeTableEditor handles its own save correctly (already guarded for addMode)
       if (window.closeTableEditor) window.closeTableEditor();
       else safeSave();
       closeAllOverlays();
     }
     else if (key === 't') {
-      closeFastLink(true);
+      closeLinkPaste(true);
       safeSave();   // save before touching Tabulator
       closeAllOverlays();
       var modal = document.getElementById('jsonModal');
@@ -511,7 +511,7 @@ window.addEventListener('keyup', e => { if (e.key.toLowerCase() === 'r') window.
       }
     }
     else if (key === 'e') {
-      closeFastLink(false);
+      closeLinkPaste(false);
       var entry = resolveEntry();
       if (!entry) { showToast('No video selected — click a row or open a video first'); return; }
       if (!entry.VidRange || !window.parseVideoAsset ||
@@ -530,7 +530,7 @@ window.addEventListener('keyup', e => { if (e.key.toLowerCase() === 'r') window.
       if (window.openVideoEditor) window.openVideoEditor(entry);
     }
     else if (key === 'v') {
-      closeFastLink(true);
+      closeLinkPaste(true);
       safeSave();
       var entry2 = resolveEntry();
       if (!entry2) { showToast('No video selected — click a row or open a video first'); return; }
@@ -542,7 +542,7 @@ window.addEventListener('keyup', e => { if (e.key.toLowerCase() === 'r') window.
       if (window.openFS) window.openFS(entry2);
     }
     else if (key === 'l') {
-      var miFL = document.getElementById('miFastLinks');
+      var miFL = document.getElementById('miLinkPastes');
       if (miFL) miFL.dispatchEvent(new Event('pointerup', {bubbles:true}));
     }
     else if (key === 'a') {

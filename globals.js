@@ -23,6 +23,7 @@ const canvas    = document.getElementById('gameCanvas');
 const ctx       = canvas.getContext('2d');
 const wrap      = document.getElementById('rotateWrap');
 const menuWrap  = document.getElementById('menuWrap');
+window.menuWrap = menuWrap;  // expose globally so overlay screens can hide/show it
 const menuBtn   = document.getElementById('menuBtn');
 const menuPanel = document.getElementById('menuPanel');
 
