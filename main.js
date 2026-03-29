@@ -61,22 +61,23 @@ async function init(){
 
   // Migrate legacy field names
   linksData.forEach(row => {
+    // Migrate legacy VidRange field name
     if ('asset' in row && !('VidRange' in row)) {
       row.VidRange = row.asset;
       delete row.asset;
     }
-    // Normalize V.Title → v.title, V.Author → v.author (capital V was old convention)
-    if ('V.Title' in row && !('v.title' in row)) {
-      row['v.title'] = row['V.Title'];
-      delete row['V.Title'];
+    // Migrate old dot-field names (v.title, v.author, V.Title, V.Author) → VidTitle, VidAuthor
+    if ('v.title'  in row) { if (!row.VidTitle)  row.VidTitle  = row['v.title'];  delete row['v.title'];  }
+    if ('v.author' in row) { if (!row.VidAuthor) row.VidAuthor = row['v.author']; delete row['v.author']; }
+    if ('V.Title'  in row) { if (!row.VidTitle)  row.VidTitle  = row['V.Title'];  delete row['V.Title'];  }
+    if ('V.Author' in row) { if (!row.VidAuthor) row.VidAuthor = row['V.Author']; delete row['V.Author']; }
+    // Repair corruption from old Tabulator nestedFieldSeparator bug:
+    // If a 'v' object exists, extract title/author then delete it
+    if (row.v && typeof row.v === 'object') {
+      if (row.v.title  !== undefined && !row.VidTitle)  row.VidTitle  = String(row.v.title  || '');
+      if (row.v.author !== undefined && !row.VidAuthor) row.VidAuthor = String(row.v.author || '');
+      delete row.v;
     }
-    if ('V.Author' in row && !('v.author' in row)) {
-      row['v.author'] = row['V.Author'];
-      delete row['V.Author'];
-    }
-    // Remove old uppercase duplicates if both exist
-    if ('V.Title' in row && 'v.title' in row) delete row['V.Title'];
-    if ('V.Author' in row && 'v.author' in row) delete row['V.Author'];
   });
   render();
 
@@ -455,7 +456,7 @@ window.addEventListener('keyup', e => { if (e.key.toLowerCase() === 'r') window.
 
   var bar = document.createElement('div');
   bar.id = 'sal-switcher-bar';
-  bar.style.cssText = 'position:fixed;bottom:18px;right:18px;z-index:9999998;'
+  bar.style.cssText = 'position:fixed;bottom:67px;right:18px;z-index:9999998;'
     + 'display:grid;grid-template-columns:repeat(3,34px);grid-template-rows:auto auto;'
     + 'gap:5px;';
 

@@ -159,12 +159,23 @@ function renderAddGrid() {
           cell.appendChild(img);
         }
 
-        // Label
+        // Label — hidden for image cells (shows only on load error), visible for video cells
         const lbl = document.createElement('div');
         lbl.style.cssText = 'position:relative;z-index:2;text-align:center;padding:4px;'
           + 'font-size:11px;font-family:sans-serif;color:#111;'
-          + 'text-shadow:0 1px 3px rgba(0,0,0,0.9);word-break:break-word;max-width:100%;';
-        lbl.textContent = entry.cname || entry.link.slice(0, 30);
+          + 'text-shadow:0 1px 3px rgba(255,255,255,0.8);word-break:break-word;max-width:100%;';
+        lbl.textContent = entry.cname || entry.link.slice(0, 28);
+        if (isImg) {
+          // Hide label until we know image failed
+          lbl.style.display = 'none';
+          const imgEl = cell.querySelector('img');
+          if (imgEl) {
+            imgEl.addEventListener('error', function() { lbl.style.display = ''; });
+          } else {
+            // No img element (e.g. VidRange wasn't 'i') — show label
+            lbl.style.display = '';
+          }
+        }
         cell.appendChild(lbl);
 
         // Cell label badge
@@ -289,10 +300,10 @@ window.toggleAddGrid = function() {
   window._addGridActive = _addGridActive;
   renderAddGrid();
 
-  // If the table modal is open, refresh it to show the correct dataset
+  // If the table modal is open, refresh it with explicit mode (avoids timing issue)
   const modal = document.getElementById('jsonModal');
   if (modal && modal.classList.contains('open') && window.openTable) {
-    window.openTable();
+    window.openTable(_addGridActive);  // pass mode explicitly
   }
 
   // Update A button appearance

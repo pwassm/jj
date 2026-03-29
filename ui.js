@@ -70,7 +70,7 @@ window.openFS = function(it) {
   topRight.style.cssText = 'color:#8ef;font-size:11px;text-decoration:underline;'
     + 'text-shadow:0 1px 3px #000;pointer-events:auto;max-width:160px;overflow:hidden;'
     + 'text-overflow:ellipsis;white-space:nowrap;display:block;';
-  topRight.textContent = '↗ ' + (it['v.title'] || it.cname || 'Source');
+  topRight.textContent = '↗ ' + (it['VidTitle'] || it.cname || 'Source');
   topRight.addEventListener('click', e => e.stopPropagation());
   topBar.appendChild(topLeft); topBar.appendChild(topRight);
 
@@ -1041,14 +1041,25 @@ function syncTab() {
   if (!window._salTab) return;
   try {
     const rows = window._salTab.getData();
-    // CRITICAL GUARD: if Tabulator currently holds addingData rows (cell names like a1a, a2b),
-    // NEVER write them into linksData. This is the root cause of GM/TM corruption.
+    // CRITICAL GUARD: never write addingData rows into linksData
     const isHoldingAddingData = window._addGridActive
       || rows.slice(0, 5).some(r => r.cell && /^a\d[a-e]$/.test(String(r.cell)));
     if (isHoldingAddingData) return;
     linksData = rows.map(r => {
       const o = {};
-      Object.keys(r).forEach(k => { if (!k.startsWith('_')) o[k] = r[k]; });
+      Object.keys(r).forEach(k => {
+        if (!k.startsWith('_')) {
+          const v = r[k];
+          // Coerce to string — prevents [object Object] if an editor returned a DOM node
+          // Special case: 'v' object from nestedFieldSeparator bug → restore v.title/v.author
+          if (k === 'v' && v && typeof v === 'object') {
+            if (v.title !== undefined) o['VidTitle'] = String(v.title || '');
+            if (v.author !== undefined) o['VidAuthor'] = String(v.author || '');
+          } else {
+            o[k] = (v === null || v === undefined) ? '' : (typeof v === 'object') ? String(v) : v;
+          }
+        }
+      });
       return o;
     });
   } catch(e) {}
@@ -1110,7 +1121,7 @@ function buildKeyOrder() {
   }));
   return order.length ? order :
     ['show','VidRange','cell','fit','link','cname','sname',
-     'v.title','v.author','attribution','comment','Mute','Portrait'];
+     'VidTitle','VidAuthor','attribution','comment','Mute','Portrait'];
 }
 
 // Rewrite every linksData row's key order to match keyOrder array
@@ -1183,6 +1194,12 @@ function getDistinctVals(field, data) {
 }
 
 // ── Column operations ─────────────────────────────────────────────────────
+// Clear Tabulator's persisted column layout so new structure takes effect cleanly
+function clearTabPersistence() {
+  try { localStorage.removeItem('tabulator-sal-table-columns'); } catch(e) {}
+  try { localStorage.removeItem('tabulator-sal-table-add-columns'); } catch(e) {}
+}
+
 function dupColumn(src) {
   if (window._addGridActive) { setStatus('Column editing not available in staging mode', '#f88'); return; }
   if (!src || !_colOrder.includes(src)) return;
@@ -1192,7 +1209,8 @@ function dupColumn(src) {
   _colOrder.splice(idx+1, 0, nk);
   linksData.forEach(r => { r[nk] = r[src]!==undefined ? String(r[src]) : ''; });
   reorderKeys(_colOrder);
-  saveData();
+  clearTabPersistence();
+  saveData(true);  // skipSync: Tabulator doesn't know about new col yet
   _activeCol = nk;
   openTable();
   setStatus('Duplicated "'+src+'" → "'+nk+'"');
@@ -1204,7 +1222,8 @@ function delColumn(k) {
   _colOrder = _colOrder.filter(x => x!==k);
   linksData.forEach(r => delete r[k]);
   if (_activeCol===k) _activeCol=null;
-  saveData();
+  clearTabPersistence();
+  saveData(true);  // skipSync: linksData already modified
   openTable();
 }
 function addColAfter(after) {
@@ -1216,7 +1235,8 @@ function addColAfter(after) {
   _colOrder.splice(idx+1, 0, nk);
   linksData.forEach(r => { if (r[nk]===undefined) r[nk]=''; });
   reorderKeys(_colOrder);
-  saveData();
+  clearTabPersistence();
+  saveData(true);  // skipSync: Tabulator doesn't have new col yet
   _activeCol = nk;
   openTable();
 }
@@ -1227,8 +1247,9 @@ function renameColumn(k) {
   if (!nk || nk===k) return;
   if (_colOrder.includes(nk)) { alert('"'+nk+'" already exists.'); return; }
   _colOrder[_colOrder.indexOf(k)] = nk;
-  linksData.forEach(r => { r[nk]=r[k]!==undefined?r[k]:''; delete r[k]; });
-  saveData();
+  linksData.forEach(r => { r[nk]=r[k]!==undefined?String(r[k]):''; delete r[k]; });
+  clearTabPersistence();
+  saveData(true);  // skipSync: Tabulator has old col name
   _activeCol = nk;
   openTable();
 }
@@ -1339,17 +1360,20 @@ function makeCommaListEditor(terms) {
 
 // This is the ONLY entry point for (re)building Tabulator.
 // It always reads fresh from linksData and colConfig.
-window.openTable = function() {
+// Pass forceAddMode=true/false to override _addGridActive (used by toggleAddGrid)
+window.openTable = function(forceAddMode) {
   const container = document.getElementById('tableEditor');
   if (!container) return;
 
-  // When GAdd overlay is active, show addingData instead of linksData
-  const isAddMode = !!window._addGridActive;
+  // Determine mode: explicit override > window._addGridActive
+  const isAddMode = (forceAddMode !== undefined) ? !!forceAddMode : !!window._addGridActive;
+  // Also sync window._addGridActive so other code agrees
+  // (add_grid.js local var may have diverged from window var in some timing scenarios)
   const tableData = isAddMode ? (window.addingData || []) : linksData;
   const titleEl = document.getElementById('jsonTitle');
   if (titleEl) titleEl.textContent = isAddMode
-    ? '📋 Table Editor: adding.json (staging)'
-    : '📋 Table Editor: masterlinks.json';
+    ? '📋 Table Editor: adding.json (staging) — ' + tableData.length + ' rows'
+    : '📋 Table Editor: masterlinks.json — ' + tableData.length + ' rows';
 
   if (window._salTab) { try { window._salTab.destroy(); } catch(e) {} window._salTab = null; }
   container.innerHTML = '';
@@ -1360,7 +1384,7 @@ window.openTable = function() {
 
   const cnameVals  = getDistinctVals('cname',  tableData);
   const snameVals  = getDistinctVals('sname',  tableData);
-  const authorVals = getDistinctVals('v.author',tableData);
+  const authorVals = getDistinctVals('VidAuthor',tableData);
   const topicVals  = getDistinctVals('Topic',  tableData);
 
   const cols = [];
@@ -1392,7 +1416,12 @@ window.openTable = function() {
       cell.getRow().delete();
     }
   });
-  cols.push({ title:'', field:'_sel', width:26, minWidth:26, resizable:false, headerSort:false, hozAlign:'center', formatter:'rowSelection', titleFormatter:'rowSelection', cellClick(e,cell){ cell.getRow().toggleSelect(); } });
+  // Checkbox column — Tabulator handles click+shift+click natively via selectableRangeMode:'click'
+  // After selecting rows, click any column header to bulk rename that column.
+  cols.push({
+    title:'', field:'_sel', width:26, minWidth:26, resizable:false, headerSort:false,
+    hozAlign:'center', formatter:'rowSelection', titleFormatter:'rowSelection'
+  });
   cols.push({
     title:'\u2195', field:'_move', width:32, minWidth:32, resizable:false, headerSort:false, hozAlign:'center',
     formatter:()=>"<span style='cursor:pointer;color:#777;font-size:10px;'>\u25b2\u25bc</span>",
@@ -1418,30 +1447,32 @@ window.openTable = function() {
         const row   = cell.getRow();
         _activeRow = row; _activeCol = field; updateFocusIndicator();
 
-        if (e.ctrlKey) {
-          // Ctrl+click = column range selection for bulk rename
-          if (window._colRangeAnchor && window._colRangeAnchor.field === field) {
-            const allRows = window._salTab.getRows();
-            const anchorIdx = allRows.indexOf(window._colRangeAnchor.row);
-            const clickIdx  = allRows.indexOf(row);
-            if (anchorIdx !== -1 && clickIdx !== -1) {
-              const lo = Math.min(anchorIdx, clickIdx);
-              const hi = Math.max(anchorIdx, clickIdx);
-              const rangeRows = allRows.slice(lo, hi + 1);
-              window._salTab.deselectRow();
-              rangeRows.forEach(r => r.select());
-              window._colRangeAnchor = null;
-              openBulkRename(field, rangeRows);
-              return;
-            }
+        if (e.shiftKey && window._cellAnchor && window._cellAnchor.field === field) {
+          // Shift+click same column → bulk rename range
+          e.preventDefault();
+          // DO NOT stopPropagation — Tabulator's row selection still needs to fire
+          if (window._salTab && window._salTab.modules && window._salTab.modules.edit) {
+            try { window._salTab.modules.edit.cancelEdit(); } catch(ex) {}
           }
-          // Set anchor for range selection
-          window._colRangeAnchor = { field, row };
-          window._salTab.deselectRow();
-          row.select();
-          setStatus('Ctrl+click another cell in "' + field + '" to select range for bulk rename — Ctrl+Alt+L to launch video', '#8ef');
+          const allRows   = window._salTab.getRows();
+          const anchorIdx = window._cellAnchor.rowPos;
+          const clickIdx  = allRows.indexOf(row);
+          if (anchorIdx !== -1 && clickIdx !== -1) {
+            const lo = Math.min(anchorIdx, clickIdx);
+            const hi = Math.max(anchorIdx, clickIdx);
+            const rangeRows = allRows.slice(lo, hi + 1);
+            window._cellAnchor = null;
+            // Use a short delay so Tabulator finishes its own click handling first
+            setTimeout(function() { openBulkRename(field, rangeRows); }, 0);
+          }
+        } else if (e.shiftKey) {
+          // Shift+click different column — set new anchor
+          e.preventDefault();
+          window._cellAnchor = { field, rowPos: window._salTab.getRows().indexOf(row) };
+          setStatus('Anchor set in "' + field + '" — shift+click another cell in same column to bulk rename', '#8ef');
         } else {
-          window._colRangeAnchor = null;
+          // Plain click — set anchor for potential future shift+click, allow normal editing
+          window._cellAnchor = { field, rowPos: window._salTab.getRows().indexOf(row) };
         }
       },
       cellEdited(){
@@ -1492,7 +1523,7 @@ window.openTable = function() {
     }
     if (k==='cname'||k==='Topic') def.editor = makeCommaListEditor(k==='cname'?cnameVals:topicVals);
     else if (k==='sname')    def.editor = makeDatalistEditor(snameVals);
-    else if (k==='v.author') def.editor = makeDatalistEditor(authorVals);
+    else if (k==='VidAuthor') def.editor = makeDatalistEditor(authorVals);
     cols.push(def);
   });
 
@@ -1503,11 +1534,13 @@ window.openTable = function() {
   window._salTab = new Tabulator(container, {
     data: deepCopy(tableData),
     reactiveData: false,
+    nestedFieldSeparator: false,   // CRITICAL: prevents v.title/v.author being treated as nested v→{title,author}
     columns: cols,
     layout: 'fitData',
     autoResize: false,
     rowHeight: window._thumbEnabled ? 58 : 24,
     selectableRows: true,
+    selectableRowsRangeMode: 'click',  // enables shift+click range selection on checkboxes
     movableColumns: true,
     history: false,
     height: '100%',
@@ -1531,8 +1564,11 @@ window.openTable = function() {
     },
 
     rowSelectionChanged(data, rows) {
-      const btn = document.getElementById('deleteSelectedRows');
-      if (btn) btn.style.display = rows.length > 0 ? 'inline-block' : 'none';
+      const del = document.getElementById('deleteSelectedRows');
+      const brn = document.getElementById('btn-bulk-rename');
+      const show = rows.length > 0;
+      if (del) del.style.display = show ? 'inline-block' : 'none';
+      if (brn) brn.style.display = show ? 'inline-block' : 'none';
     },
 
     rowClick(e, row) {
@@ -1605,6 +1641,13 @@ document.getElementById('deleteSelectedRows').addEventListener('click', function
   localStorage.setItem('seeandlearn-recycle', JSON.stringify(rd));
   saveData(true);  // skipSync=true — linksData already updated by splices above
   _activeRow=null; this.style.display='none'; setStatus('Row(s) deleted');
+});
+
+document.getElementById('btn-bulk-rename').addEventListener('click', function() {
+  if (!window._salTab) return;
+  const sel = window._salTab.getSelectedRows();
+  if (!sel.length) { setStatus('Select rows first', '#f88'); return; }
+  openBulkRename(_activeCol || _colOrder[0] || '', sel);
 });
 
 document.getElementById('btn-col-add').addEventListener('click', function() {
@@ -1685,29 +1728,21 @@ document.getElementById('toggleRawJson').addEventListener('click', function() {
 });
 
 // ─── OPEN / CLOSE TABLE EDITOR ─────────────────────────────────────────────
-document.getElementById('miTables').addEventListener('pointerup', e => {
-  e.stopPropagation(); closeMenu();
-  rawJsonMode = false;
-  document.getElementById('toggleRawJson').textContent         = 'Show Raw JSON';
-  document.getElementById('tableEditor').style.display         = 'block';
-  document.getElementById('jsonText').style.display            = 'none';
-  document.getElementById('tableToolbar').style.display        = 'flex';
-  document.getElementById('deleteSelectedRows').style.display  = 'none';
-  document.getElementById('jsonStatus').textContent            = '';
-  document.getElementById('jsonModal').classList.add('open');
-  window.openTable();
-});
-
 function closeTableEditor() {
   if (window._addGridActive) {
-    // Tabulator holds addingData — sync and save staging only, never touch linksData
+    // Only pull Tabulator data into addingData if Tabulator actually holds addingData rows
+    // (cell names like a1a, a2b). If it still shows ML rows, don't overwrite addingData.
     if (window._salTab && window.addingData) {
       try {
         const rows = window._salTab.getData();
-        window.addingData = rows.map(r => {
-          const o = {}; Object.keys(r).forEach(k => { if (!k.startsWith('_')) o[k] = r[k]; });
-          return o;
-        });
+        const hasAddingRows = rows.slice(0, 3).some(r => r.cell && /^a\d[a-e]$/.test(String(r.cell)));
+        if (hasAddingRows) {
+          window.addingData = rows.map(r => {
+            const o = {}; Object.keys(r).forEach(k => { if (!k.startsWith('_')) o[k] = r[k]; });
+            return o;
+          });
+        }
+        // If Tabulator still has ML data, addingData is untouched (correct)
       } catch(e) {}
     }
     if (typeof saveAdding === 'function') saveAdding();
@@ -1781,7 +1816,30 @@ document.getElementById('jsonText').addEventListener('keydown', e => {
 // (saveJsonSilent, saveJson, triggerDownload defined in table module above)
 
 // ─── Settings ─────────────────────────────────────────────────────────────────
-document.getElementById('miSaveJson').addEventListener('pointerup', e => { e.stopPropagation(); closeMenu(); saveJson(); });
+document.getElementById('miDlAll').addEventListener('pointerup', e => {
+  e.stopPropagation(); closeMenu();
+  function dl(filename, data) {
+    const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = filename; document.body.appendChild(a); a.click();
+    document.body.removeChild(a); setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+  }
+  // Small delay between downloads so browser doesn't block second one
+  dl('masterlinks.json', linksData);
+  setTimeout(() => dl('adding.json', window.addingData || []), 400);
+  setStatus('Downloaded masterlinks.json and adding.json', '#5f5');
+});
+
+document.getElementById('miClearStaging').addEventListener('pointerup', e => {
+  e.stopPropagation(); closeMenu();
+  const n = (window.addingData || []).length;
+  if (!confirm('Clear all ' + n + ' staging entries?\n\nThis resets adding.json to [] on next download.\nMasterlinks.json is NOT affected.')) return;
+  window.addingData = [];
+  if (typeof saveAdding === 'function') saveAdding();
+  // If AT is open, refresh it
+  if (window._salTab && window._addGridActive) window.openTable(true);
+  setStatus('Staging cleared (' + n + ' entries removed)', '#5f5');
+});
 document.getElementById('miHelp').addEventListener('pointerup', e => {
   e.stopPropagation(); closeMenu();
   alert('SeeAndLearn\n\nTap cell image → fullscreen\nTap empty cell → quick-fill (Ctrl+S to save)\n\nTable editor:\n• Click any cell to focus it for toolbar row/col buttons\n• Drag column headers to reorder\n• Drag column edges to resize (auto-saved)\n• Right-click column header: rename / duplicate / delete\n• Push to GitHub: syncs all edits including column order');
@@ -1822,7 +1880,6 @@ document.getElementById('togAutopause').addEventListener('change', function() {
 })();
 
 document.addEventListener('keydown', e => {
-  if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 's') { e.preventDefault(); saveJson(); }
   // Ctrl+Alt+L — launch video from focused table row
   // If row has VidRange → open VideoEdit; otherwise open VideoShow
   if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'l') {
@@ -1852,34 +1909,82 @@ document.getElementById('qfDesktop').style.display = ISMOBILE ? 'none' : 'block'
 
 // ─── Get Video Info ───────────────────────────────────────────────────────────
 window.fillEmptyVideoInfo = async function() {
-  if (!rawJsonMode) syncFromTabulator();
+  // Pull Tabulator → linksData before operating
+  syncTab();
   const btn = document.getElementById('btn-get-vid-info');
-  if (btn) btn.textContent = 'Fetching...';
-  let updated = false;
-  if (!tableKeys.includes('v.title'))  tableKeys.push('v.title');
-  if (!tableKeys.includes('v.author')) tableKeys.push('v.author');
-  if (!tableKeys.includes('Portrait')) tableKeys.push('Portrait');
+  if (btn) { btn.textContent = 'Fetching...'; btn.disabled = true; }
+  let updated = 0, skipped = 0;
 
-  await Promise.all(linksData.map(async row => {
-    const isVid = row.VidRange && window.parseVideoAsset && window.parseVideoAsset(row.VidRange) !== null;
-    if (!isVid || !row.link || !row.link.match(/^https?:/i)) return;
-    if (row['v.title'] && row['v.author'] && row.Portrait) return;
-    try {
-      const res  = await fetch('https://noembed.com/embed?url=' + encodeURIComponent(row.link));
-      const data = await res.json();
-      if (data.title       && !row['v.title'])  { row['v.title']  = data.title;       updated = true; }
-      if (data.author_name && !row['v.author']) { row['v.author'] = data.author_name; updated = true; }
-      if (data.width && data.height && (!row.Portrait || row.Portrait === ''))
-        { row.Portrait = data.width < data.height ? '1' : '0'; updated = true; }
-    } catch(e) {}
+  // Operate on selected rows if any, otherwise all rows
+  const selRows = window._salTab ? window._salTab.getSelectedRows() : [];
+  const targetData = selRows.length
+    ? selRows.map(r => {
+        const d = r.getData();
+        const idx = linksData.findIndex(row => row.link === d.link && row.cell === d.cell);
+        return idx !== -1 ? linksData[idx] : null;
+      }).filter(Boolean)
+    : linksData;
+
+  const scope = selRows.length ? selRows.length + ' selected rows' : linksData.length + ' rows';
+
+  // Helper: fetch image natural dimensions
+  function fetchImgDimensions(url) {
+    return new Promise(function(resolve) {
+      const img = new Image();
+      img.onload  = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+      img.onerror = () => resolve(null);
+      img.src = url;
+      setTimeout(() => { img.src = ''; resolve(null); }, 8000);
+    });
+  }
+
+  await Promise.all(targetData.map(async row => {
+    if (!row.link || !row.link.match(/^https?:/i)) return;
+    const isImg = row.VidRange === 'i';
+    const isVid = !isImg && row.VidRange && window.parseVideoAsset &&
+                  window.parseVideoAsset(row.VidRange) !== null;
+
+    // Video rows: title, author, portrait via noembed
+    if (isVid) {
+      const needsInfo = !row.VidTitle || !row.VidAuthor || !row.Portrait;
+      if (!needsInfo) { skipped++; return; }
+      try {
+        const res  = await fetch('https://noembed.com/embed?url=' + encodeURIComponent(row.link));
+        const data = await res.json();
+        if (data.title       && !row.VidTitle)  { row.VidTitle  = data.title;       updated++; }
+        if (data.author_name && !row.VidAuthor) { row.VidAuthor = data.author_name; updated++; }
+        if (data.width && data.height && (!row.Portrait || row.Portrait === '')) {
+          row.Portrait = data.width < data.height ? '1' : '0'; updated++;
+        }
+      } catch(e) { skipped++; }
+    }
+
+    // Image rows: dimensions → MPix + Portrait
+    // Re-fetch if MPix is empty (don't skip if Portrait already set)
+    if (isImg) {
+      const needsMPix = !row.MPix || row.MPix === '';
+      const needsPortrait = !row.Portrait || row.Portrait === '';
+      if (!needsMPix && !needsPortrait) { skipped++; return; }
+      const dims = await fetchImgDimensions(row.link);
+      if (dims && dims.w && dims.h) {
+        if (needsMPix)    { row.MPix    = (dims.w * dims.h / 1e6).toFixed(1); updated++; }
+        if (needsPortrait){ row.Portrait = dims.h > dims.w ? '1' : '0';       updated++; }
+      } else { skipped++; }
+    }
   }));
 
-  if (updated) {
-    saveJsonSilent();
+  // Save directly from linksData (skipSync so we don't clobber our updates)
+  if (updated > 0) {
+    saveData(true);
     window.renderTableEditor();
   }
-  if (btn) btn.textContent = 'Get Video Info';
-  setStatus(updated ? 'Video info updated' : 'No new info found');
+  if (btn) { btn.textContent = 'Get Video Info'; btn.disabled = false; }
+  setStatus(
+    updated > 0
+      ? '✓ Updated ' + updated + ' field(s) across ' + scope + (skipped ? ' · ' + skipped + ' already set' : '')
+      : 'No empty fields to fill in ' + scope,
+    updated > 0 ? '#5f5' : '#888'
+  );
 };
 
 // ─── Compat shims ─────────────────────────────────────────────────────────────
@@ -1898,39 +2003,48 @@ document.getElementById('miLoadGithub').addEventListener('pointerup', async e =>
     alert('GitHub owner/repo not set.\nOpen Settings → GitHub Sync to configure, or do a Push first.');
     return;
   }
-  if (!confirm('Load masterlinks.json from GitHub?\n\nThis REPLACES your current data.\nAlso downloads masterlinks.json so your local file is updated.')) return;
+  if (!confirm('Load masterlinks.json from GitHub?\n\nThis REPLACES your current data.\nA copy will also be downloaded so your local file is updated.')) return;
   try {
-    const headers = token ? { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json' } : {};
-    const rawUrl = 'https://raw.githubusercontent.com/' + owner + '/' + repo + '/main/masterlinks.json?v=' + Date.now();
-    const res = await fetch(rawUrl, { headers });
-    if (!res.ok) throw new Error('HTTP ' + res.status + ': ' + res.statusText);
-    const raw = await res.json();
+    // Use the GitHub Contents API — works on localhost, no CORS issue
+    // Returns JSON with base64-encoded content field
+    const apiUrl = 'https://api.github.com/repos/' + owner + '/' + repo + '/contents/masterlinks.json';
+    const headers = { 'Accept': 'application/vnd.github+json' };
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    const res = await fetch(apiUrl, { headers });
+    if (!res.ok) throw new Error('HTTP ' + res.status + ' — check owner/repo in Settings');
+    const meta = await res.json();
+    if (!meta.content) throw new Error('No content in API response');
+    // Decode base64 (GitHub returns it with newlines)
+    const decoded = atob(meta.content.replace(/\n/g, ''));
+    const raw = JSON.parse(decoded);
     if (!Array.isArray(raw)) throw new Error('Expected JSON array');
-    // Strip the _salMeta row if present
-    let pushTime = 0;
+    // Strip _salMeta row if present
     let data = raw;
-    if (raw.length > 0 && raw[0]._salMeta) {
-      pushTime = parseInt(raw[0]._salPushTime || '0', 10);
-      data = raw.slice(1);
-    }
-    linksData = data;
-    linksData.forEach(row => {
+    let pushTime = 0;
+    if (raw.length > 0 && raw[0]._salMeta) { pushTime = parseInt(raw[0]._salPushTime || '0', 10); data = raw.slice(1); }
+    // Migrate legacy field names
+    data.forEach(row => {
       if ('asset' in row && !('VidRange' in row)) { row.VidRange = row.asset; delete row.asset; }
+      if ('v.title'  in row) { row.VidTitle  = row['v.title'];  delete row['v.title'];  }
+      if ('v.author' in row) { row.VidAuthor = row['v.author']; delete row['v.author']; }
     });
-    // Save to localStorage with the push timestamp so future loads detect it
+    linksData = data;
     const s = JSON.stringify(linksData);
     localStorage.setItem('seeandlearn-links', s);
     localStorage.setItem('mlynx-links', s);
     localStorage.setItem('sal-edited', pushTime > 0 ? String(pushTime) : Date.now().toString());
     render();
-    // Auto-download masterlinks.json so the local file at m:\jj is updated too
+    // Auto-download so local file is updated
     const blob = new Blob([JSON.stringify(linksData, null, 2)], {type:'application/json'});
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = 'masterlinks.json';
     document.body.appendChild(a); a.click();
     document.body.removeChild(a); URL.revokeObjectURL(a.href);
-    alert('✓ Loaded ' + linksData.length + ' rows from GitHub.\nmasterlinks.json downloaded — replace your local copy in m:\\jj');
-  } catch(err) { alert('Load from GitHub failed:\n' + err.message); }
+    setStatus('Loaded ' + linksData.length + ' rows from GitHub', '#5f5');
+  } catch(err) {
+    alert('Load from GitHub failed:\n' + err.message);
+    setStatus('Load from GitHub failed: ' + err.message, '#f88');
+  }
 });
 
 // Reload masterlinks.json from local server — clears corrupted localStorage first
@@ -2011,7 +2125,7 @@ function showThumbForRow(data, anchorEl) {
   const label = document.createElement('div');
   label.style.cssText = 'color:#8ef;font-size:11px;margin-bottom:4px;'
     + 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
-  label.textContent = (data.cname || data['v.title'] || '').slice(0, 28) || 'Preview';
+  label.textContent = (data.cname || data['VidTitle'] || '').slice(0, 28) || 'Preview';
   panel.appendChild(label);
 
   const imgBox = document.createElement('div');
@@ -2143,19 +2257,32 @@ document.getElementById('btn-clear-cells').addEventListener('click', function() 
 function openBulkRename(field, rangeRows) {
   const existing = document.getElementById('bulk-rename-popup');
   if (existing) existing.remove();
+
+  const activeData = window._addGridActive ? (window.addingData || []) : linksData;
   const dictVals = Array.from(new Set(
-    linksData.map(r => String(r[field] || '').trim()).filter(Boolean)
+    activeData.map(r => String(r[field] || '').trim()).filter(Boolean)
   )).sort();
   const count = rangeRows.length;
+
+  // Build column picker options
+  const colOpts = _colOrder.filter(k => !k.startsWith('_'))
+    .map(k => '<option value="' + k.replace(/"/g,'&quot;') + '"' + (k===field?' selected':'') + '>' + k + '</option>')
+    .join('');
+
   const popup = document.createElement('div');
   popup.id = 'bulk-rename-popup';
   popup.style.cssText = 'position:fixed;z-index:999999;top:50%;left:50%;'
     + 'transform:translate(-50%,-50%);min-width:320px;max-width:460px;'
     + 'background:#1a2a3a;border:1px solid #4af;border-radius:8px;'
     + 'padding:14px;box-shadow:0 8px 32px rgba(0,0,0,0.9);font-family:sans-serif;color:#fff;';
-  popup.innerHTML = '<div style="font-size:13px;font-weight:bold;color:#8ef;margin-bottom:8px;">'
+  popup.innerHTML = '<div style="font-size:13px;font-weight:bold;color:#8ef;margin-bottom:10px;">'
     + 'Bulk rename &nbsp;<span style="font-weight:normal;color:#888;font-size:11px;">'
-    + count + ' row' + (count>1?'s':'') + ' · column: ' + field + '</span></div>'
+    + count + ' row' + (count>1?'s':'') + '</span></div>'
+    + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">'
+    + '<label style="font-size:11px;color:#888;white-space:nowrap;">Column:</label>'
+    + '<select id="brn-col" style="flex:1;padding:5px 7px;font-size:12px;border-radius:5px;'
+    + 'border:1px solid #4af;background:#0d1a2a;color:#fff;outline:none;">'
+    + colOpts + '</select></div>'
     + '<div style="position:relative;">'
     + '<input id="brn-inp" type="text" autocomplete="off" placeholder="New value…" '
     + 'style="width:100%;box-sizing:border-box;padding:7px 8px;font-size:13px;border-radius:5px;'
@@ -2172,11 +2299,26 @@ function openBulkRename(field, rangeRows) {
     + 'background:#222;color:#aaa;cursor:pointer;font-size:13px;">Cancel</button>'
     + '</div>';
   document.body.appendChild(popup);
-  const inp = document.getElementById('brn-inp');
-  const dd  = document.getElementById('brn-dd');
+  const inp    = document.getElementById('brn-inp');
+  const dd     = document.getElementById('brn-dd');
+  const colSel = document.getElementById('brn-col');
+
+  // Current field (may change via dropdown)
+  let curField = field;
+  let curDict  = dictVals.slice();
+
+  function refreshDict() {
+    curField = colSel.value;
+    const src = window._addGridActive ? (window.addingData || []) : linksData;
+    curDict = Array.from(new Set(src.map(r => String(r[curField]||'').trim()).filter(Boolean))).sort();
+    inp.value = '';
+    showDD();
+  }
+  colSel.addEventListener('change', refreshDict);
+
   function showDD() {
     const q = inp.value.trim().toLowerCase();
-    const hits = q ? dictVals.filter(v => v.toLowerCase().includes(q)) : dictVals;
+    const hits = q ? curDict.filter(v => v.toLowerCase().includes(q)) : curDict;
     dd.innerHTML = '';
     if (!hits.length) { dd.style.display = 'none'; return; }
     hits.slice(0, 20).forEach(v => {
@@ -2192,21 +2334,30 @@ function openBulkRename(field, rangeRows) {
     });
     dd.style.display = 'block';
   }
+
   function applyRename() {
     const val = inp.value.trim();
-    if (val === '') { alert('Enter a value first.'); return; }
+    // Allow blank — clears the field. Confirm so it's not accidental.
+    if (val === '') {
+      if (!confirm('Set "' + (colSel.value) + '" to empty on ' + rangeRows.length + ' row(s)?')) return;
+    }
+    const f = colSel.value;
     const activeData = window._addGridActive ? (window.addingData || []) : linksData;
+    const allRows = window._salTab.getRows();
     rangeRows.forEach(row => {
-      const data = row.getData();
-      const idx = activeData.findIndex(r => r.link === data.link && r.cell === data.cell);
-      if (idx !== -1) activeData[idx][field] = val;
-      const upd = {}; upd[field] = val; row.update(upd);
+      // Use row position in Tabulator to find matching data entry
+      const pos = allRows.indexOf(row);
+      if (pos !== -1 && pos < activeData.length) {
+        activeData[pos][f] = val;
+      }
+      const upd = {}; upd[f] = val; row.update(upd);
     });
     if (window._addGridActive) { if (typeof saveAdding === 'function') saveAdding(); }
     else saveData(true);
     window._salTab.deselectRow();
+    window._cellAnchor = null;
     popup.remove();
-    setStatus('Set "' + field + '" = "' + val + '" on ' + count + ' rows', '#5f5');
+    setStatus('Set "' + f + '" = "' + val + '" on ' + rangeRows.length + ' rows', '#5f5');
   }
   inp.addEventListener('input', showDD);
   inp.addEventListener('focus', showDD);

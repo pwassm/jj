@@ -57,6 +57,19 @@ function renderGrid(){
     }
     ctx.textAlign='left'; ctx.textBaseline='alphabetic';
   }
+  // Build info in bottom-right cell (row ROWS, col COLS)
+  (function(){
+    const bfs = Math.max(8, Math.floor(Math.min(cellW, cellH) * 0.11));
+    const bx = (COLS-1)*cellW + 3;
+    const by = ROWS*cellH - 4;
+    const label = 'zip152 · 2026-03-27';
+    ctx.font = bfs + 'px monospace';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillText(label, bx+1, by+1);
+    ctx.fillStyle = 'rgba(100,160,255,0.6)';
+    ctx.fillText(label, bx, by);
+  })();
   buildOverlays();
 }
 

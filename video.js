@@ -146,7 +146,8 @@ window.mountYouTubeClip = async function(hostEl, url, startSec, dur, isMuted, cu
       start: Math.floor(initSeek),
       iv_load_policy: 3,
       endscreen: 0,
-      cc_load_policy: 0
+      cc_load_policy: 0,
+      origin: window.location.origin || window.location.hostname || 'localhost'
     },
     events: {
       onReady: function(e) {
@@ -1117,7 +1118,8 @@ window.openVideoEditor = function(it) {
       playerVars: {
         autoplay: 1, controls: 0, disablekb: 1, fs: 0, rel: 0,
         modestbranding: 1, playsinline: 1, start: Math.floor(seekSec),
-        iv_load_policy: 3, endscreen: 0, cc_load_policy: 0
+        iv_load_policy: 3, endscreen: 0, cc_load_policy: 0,
+        origin: window.location.origin || window.location.hostname || 'localhost'
       },
       events: {
         onReady: function(ev) {
