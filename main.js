@@ -99,15 +99,64 @@ init();
 window.addEventListener('resize',()=>{ setupLayout(); render(); });
 window.addEventListener('orientationchange',()=>setTimeout(()=>{ setupLayout(); render(); },350));
 
-// ─── FastLinkPaste — unified smart-parse textarea ────────────────────────────
-// Parsing rules:
-//   Non-URL line (1st of a group) → cname
-//   Non-URL line (2nd of a group) → topic
-//   URL lines                     → assigned to current cname + topic
-//   Blank line or new non-URL     → resets to new cname group
-//   Single URL works fine too.
+// ─── LinkUpload (LU) — smart-parse textarea ──────────────────────────────────
+// New parsing rules for alternating image+source format:
+//   Image URL line   → new row, VidRange='i', next free cell
+//   Next non-image line (optional) → linkpage field on that same row
+//   Next image URL   → new row, etc.
+//
+// An "image URL" is: direct .jpg/.png/.gif/.webp/.svg extension,
+//   OR a Wikipedia /wiki/.../media/File: URL (resolved via Wikimedia API),
+//   OR a YouTube/Vimeo URL (video, VidRange='0 99999')
+//
+// A non-URL text line still works as cname (old behaviour preserved)
+// A non-image URL (e.g. a Wikipedia article page) → linkpage on current row
 
 function flIsURL(s) { return /^https?:\/\//i.test(s.trim()); }
+
+function flIsImageURL(s) {
+  s = s.trim();
+  if (!flIsURL(s)) return false;
+  // Direct image extension (strip query/fragment first)
+  const clean = s.split('?')[0].split('#')[0].toLowerCase();
+  if (/\.(jpg|jpeg|png|gif|webp|svg|bmp|tiff?)$/.test(clean)) return true;
+  // Wikimedia commons direct upload URLs
+  if (/upload\.wikimedia\.org/i.test(s)) return true;
+  // Wikipedia #/media/File: fragment pattern
+  if (/wikipedia\.org\/wiki\/.*#\/media\/File:/i.test(s)) return true;
+  return false;
+}
+
+function flIsVideoURL(s) {
+  return (window.isYouTubeLink && window.isYouTubeLink(s)) ||
+         (window.isVimeoLink && window.isVimeoLink(s));
+}
+
+// Resolve a Wikipedia wiki page #/media/File: URL to the actual image URL
+// via the Wikimedia imageinfo API. Returns a Promise<string|null>.
+async function flResolveWikipediaMedia(url) {
+  try {
+    // Extract filename: .../wiki/Page#/media/File:Foo.jpg → "File:Foo.jpg"
+    const m = url.match(/#\/media\/(File:[^&?#]+)/i);
+    if (!m) return null;
+    const filename = decodeURIComponent(m[1]);
+    // Determine language prefix (en, de, fr, etc.)
+    const langM = url.match(/^https?:\/\/([a-z]{2,})\.wikipedia\.org/i);
+    const lang = langM ? langM[1] : 'en';
+    const apiUrl = 'https://' + lang + '.wikipedia.org/w/api.php'
+      + '?action=query&titles=' + encodeURIComponent(filename)
+      + '&prop=imageinfo&iiprop=url&format=json&origin=*';
+    const res = await fetch(apiUrl);
+    const data = await res.json();
+    const pages = data.query && data.query.pages;
+    if (!pages) return null;
+    const page = Object.values(pages)[0];
+    if (page && page.imageinfo && page.imageinfo[0]) {
+      return page.imageinfo[0].url;
+    }
+  } catch(e) {}
+  return null;
+}
 
 function flDateStamp() {
   const d = new Date();
@@ -124,50 +173,104 @@ function flNextFreeCell() {
   return '';
 }
 
-function flParseAndImport() {
+async function flParseAndImport() {
   const raw   = document.getElementById('fastLinkInput').value;
-  const lines = raw.split(/\r?\n/).map(l => l.trim());
+  const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
   const da    = flDateStamp();
 
-  // If GAdd overlay is active, import into addingData instead of linksData
   const target = (typeof window.flImportTarget === 'function') ? window.flImportTarget() : 'master';
   const isAdding = target === 'adding';
 
-  let cname = '', topic = '', nonUrlCount = 0;
+  const statusEl = document.getElementById('fastLinkStatus');
+  statusEl.textContent = 'Processing...';
+
   let imported = 0, skipped = 0;
+  let lastEntry = null;   // the most recently created row (for attaching linkpage)
+  let cname = '';         // text line before an image = cname
 
-  lines.forEach(line => {
-    if (!line) {
-      cname = ''; topic = ''; nonUrlCount = 0; return;
-    }
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Blank-like separator: skip
+    if (!line) { cname = ''; lastEntry = null; continue; }
+
+    // Non-URL line → cname for the next image
     if (!flIsURL(line)) {
-      if (nonUrlCount === 0) { cname = line; topic = ''; nonUrlCount = 1; }
-      else                   { topic = line; nonUrlCount = 2; }
-      return;
+      cname = line;
+      continue;
     }
-    // It's a URL — assign to next free cell in the appropriate grid
-    let nextCell = '';
-    if (isAdding) {
-      nextCell = (typeof nextFreeAddCell === 'function') ? nextFreeAddCell() : '';
-    } else {
-      nextCell = flNextFreeCell();
-    }
-    if (!nextCell) { skipped++; return; }
 
+    // Video URL → row with VidRange
+    if (flIsVideoURL(line)) {
+      const nextCell = isAdding
+        ? (typeof nextFreeAddCell === 'function' ? nextFreeAddCell() : '')
+        : flNextFreeCell();
+      if (!nextCell) { skipped++; continue; }
+      const entry = { show:'1', VidRange:'0 99999', cell:nextCell, fit:'fc',
+        link:line, cname, linkpage:'', sname:'', attribution:'', comment:'', DateAdded:da, Mute:'1' };
+      if (isAdding) { addingData.push(entry); if (typeof saveAdding==='function') saveAdding(); }
+      else linksData.push(entry);
+      lastEntry = entry; cname = ''; imported++;
+      continue;
+    }
+
+    // Wikipedia #/media/File: URL → resolve to direct image URL
+    if (/wikipedia\.org\/wiki\/.*#\/media\/File:/i.test(line)) {
+      statusEl.textContent = 'Resolving Wikipedia image URL...';
+      const resolved = await flResolveWikipediaMedia(line);
+      if (!resolved) {
+        statusEl.textContent = 'Could not resolve Wikipedia image URL: ' + line.slice(0, 60);
+        skipped++;
+        continue;
+      }
+      // Fall through with resolved URL as the image link, original as linkpage
+      const nextCell = isAdding
+        ? (typeof nextFreeAddCell === 'function' ? nextFreeAddCell() : '')
+        : flNextFreeCell();
+      if (!nextCell) { skipped++; continue; }
+      const entry = { show:'1', VidRange:'i', cell:nextCell, fit:'fc',
+        link:resolved, linkpage:line, cname, sname:'', attribution:'', comment:'', DateAdded:da, Mute:'1' };
+      if (isAdding) { addingData.push(entry); if (typeof saveAdding==='function') saveAdding(); }
+      else linksData.push(entry);
+      lastEntry = entry; cname = ''; imported++;
+      continue;
+    }
+
+    // Direct image URL
+    if (flIsImageURL(line)) {
+      const nextCell = isAdding
+        ? (typeof nextFreeAddCell === 'function' ? nextFreeAddCell() : '')
+        : flNextFreeCell();
+      if (!nextCell) { skipped++; continue; }
+      const entry = { show:'1', VidRange:'i', cell:nextCell, fit:'fc',
+        link:line, linkpage:'', cname, sname:'', attribution:'', comment:'', DateAdded:da, Mute:'1' };
+      if (isAdding) { addingData.push(entry); if (typeof saveAdding==='function') saveAdding(); }
+      else linksData.push(entry);
+      lastEntry = entry; cname = ''; imported++;
+      continue;
+    }
+
+    // Non-image URL after an image row → linkpage on that row
+    if (lastEntry) {
+      lastEntry.linkpage = line;
+      lastEntry = null;   // consumed — next non-image URL won't attach here
+      continue;
+    }
+
+    // Any other URL (no preceding image row) — treat as cname-less image attempt
+    const nextCell = isAdding
+      ? (typeof nextFreeAddCell === 'function' ? nextFreeAddCell() : '')
+      : flNextFreeCell();
+    if (!nextCell) { skipped++; continue; }
     const entry = { show:'1', VidRange:'i', cell:nextCell, fit:'fc',
-      link:line, cname, Topic:topic, sname:'', attribution:'', comment:'', DateAdded:da, Mute:'1' };
-
-    if (isAdding) {
-      addingData.push(entry);
-      if (typeof saveAdding === 'function') saveAdding();
-    } else {
-      linksData.push(entry);
-    }
-    imported++;
-  });
+      link:line, linkpage:'', cname, sname:'', attribution:'', comment:'', DateAdded:da, Mute:'1' };
+    if (isAdding) { addingData.push(entry); if (typeof saveAdding==='function') saveAdding(); }
+    else linksData.push(entry);
+    lastEntry = entry; cname = ''; imported++;
+  }
 
   if (!imported && !skipped) {
-    document.getElementById('fastLinkStatus').textContent = 'No URLs found.';
+    statusEl.textContent = 'No URLs found.';
     return;
   }
 
@@ -179,10 +282,10 @@ function flParseAndImport() {
   if (typeof renderAddGrid === 'function') renderAddGrid();
   render();
 
-  const dest = isAdding ? 'staging grid (GAdd)' : 'masterlinks';
-  const msg = `✓ Pushed ${imported} URL${imported !== 1 ? 's' : ''} to ${dest}` +
-              (skipped ? ` (${skipped} skipped — no empty cells)` : '');
-  document.getElementById('fastLinkStatus').textContent = msg;
+  const dest = isAdding ? 'staging (AT)' : 'masterlinks (TM)';
+  const msg = '✓ Pushed ' + imported + ' row' + (imported !== 1 ? 's' : '') + ' to ' + dest
+    + (skipped ? ' (' + skipped + ' skipped — no empty cells)' : '');
+  statusEl.textContent = msg;
   document.getElementById('fastLinkInput').value = '';
 }
 
@@ -215,11 +318,11 @@ document.getElementById('flClearBtn').addEventListener('click', () => {
   document.getElementById('fastLinkInput').focus();
 });
 
-document.getElementById('flImport').addEventListener('click', flParseAndImport);
+document.getElementById('flImport').addEventListener('click', () => flParseAndImport().catch(err => { document.getElementById('fastLinkStatus').textContent = 'Error: ' + err.message; }));
 
 // Ctrl+Enter also imports
 document.getElementById('fastLinkInput').addEventListener('keydown', e => {
-  if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); flParseAndImport(); }
+  if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); flParseAndImport().catch(err => { document.getElementById('fastLinkStatus').textContent = 'Error: ' + err.message; }); }
 });
 
 document.getElementById('fastLinkExit').addEventListener('pointerup', () => {
@@ -363,7 +466,7 @@ window.addEventListener('keyup', e => { if (e.key.toLowerCase() === 'r') window.
     if (!modal || modal.style.display === 'none') return;
     if (andImport) {
       var ta = document.getElementById('fastLinkInput');
-      if (ta && ta.value.trim()) flParseAndImport();
+      if (ta && ta.value.trim()) flParseAndImport().catch(err => { document.getElementById('fastLinkStatus').textContent = 'Error: ' + err.message; });
     }
     modal.style.display = 'none';
   }

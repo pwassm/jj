@@ -2212,6 +2212,38 @@ document.getElementById('btn-make-json-topic').addEventListener('click', functio
   setStatus('MakeJsonFromTopic: stub — topic="' + topic + '" (not yet implemented)', '#ff8');
 });
 
+// ─── Sync TM column structure → AT ───────────────────────────────────────────
+// Copies the current TM column order to every row in addingData,
+// adding empty string for any column that's missing.
+// If addingData has entries, warns the user to merge first.
+document.getElementById('btn-sync-at-cols').addEventListener('click', function() {
+  const atCount = (window.addingData || []).filter(r => r.show === '1').length;
+  if (atCount > 0) {
+    if (!confirm(
+      'AT (staging) has ' + atCount + ' unmerged row(s).\n\n' +
+      'You should merge them into TM first (use the Merge→ML button in GAdd).\n\n' +
+      'Continue anyway? (only adds missing columns — existing rows are preserved)'
+    )) return;
+  }
+  // Get TM column order
+  const tmCols = _colOrder.filter(k => !k.startsWith('_'));
+  if (!tmCols.length) { setStatus('No TM columns found — open TM first', '#f88'); return; }
+  // Add missing keys to each addingData row
+  let added = 0;
+  (window.addingData || []).forEach(row => {
+    tmCols.forEach(k => {
+      if (!(k in row)) { row[k] = ''; added++; }
+    });
+  });
+  if (typeof saveAdding === 'function') saveAdding();
+  setStatus(
+    'Synced ' + tmCols.length + ' TM columns to AT' +
+    (added > 0 ? ' (added ' + added + ' missing fields)' : ' (already in sync)') +
+    '. AT columns: ' + tmCols.join(', '),
+    '#8f8'
+  );
+});
+
 // ─── VideoEdit button ─────────────────────────────────────────────────────────
 document.getElementById('btn-video-edit').addEventListener('click', function() {
   const row = activeRow;
