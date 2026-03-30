@@ -88,8 +88,8 @@ function renderAddGrid() {
 
   // Merge button in header
   const mergeBtn = document.createElement('button');
-  mergeBtn.textContent = 'Merge → ML';
-  mergeBtn.title = 'Add all staged entries to masterlinks.json (dedup by link URL)';
+  mergeBtn.textContent = 'Merge → TM';
+  mergeBtn.title = 'Merge all staged entries into TM (masterlinks) — dedup by link URL';
   mergeBtn.style.cssText = 'margin-left:auto;padding:3px 10px;font-size:11px;border-radius:4px;'
     + 'border:1px solid #5f5;background:rgba(0,100,0,0.4);color:#5f5;cursor:pointer;';
   mergeBtn.addEventListener('click', function(e) {
@@ -243,16 +243,16 @@ function renderAddGrid() {
 // ── Merge addingData → linksData (masterlinks) ───────────────────────────────
 function mergeAddingToML() {
   const toAdd = addingData.filter(function(it) { return it.show === '1' && it.link; });
-  if (!toAdd.length) { alert('No entries in staging grid to merge.'); return; }
+  if (!toAdd.length) { alert('No entries in staging (TA) to merge.'); return; }
 
-  // Dedup by link URL — skip if already in masterlinks
+  // Dedup by link URL — skip if already in TM
   const existingLinks = new Set(linksData.map(function(r) { return r.link; }));
   let added = 0, dupes = 0;
 
   toAdd.forEach(function(it) {
     if (existingLinks.has(it.link)) { dupes++; return; }
-    // Assign next free cell in masterlinks grid
-    const occ = occupied ? occupied() : new Set();
+    // Assign next free cell in TM grid
+    const occ = (typeof occupied === 'function') ? occupied() : new Set();
     let nextCell = '';
     for (let r = 1; r <= ROWS; r++) {
       for (let c = 1; c <= COLS; c++) {
@@ -269,11 +269,11 @@ function mergeAddingToML() {
   });
 
   if (added === 0) {
-    alert('All ' + dupes + ' entries already exist in masterlinks. Nothing added.');
+    alert('All ' + dupes + ' entries already exist in TM. Nothing added.');
     return;
   }
 
-  // Save masterlinks
+  // Save TM — skipSync=true so Tabulator's current state (may be TA) doesn't overwrite linksData
   if (window.saveData) window.saveData(true);
   else {
     localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
@@ -281,18 +281,22 @@ function mergeAddingToML() {
   }
 
   // Clear merged entries from addingData
-  const mergedLinks = new Set(toAdd.slice(0, added + dupes).map(function(it) { return it.link; }));
+  const mergedLinks = new Set(toAdd.map(function(it) { return it.link; }));
   addingData = addingData.filter(function(it) { return !mergedLinks.has(it.link); });
   saveAdding();
 
-  const msg = '✓ Merged ' + added + ' entries into masterlinks.'
+  const msg = '✓ Merged ' + added + ' entries into TM.'
     + (dupes ? ' (' + dupes + ' duplicates skipped)' : '')
-    + '\n\nNow push to GitHub from the hamburger menu to make it permanent.';
+    + '\n\nPush to GitHub from the hamburger menu to make permanent.';
   alert(msg);
 
   renderAddGrid();
   if (window.renderGrid) window.renderGrid();
+  // Refresh TA table if open
+  if (window._salTab && window._tabMode === 'adding' && window.openTable) window.openTable(true);
 }
+// Expose for TA toolbar button
+window.mergeAddingToML = mergeAddingToML;
 
 // ── Toggle GAdd overlay ───────────────────────────────────────────────────────
 window.toggleAddGrid = function() {
@@ -315,15 +319,10 @@ window.toggleAddGrid = function() {
   }
 };
 
-// ── Push addingData to FastLink modal (when L is tapped from GAdd) ────────────
-// When the user is in GAdd and presses L, the FastLink paste modal opens.
-// On "Push →" it imports into addingData (not linksData) if GAdd is active.
-window.flImportTarget = function() {
-  // 'adding' if GAdd overlay is active OR if table is open in add mode
-  if (_addGridActive) return 'adding';
-  if (window._addGridActive) return 'adding';
-  return 'master';
-};
+// ── LP (LinkPaste) always imports to TA (staging) ────────────────────────────
+// TA is the provisional table — always paste here, then merge to TM when ready.
+// This is true whether GA overlay is active or not.
+window.flImportTarget = function() { return 'adding'; };
 
 // ── Window resize ─────────────────────────────────────────────────────────────
 window.addEventListener('resize', function() {

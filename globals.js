@@ -12,7 +12,7 @@ function syncAdminUI() {
 }
 
 let GW=0, GH=0, cellW=0, cellH=0, isPortrait=false, bgColor='#c8ddf0';
-let fitMode = localStorage.getItem("mlynx-fit")||"fc";
+let fitMode = localStorage.getItem("sal-fit") || localStorage.getItem("mlynx-fit") || "fc"; // mlynx-fit fallback for existing devices
 let showCellLbl=false, showCname=true;
 var linksData=[];  // var (not let) so window.linksData works from all scripts
 

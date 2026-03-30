@@ -14,7 +14,7 @@ async function init(){
   //  - Local edits always preserved until a newer push overwrites them
   //  - file:/// still works via localStorage/inline fallback
 
-  const lsRaw = localStorage.getItem('seeandlearn-links') || localStorage.getItem('mlynx-links');
+  const lsRaw = localStorage.getItem('seeandlearn-links');
   let lsData = null;
   if (lsRaw) { try { lsData = JSON.parse(lsRaw); } catch(e) {} }
   const lsTime = parseInt(localStorage.getItem('sal-edited') || '0', 10);

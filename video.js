@@ -215,7 +215,8 @@ window.mountVimeoClip = async function(hostEl, url, startSec, dur, isMuted, cust
     window.seeLearnVideoTimers[cellId] = setInterval(function() {
       player.getCurrentTime().then(function(t) {
         var seg = segs[segIdx];
-        if (t >= seg.start + seg.dur || t < seg.start - 0.5) {
+        // UPPER-BOUND ONLY — no lower-bound snap (prevents "goes to beginning" on scrub)
+        if (t >= seg.start + seg.dur - 0.2) {
           segIdx = (segIdx + 1) % segs.length;
           player.setCurrentTime(segs[segIdx].start);
           player.play();
@@ -919,7 +920,8 @@ window.openVideoEditor = function(it) {
         try {
           if (p._salPaused) return;
           var t = p.getCurrentTime();
-          if (t >= endT - 0.2 || t < segStart - 0.5) {
+          // UPPER-BOUND ONLY — no lower-bound snap
+          if (t >= endT - 0.2) {
             p.seekTo(segStart, true); p.playVideo();
           }
         } catch(ex) {}
@@ -931,7 +933,8 @@ window.openVideoEditor = function(it) {
       window.seeLearnVideoTimers['v2host'] = setInterval(function() {
         p.getCurrentTime().then(function(t) {
           if (p._salPaused) return;
-          if (t >= endT - 0.2 || t < segStart - 0.5) {
+          // UPPER-BOUND ONLY — no lower-bound snap
+          if (t >= endT - 0.2) {
             p.setCurrentTime(segStart); p.play();
           }
         }).catch(function(){});
@@ -1295,7 +1298,6 @@ window.openVideoEditor = function(it) {
     } else {
       var s = JSON.stringify(linksData);
       localStorage.setItem('seeandlearn-links', s);
-      localStorage.setItem('mlynx-links', s);
       localStorage.setItem('sal-edited', Date.now().toString());
     }
     closeEditor();

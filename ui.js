@@ -998,7 +998,7 @@ document.addEventListener('pointerup', () => { if (menuPanel.classList.contains(
 //     syncTab() pulls Tabulator → linksData before every save.
 //
 //  3. saveData() is the ONE save function.
-//     It calls syncTab(), writes seeandlearn-links + mlynx-links.
+//     It calls syncTab(), writes seeandlearn-links.
 //     It does NOT touch 'sal-cols'.
 //
 //  4. openTable() rebuilds Tabulator from scratch every time it's called.
@@ -1043,19 +1043,19 @@ function scrubUnderscores() {
 // Pull Tabulator's current state into linksData
 function syncTab() {
   if (!window._salTab) return;
+  // PRIMARY GUARD: _tabMode is authoritative — set when openTable() was called.
+  // Unlike _addGridActive, it never drifts if the user toggles the A button while TA is open.
+  if (_tabMode === 'adding') return;
   try {
     const rows = window._salTab.getData();
-    // CRITICAL GUARD: never write addingData rows into linksData
-    const isHoldingAddingData = window._addGridActive
-      || rows.slice(0, 5).some(r => r.cell && /^a\d[a-e]$/.test(String(r.cell)));
-    if (isHoldingAddingData) return;
+    // Belt-and-suspenders: if cell pattern looks like addingData, skip anyway
+    const hasAddingCells = rows.slice(0, 5).some(r => r.cell && /^a\d[a-e]$/.test(String(r.cell)));
+    if (hasAddingCells) return;
     linksData = rows.map(r => {
       const o = {};
       Object.keys(r).forEach(k => {
         if (!k.startsWith('_')) {
           const v = r[k];
-          // Coerce to string — prevents [object Object] if an editor returned a DOM node
-          // Special case: 'v' object from nestedFieldSeparator bug → restore v.title/v.author
           if (k === 'v' && v && typeof v === 'object') {
             if (v.title !== undefined) o['VidTitle'] = String(v.title || '');
             if (v.author !== undefined) o['VidAuthor'] = String(v.author || '');
@@ -1073,12 +1073,11 @@ function syncTab() {
 // Pass skipSync=true when linksData has already been updated directly (e.g. after delete)
 // to prevent syncTab() from reading Tabulator's async state and resurrecting deleted rows.
 function saveData(skipSync) {
-  // Never sync from Tabulator while it holds addingData
-  if (!skipSync && !window._addGridActive) syncTab();
+  // Use _tabMode (authoritative) to guard against syncTab() reading addingData into linksData
+  if (!skipSync && _tabMode !== 'adding') syncTab();
   scrubUnderscores();
   const s = JSON.stringify(linksData);
   localStorage.setItem('seeandlearn-links', s);
-  localStorage.setItem('mlynx-links', s);
   localStorage.setItem('sal-edited', Date.now().toString());
 }
 
@@ -1148,6 +1147,12 @@ Object.defineProperty(window, '_activeRow', {
 });
 let _activeCol = null; // field name string
 
+// AUTHORITATIVE flag — set in openTable(), never drifts with _addGridActive.
+// 'master' = Tabulator holds linksData (TM). 'adding' = Tabulator holds addingData (TA).
+// syncTab() and closeTableEditor() use ONLY this flag; cell-pattern heuristics are fallback only.
+let _tabMode = 'master';
+window._tabMode = 'master';
+
 window._salTab  = null; // the Tabulator instance
 
 // ── Utility ───────────────────────────────────────────────────────────────
@@ -1205,7 +1210,7 @@ function clearTabPersistence() {
 }
 
 function dupColumn(src) {
-  if (window._addGridActive) { setStatus('Column editing not available in staging mode', '#f88'); return; }
+  if (_tabMode === 'adding') { setStatus('Column editing not available in staging mode', '#f88'); return; }
   if (!src || !_colOrder.includes(src)) return;
   let nk = src+'_copy', n=2;
   while (_colOrder.includes(nk)) nk = src+'_copy'+n++;
@@ -1220,7 +1225,7 @@ function dupColumn(src) {
   setStatus('Duplicated "'+src+'" → "'+nk+'"');
 }
 function delColumn(k) {
-  if (window._addGridActive) { setStatus('Column editing not available in staging mode', '#f88'); return; }
+  if (_tabMode === 'adding') { setStatus('Column editing not available in staging mode', '#f88'); return; }
   if (!k || !_colOrder.includes(k)) return;
   if (!confirm('Delete column "'+k+'" from ALL rows?')) return;
   _colOrder = _colOrder.filter(x => x!==k);
@@ -1231,7 +1236,7 @@ function delColumn(k) {
   openTable();
 }
 function addColAfter(after) {
-  if (window._addGridActive) { setStatus('Column editing not available in staging mode', '#f88'); return; }
+  if (_tabMode === 'adding') { setStatus('Column editing not available in staging mode', '#f88'); return; }
   const nk = prompt('New column name'+(after?' (after "'+after+'")':'')+':');
   if (!nk) return;
   if (_colOrder.includes(nk)) { alert('"'+nk+'" already exists.'); return; }
@@ -1245,7 +1250,7 @@ function addColAfter(after) {
   openTable();
 }
 function renameColumn(k) {
-  if (window._addGridActive) { setStatus('Column editing not available in staging mode', '#f88'); return; }
+  if (_tabMode === 'adding') { setStatus('Column editing not available in staging mode', '#f88'); return; }
   if (!k || !_colOrder.includes(k)) return;
   const nk = prompt('Rename "'+k+'" to:', k);
   if (!nk || nk===k) return;
@@ -1371,13 +1376,23 @@ window.openTable = function(forceAddMode) {
 
   // Determine mode: explicit override > window._addGridActive
   const isAddMode = (forceAddMode !== undefined) ? !!forceAddMode : !!window._addGridActive;
-  // Also sync window._addGridActive so other code agrees
-  // (add_grid.js local var may have diverged from window var in some timing scenarios)
+
+  // SET THE AUTHORITATIVE FLAG — this is the single source of truth for syncTab/closeTableEditor
+  _tabMode = isAddMode ? 'adding' : 'master';
+  window._tabMode = _tabMode;
+
   const tableData = isAddMode ? (window.addingData || []) : linksData;
   const titleEl = document.getElementById('jsonTitle');
   if (titleEl) titleEl.textContent = isAddMode
-    ? '📋 Table Editor: adding.json (staging) — ' + tableData.length + ' rows'
-    : '📋 Table Editor: masterlinks.json — ' + tableData.length + ' rows';
+    ? '📋 Table Editor: TA (staging) — ' + tableData.length + ' rows'
+    : '📋 Table Editor: TM (masterlinks) — ' + tableData.length + ' rows';
+
+  // Show/hide TA-specific toolbar buttons
+  const taOnlyBtns = ['btn-merge-to-tm', 'btn-clear-ta'];
+  taOnlyBtns.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = isAddMode ? 'inline-block' : 'none';
+  });
 
   if (window._salTab) { try { window._salTab.destroy(); } catch(e) {} window._salTab = null; }
   container.innerHTML = '';
@@ -1733,34 +1748,21 @@ document.getElementById('toggleRawJson').addEventListener('click', function() {
 
 // ─── OPEN / CLOSE TABLE EDITOR ─────────────────────────────────────────────
 function closeTableEditor() {
-  if (window._addGridActive) {
-    // Only pull Tabulator data into addingData if Tabulator actually holds addingData rows
-    // (cell names like a1a, a2b). If it still shows ML rows, don't overwrite addingData.
+  if (_tabMode === 'adding') {
+    // Tabulator holds addingData — pull it back and save staging
     if (window._salTab && window.addingData) {
       try {
         const rows = window._salTab.getData();
-        const hasAddingRows = rows.slice(0, 3).some(r => r.cell && /^a\d[a-e]$/.test(String(r.cell)));
-        if (hasAddingRows) {
-          window.addingData = rows.map(r => {
-            const o = {}; Object.keys(r).forEach(k => { if (!k.startsWith('_')) o[k] = r[k]; });
-            return o;
-          });
-        }
-        // If Tabulator still has ML data, addingData is untouched (correct)
+        window.addingData = rows.map(r => {
+          const o = {}; Object.keys(r).forEach(k => { if (!k.startsWith('_')) o[k] = r[k]; });
+          return o;
+        });
       } catch(e) {}
     }
     if (typeof saveAdding === 'function') saveAdding();
   } else {
-    // Extra safety: if Tabulator has addingData-style cells (a1a, a2b…), skip save
-    let tabHasAddingRows = false;
-    if (window._salTab) {
-      try {
-        const sample = window._salTab.getData().slice(0, 3);
-        tabHasAddingRows = sample.some(r => r.cell && /^a\d[a-e]$/.test(String(r.cell)));
-      } catch(e) {}
-    }
-    if (!tabHasAddingRows) saveData();
-    else console.warn('closeTableEditor: skipped saveData — Tabulator contained addingData rows');
+    // Tabulator holds linksData — _tabMode === 'master' is authoritative; no cell-pattern needed
+    saveData();
   }
   document.getElementById('jsonModal').classList.remove('open');
   render();
@@ -1840,8 +1842,8 @@ document.getElementById('miClearStaging').addEventListener('pointerup', e => {
   if (!confirm('Clear all ' + n + ' staging entries?\n\nThis resets adding.json to [] on next download.\nMasterlinks.json is NOT affected.')) return;
   window.addingData = [];
   if (typeof saveAdding === 'function') saveAdding();
-  // If AT is open, refresh it
-  if (window._salTab && window._addGridActive) window.openTable(true);
+  // If TA is open, refresh it
+  if (window._salTab && _tabMode === 'adding') window.openTable(true);
   setStatus('Staging cleared (' + n + ' entries removed)', '#5f5');
 });
 document.getElementById('miHelp').addEventListener('pointerup', e => {
@@ -1861,7 +1863,7 @@ function syncFit() {
 }
 document.getElementById('togFit').addEventListener('change', function() {
   fitMode = this.checked ? 'ei' : 'fc';
-  localStorage.setItem('mlynx-fit', fitMode); syncFit(); render();
+  localStorage.setItem('sal-fit', fitMode); syncFit(); render();
 });
 document.getElementById('togCellLbl').addEventListener('change', function() { showCellLbl = this.checked; render(); });
 document.getElementById('togCname').addEventListener('change',   function() { showCname   = this.checked; render(); });
@@ -2035,7 +2037,6 @@ document.getElementById('miLoadGithub').addEventListener('pointerup', async e =>
     linksData = data;
     const s = JSON.stringify(linksData);
     localStorage.setItem('seeandlearn-links', s);
-    localStorage.setItem('mlynx-links', s);
     localStorage.setItem('sal-edited', pushTime > 0 ? String(pushTime) : Date.now().toString());
     render();
     // Auto-download so local file is updated
@@ -2068,7 +2069,6 @@ document.getElementById('miReloadML').addEventListener('pointerup', async e => {
     }
     // Clear all localStorage data so we start fresh
     localStorage.removeItem('seeandlearn-links');
-    localStorage.removeItem('mlynx-links');
     localStorage.removeItem('sal-edited');
     linksData = data;
     linksData.forEach(row => {
@@ -2224,33 +2224,60 @@ document.getElementById('btn-sync-at-cols').addEventListener('click', function()
   const atCount = (window.addingData || []).filter(r => r.show === '1').length;
   if (atCount > 0) {
     if (!confirm(
-      'AT (staging) has ' + atCount + ' unmerged row(s).\n\n' +
-      'You should merge them into TM first (use the Merge→ML button in GAdd).\n\n' +
-      'Continue anyway? (only adds missing columns — existing rows are preserved)'
+      'TA (staging) has ' + atCount + ' unmerged row(s).\n\n' +
+      'You should merge them into TM first (use Merge→TM in GA or TA).\n\n' +
+      'Continue anyway? (adds missing columns + syncs column order/widths)'
     )) return;
   }
-  // Get TM column order
+  // Must be in TM mode to read _colOrder
+  if (_tabMode !== 'master') { setStatus('Open TM table first, then click Sync TM→TA', '#f88'); return; }
   const tmCols = _colOrder.filter(k => !k.startsWith('_'));
-  if (!tmCols.length) { setStatus('No TM columns found — open TM first', '#f88'); return; }
-  // Add missing keys to each addingData row
+  if (!tmCols.length) { setStatus('No TM columns found — open TM table first', '#f88'); return; }
+
+  // 1. Add missing column keys to every addingData row
   let added = 0;
   (window.addingData || []).forEach(row => {
-    tmCols.forEach(k => {
-      if (!(k in row)) { row[k] = ''; added++; }
-    });
+    tmCols.forEach(k => { if (!(k in row)) { row[k] = ''; added++; } });
   });
   if (typeof saveAdding === 'function') saveAdding();
+
+  // 2. Copy TM column ORDER to sal-cols (shared key) — TA reads it via buildKeyOrder()
+  colConfigSave(tmCols, {});
+
+  // 3. Copy TM Tabulator column widths/order persistence to TA persistence key
+  const tmPersist = localStorage.getItem('tabulator-sal-table-columns');
+  if (tmPersist) {
+    localStorage.setItem('tabulator-sal-table-add-columns', tmPersist);
+  }
+
   setStatus(
-    'Synced ' + tmCols.length + ' TM columns to AT' +
-    (added > 0 ? ' (added ' + added + ' missing fields)' : ' (already in sync)') +
-    '. AT columns: ' + tmCols.join(', '),
+    'Synced TM→TA: ' + tmCols.length + ' cols, order + widths copied' +
+    (added > 0 ? ', ' + added + ' missing fields added to rows' : ''),
     '#8f8'
   );
+  // If TA is open, rebuild it with the new order
+  if (_tabMode === 'adding') openTable(true);
+});
+
+// ─── TA toolbar: Merge→TM and Clear TA ───────────────────────────────────────
+document.getElementById('btn-merge-to-tm').addEventListener('click', function() {
+  if (typeof mergeAddingToML === 'function') mergeAddingToML();
+  else if (window.mergeAddingToML) window.mergeAddingToML();
+  else setStatus('mergeAddingToML not found', '#f88');
+});
+
+document.getElementById('btn-clear-ta').addEventListener('click', function() {
+  const n = (window.addingData || []).length;
+  if (!confirm('Clear all ' + n + ' TA staging entries?\n\nMasterlinks (TM) is NOT affected.')) return;
+  window.addingData = [];
+  if (typeof saveAdding === 'function') saveAdding();
+  openTable(true);
+  setStatus('TA cleared (' + n + ' entries removed)', '#5f5');
 });
 
 // ─── VideoEdit button ─────────────────────────────────────────────────────────
 document.getElementById('btn-video-edit').addEventListener('click', function() {
-  const row = activeRow;
+  const row = _activeRow;
   if (!row) { setStatus('Click a row first to open VideoEdit', '#f88'); return; }
   const data = row.getData();
   if (!data.link) { setStatus('Active row has no link', '#f88'); return; }
@@ -2294,7 +2321,7 @@ function openBulkRename(field, rangeRows) {
   const existing = document.getElementById('bulk-rename-popup');
   if (existing) existing.remove();
 
-  const activeData = window._addGridActive ? (window.addingData || []) : linksData;
+  const activeData = _tabMode === 'adding' ? (window.addingData || []) : linksData;
   const dictVals = Array.from(new Set(
     activeData.map(r => String(r[field] || '').trim()).filter(Boolean)
   )).sort();
@@ -2345,7 +2372,7 @@ function openBulkRename(field, rangeRows) {
 
   function refreshDict() {
     curField = colSel.value;
-    const src = window._addGridActive ? (window.addingData || []) : linksData;
+    const src = _tabMode === 'adding' ? (window.addingData || []) : linksData;
     curDict = Array.from(new Set(src.map(r => String(r[curField]||'').trim()).filter(Boolean))).sort();
     inp.value = '';
     showDD();
@@ -2378,7 +2405,7 @@ function openBulkRename(field, rangeRows) {
       if (!confirm('Set "' + (colSel.value) + '" to empty on ' + rangeRows.length + ' row(s)?')) return;
     }
     const f = colSel.value;
-    const activeData = window._addGridActive ? (window.addingData || []) : linksData;
+    const activeData = _tabMode === 'adding' ? (window.addingData || []) : linksData;
     const allRows = window._salTab.getRows();
     rangeRows.forEach(row => {
       // Use row position in Tabulator to find matching data entry
@@ -2388,7 +2415,7 @@ function openBulkRename(field, rangeRows) {
       }
       const upd = {}; upd[f] = val; row.update(upd);
     });
-    if (window._addGridActive) { if (typeof saveAdding === 'function') saveAdding(); }
+    if (_tabMode === 'adding') { if (typeof saveAdding === 'function') saveAdding(); }
     else saveData(true);
     window._salTab.deselectRow();
     window._cellAnchor = null;
