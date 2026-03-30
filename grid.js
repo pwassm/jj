@@ -62,7 +62,7 @@ function renderGrid(){
     const bfs = Math.max(8, Math.floor(Math.min(cellW, cellH) * 0.11));
     const bx = (COLS-1)*cellW + 3;
     const by = ROWS*cellH - 4;
-    const label = 'zip162 · 2026-03-29';
+    const label = 'zip163 · 2026-03-29';
     ctx.font = bfs + 'px monospace';
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     ctx.fillStyle = 'rgba(0,0,0,0.5)';

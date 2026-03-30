@@ -83,8 +83,10 @@ async function init(){
 
   // ── Deep-link: ?id=UNIQUEID opens VideoShow directly ─────────────────────
   // Usage: pwassm.github.io/jj/?id=ABC123
-  // Match against UniqID field. Add a UniqID column to links.json to use this.
-  const urlId = new URLSearchParams(location.search).get('id');
+  const urlParams = new URLSearchParams(location.search);
+  const urlId     = urlParams.get('id');
+  const urlScreen = urlParams.get('screen');
+
   if (urlId) {
     const target = linksData.find(r => String(r.UniqID || '') === String(urlId));
     if (target) {
@@ -92,6 +94,14 @@ async function init(){
     } else {
       console.warn('SeeAndLearn: no row found for ?id=' + urlId);
     }
+  }
+
+  // ── Deep-link: ?screen=ga opens GA (adding grid overlay) ─────────────────
+  // Usage: pwassm.github.io/jj/?screen=ga
+  if (urlScreen === 'ga') {
+    setTimeout(function() {
+      if (window.toggleAddGrid && !window._addGridActive) window.toggleAddGrid();
+    }, 400);
   }
 }
 
@@ -178,7 +188,7 @@ async function flParseAndImport() {
   const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
   const da    = flDateStamp();
 
-  const target = (typeof window.flImportTarget === 'function') ? window.flImportTarget() : 'master';
+  const target = (typeof window.flImportTarget === 'function') ? window.flImportTarget() : 'adding';
   const isAdding = target === 'adding';
 
   const statusEl = document.getElementById('fastLinkStatus');
@@ -186,31 +196,29 @@ async function flParseAndImport() {
 
   let imported = 0, skipped = 0;
   let lastEntry = null;   // the most recently created row (for attaching linkpage)
-  let cname = '';         // text line before an image = cname
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Blank-like separator: skip
-    if (!line) { cname = ''; lastEntry = null; continue; }
+    // Ignore blank lines and any line that isn't a URL — LP is URL-only input
+    if (!line || !flIsURL(line)) continue;
 
-    // Non-URL line → cname for the next image
-    if (!flIsURL(line)) {
-      cname = line;
-      continue;
+    // Assign next cell — for TA there is no hard limit (GA shows 9 but TA holds any amount)
+    function nextCell() {
+      return isAdding
+        ? (typeof nextFreeAddCell === 'function' ? nextFreeAddCell() : 'a' + (addingData.length + 1) + 'a')
+        : flNextFreeCell();
     }
 
-    // Video URL → row with VidRange
+    // Video URL → row with VidRange full
     if (flIsVideoURL(line)) {
-      const nextCell = isAdding
-        ? (typeof nextFreeAddCell === 'function' ? nextFreeAddCell() : '')
-        : flNextFreeCell();
-      if (!nextCell) { skipped++; continue; }
-      const entry = { show:'1', VidRange:'0 99999', cell:nextCell, fit:'fc',
-        link:line, cname, linkpage:'', sname:'', attribution:'', comment:'', DateAdded:da, Mute:'1' };
+      const cell = isAdding ? '' : flNextFreeCell();  // TA: no cell needed until merge
+      if (!isAdding && !cell) { skipped++; continue; }
+      const entry = { show:'1', VidRange:'0 99999', cell, fit:'fc',
+        link:line, cname:'', linkpage:'', sname:'', attribution:'', comment:'', DateAdded:da, Mute:'1' };
       if (isAdding) { addingData.push(entry); if (typeof saveAdding==='function') saveAdding(); }
       else linksData.push(entry);
-      lastEntry = entry; cname = ''; imported++;
+      lastEntry = entry; imported++;
       continue;
     }
 
@@ -223,50 +231,43 @@ async function flParseAndImport() {
         skipped++;
         continue;
       }
-      // Fall through with resolved URL as the image link, original as linkpage
-      const nextCell = isAdding
-        ? (typeof nextFreeAddCell === 'function' ? nextFreeAddCell() : '')
-        : flNextFreeCell();
-      if (!nextCell) { skipped++; continue; }
-      const entry = { show:'1', VidRange:'i', cell:nextCell, fit:'fc',
-        link:resolved, linkpage:line, cname, sname:'', attribution:'', comment:'', DateAdded:da, Mute:'1' };
+      const cell = isAdding ? '' : flNextFreeCell();
+      if (!isAdding && !cell) { skipped++; continue; }
+      const entry = { show:'1', VidRange:'i', cell, fit:'fc',
+        link:resolved, linkpage:line, cname:'', sname:'', attribution:'', comment:'', DateAdded:da, Mute:'1' };
       if (isAdding) { addingData.push(entry); if (typeof saveAdding==='function') saveAdding(); }
       else linksData.push(entry);
-      lastEntry = entry; cname = ''; imported++;
+      lastEntry = entry; imported++;
       continue;
     }
 
     // Direct image URL
     if (flIsImageURL(line)) {
-      const nextCell = isAdding
-        ? (typeof nextFreeAddCell === 'function' ? nextFreeAddCell() : '')
-        : flNextFreeCell();
-      if (!nextCell) { skipped++; continue; }
-      const entry = { show:'1', VidRange:'i', cell:nextCell, fit:'fc',
-        link:line, linkpage:'', cname, sname:'', attribution:'', comment:'', DateAdded:da, Mute:'1' };
+      const cell = isAdding ? '' : flNextFreeCell();
+      if (!isAdding && !cell) { skipped++; continue; }
+      const entry = { show:'1', VidRange:'i', cell, fit:'fc',
+        link:line, linkpage:'', cname:'', sname:'', attribution:'', comment:'', DateAdded:da, Mute:'1' };
       if (isAdding) { addingData.push(entry); if (typeof saveAdding==='function') saveAdding(); }
       else linksData.push(entry);
-      lastEntry = entry; cname = ''; imported++;
+      lastEntry = entry; imported++;
       continue;
     }
 
-    // Non-image URL after an image row → linkpage on that row
+    // Non-image URL after an image/video row → linkpage on that row
     if (lastEntry) {
       lastEntry.linkpage = line;
-      lastEntry = null;   // consumed — next non-image URL won't attach here
+      lastEntry = null;
       continue;
     }
 
-    // Any other URL (no preceding image row) — treat as cname-less image attempt
-    const nextCell = isAdding
-      ? (typeof nextFreeAddCell === 'function' ? nextFreeAddCell() : '')
-      : flNextFreeCell();
-    if (!nextCell) { skipped++; continue; }
-    const entry = { show:'1', VidRange:'i', cell:nextCell, fit:'fc',
-      link:line, linkpage:'', cname, sname:'', attribution:'', comment:'', DateAdded:da, Mute:'1' };
+    // Any other URL (no preceding image row) — store as-is, treat as image
+    const cell = isAdding ? '' : flNextFreeCell();
+    if (!isAdding && !cell) { skipped++; continue; }
+    const entry = { show:'1', VidRange:'i', cell, fit:'fc',
+      link:line, linkpage:'', cname:'', sname:'', attribution:'', comment:'', DateAdded:da, Mute:'1' };
     if (isAdding) { addingData.push(entry); if (typeof saveAdding==='function') saveAdding(); }
     else linksData.push(entry);
-    lastEntry = entry; cname = ''; imported++;
+    lastEntry = entry; imported++;
   }
 
   if (!imported && !skipped) {
@@ -277,14 +278,17 @@ async function flParseAndImport() {
   if (!isAdding) {
     if (window.saveData) window.saveData(true);
     else localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
+  } else {
+    // Refresh TA table if open
+    if (window._salTab && window._tabMode === 'adding' && window.openTable) window.openTable(true);
   }
 
   if (typeof renderAddGrid === 'function') renderAddGrid();
   render();
 
-  const dest = isAdding ? 'staging (AT)' : 'masterlinks (TM)';
+  const dest = isAdding ? 'TA (staging)' : 'TM (masterlinks)';
   const msg = '✓ Pushed ' + imported + ' row' + (imported !== 1 ? 's' : '') + ' to ' + dest
-    + (skipped ? ' (' + skipped + ' skipped — no empty cells)' : '');
+    + (skipped ? ' (' + skipped + ' skipped — TM grid full)' : '');
   statusEl.textContent = msg;
   document.getElementById('fastLinkInput').value = '';
 }
@@ -292,6 +296,7 @@ async function flParseAndImport() {
 document.getElementById('miLinkPastes').addEventListener('pointerup', e => {
   e.stopPropagation(); closeMenu();
   if (typeof isAdmin === 'function' && !isAdmin()) { alert('Admin privileges required.'); return; }
+  if (window.menuWrap) window.menuWrap.style.display = 'none';  // hide HM on L screen
   document.getElementById('fastLinkModal').style.display = 'flex';
   document.getElementById('fastLinkStatus').textContent = '';
   setTimeout(() => document.getElementById('fastLinkInput').focus(), 80);
@@ -327,6 +332,7 @@ document.getElementById('fastLinkInput').addEventListener('keydown', e => {
 
 document.getElementById('fastLinkExit').addEventListener('pointerup', () => {
   document.getElementById('fastLinkModal').style.display = 'none';
+  if (window.menuWrap) window.menuWrap.style.display = '';  // restore HM
   render();
 });
 
@@ -339,10 +345,12 @@ document.addEventListener('keydown', e => {
     if (jsonMod && jsonMod.classList.contains('open')) {
       if (window.closeTableEditor) window.closeTableEditor();
       else { jsonMod.classList.remove('open'); render(); }
+      if (window.menuWrap) window.menuWrap.style.display = '';  // restore HM
     }
     const fastMod = document.getElementById('fastLinkModal');
     if (fastMod && fastMod.style.display === 'flex') {
       fastMod.style.display = 'none';
+      if (window.menuWrap) window.menuWrap.style.display = '';  // restore HM
       render();
     }
   }
@@ -484,15 +492,16 @@ window.addEventListener('keyup', e => { if (e.key.toLowerCase() === 'r') window.
 
     if (key === 'g') {
       closeLinkPaste(true);
-      // closeTableEditor handles its own save correctly (already guarded for addMode)
       if (window.closeTableEditor) window.closeTableEditor();
       else safeSave();
       closeAllOverlays();
+      if (window.menuWrap) window.menuWrap.style.display = '';  // restore HM on G screen
     }
     else if (key === 't') {
       closeLinkPaste(true);
-      safeSave();   // save before touching Tabulator
+      safeSave();
       closeAllOverlays();
+      if (window.menuWrap) window.menuWrap.style.display = 'none';  // hide HM on T screen
       var modal = document.getElementById('jsonModal');
       // Always open/refresh table — don't skip if modal was already open
       if (modal) {

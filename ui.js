@@ -1765,6 +1765,7 @@ function closeTableEditor() {
     saveData();
   }
   document.getElementById('jsonModal').classList.remove('open');
+  if (window.menuWrap) window.menuWrap.style.display = '';  // restore HM
   render();
 }
 window.closeTableEditor = closeTableEditor;
@@ -1914,29 +1915,32 @@ let qfCell = '';
 document.getElementById('qfDesktop').style.display = ISMOBILE ? 'none' : 'block';
 
 // ─── Get Video Info ───────────────────────────────────────────────────────────
-window.fillEmptyVideoInfo = async function() {
-  // Pull Tabulator → linksData before operating
-  syncTab();
+window.fillEmptyMediaInfo = async function() {
+  // Works on whichever dataset the table currently shows (TM or TA)
+  const activeData = _tabMode === 'adding' ? (window.addingData || []) : linksData;
+  if (_tabMode !== 'adding') syncTab();  // pull Tabulator → linksData only when in TM
+
   const btn = document.getElementById('btn-get-vid-info');
   if (btn) { btn.textContent = 'Fetching...'; btn.disabled = true; }
   let updated = 0, skipped = 0;
 
-  // Operate on selected rows if any, otherwise all rows
+  // Operate on selected rows if any, otherwise all rows in active dataset
   const selRows = window._salTab ? window._salTab.getSelectedRows() : [];
   const targetData = selRows.length
     ? selRows.map(r => {
         const d = r.getData();
-        const idx = linksData.findIndex(row => row.link === d.link && row.cell === d.cell);
-        return idx !== -1 ? linksData[idx] : null;
+        const idx = activeData.findIndex(row => row.link === d.link && row.cell === d.cell);
+        return idx !== -1 ? activeData[idx] : null;
       }).filter(Boolean)
-    : linksData;
+    : activeData;
 
-  const scope = selRows.length ? selRows.length + ' selected rows' : linksData.length + ' rows';
+  const scope = selRows.length ? selRows.length + ' selected rows' : activeData.length + ' rows';
 
-  // Helper: fetch image natural dimensions
+  // Helper: fetch image natural dimensions via hidden Image element
   function fetchImgDimensions(url) {
     return new Promise(function(resolve) {
       const img = new Image();
+      img.crossOrigin = 'anonymous';  // helps with some CORS-friendly hosts
       img.onload  = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
       img.onerror = () => resolve(null);
       img.src = url;
@@ -1946,51 +1950,96 @@ window.fillEmptyVideoInfo = async function() {
 
   await Promise.all(targetData.map(async row => {
     if (!row.link || !row.link.match(/^https?:/i)) return;
-    const isImg = row.VidRange === 'i';
+    const isImg = String(row.VidRange || '').trim() === 'i';
     const isVid = !isImg && row.VidRange && window.parseVideoAsset &&
                   window.parseVideoAsset(row.VidRange) !== null;
 
-    // Video rows: title, author, portrait via noembed
+    // ── Video rows: title, author, portrait via noembed ──────────────────────
     if (isVid) {
-      const needsInfo = !row.VidTitle || !row.VidAuthor || !row.Portrait;
-      if (!needsInfo) { skipped++; return; }
+      const needsTitle   = !row.VidTitle  || row.VidTitle  === '';
+      const needsAuthor  = !row.VidAuthor || row.VidAuthor === '';
+      const needsPortrait= !row.Portrait  || row.Portrait  === '';
+      const needsMPix    = !row.MPix      || row.MPix      === '';
+      if (!needsTitle && !needsAuthor && !needsPortrait && !needsMPix) { skipped++; return; }
       try {
         const res  = await fetch('https://noembed.com/embed?url=' + encodeURIComponent(row.link));
         const data = await res.json();
-        if (data.title       && !row.VidTitle)  { row.VidTitle  = data.title;       updated++; }
-        if (data.author_name && !row.VidAuthor) { row.VidAuthor = data.author_name; updated++; }
-        if (data.width && data.height && (!row.Portrait || row.Portrait === '')) {
-          row.Portrait = data.width < data.height ? '1' : '0'; updated++;
+        if (data.title       && needsTitle)   { row.VidTitle  = data.title;       updated++; }
+        if (data.author_name && needsAuthor)  { row.VidAuthor = data.author_name; updated++; }
+        // noembed returns thumbnail dimensions (not video frame), but width/height are always
+        // landscape for YouTube embeds — use thumbnail aspect ratio as a proxy.
+        // More reliable: check the thumbnail URL's own dimensions.
+        if (needsPortrait) {
+          const isYT  = window.isYouTubeLink && window.isYouTubeLink(row.link);
+          const isVim = window.isVimeoLink   && window.isVimeoLink(row.link);
+          if (isYT) {
+            // YouTube is virtually always landscape
+            row.Portrait = '0'; updated++;
+          } else if (isVim && data.thumbnail_url) {
+            // Use noembed thumbnail dimensions for Vimeo
+            const dims = await fetchImgDimensions(data.thumbnail_url);
+            if (dims) { row.Portrait = dims.h > dims.w ? '1' : '0'; updated++; }
+          } else if (data.width && data.height) {
+            row.Portrait = data.height > data.width ? '1' : '0'; updated++;
+          }
+        }
+        if (needsMPix && data.width && data.height) {
+          row.MPix = (data.width * data.height / 1e6).toFixed(1); updated++;
         }
       } catch(e) { skipped++; }
     }
 
-    // Image rows: dimensions → MPix + Portrait
-    // Re-fetch if MPix is empty (don't skip if Portrait already set)
+    // ── Image rows: natural dimensions → MPix + Portrait ─────────────────────
     if (isImg) {
-      const needsMPix = !row.MPix || row.MPix === '';
-      const needsPortrait = !row.Portrait || row.Portrait === '';
+      const needsMPix    = !row.MPix    || row.MPix    === '';
+      const needsPortrait= !row.Portrait|| row.Portrait=== '';
       if (!needsMPix && !needsPortrait) { skipped++; return; }
       const dims = await fetchImgDimensions(row.link);
       if (dims && dims.w && dims.h) {
-        if (needsMPix)    { row.MPix    = (dims.w * dims.h / 1e6).toFixed(1); updated++; }
-        if (needsPortrait){ row.Portrait = dims.h > dims.w ? '1' : '0';       updated++; }
+        if (needsMPix)     { row.MPix    = (dims.w * dims.h / 1e6).toFixed(1); updated++; }
+        if (needsPortrait) { row.Portrait = dims.h > dims.w ? '1' : '0';       updated++; }
       } else { skipped++; }
     }
   }));
 
-  // Save directly from linksData (skipSync so we don't clobber our updates)
+  // Save
   if (updated > 0) {
-    saveData(true);
+    if (_tabMode === 'adding') { if (typeof saveAdding === 'function') saveAdding(); }
+    else saveData(true);
     window.renderTableEditor();
   }
-  if (btn) { btn.textContent = 'Get Video Info'; btn.disabled = false; }
+  if (btn) { btn.textContent = 'Get Media Info'; btn.disabled = false; }
   setStatus(
     updated > 0
       ? '✓ Updated ' + updated + ' field(s) across ' + scope + (skipped ? ' · ' + skipped + ' already set' : '')
       : 'No empty fields to fill in ' + scope,
     updated > 0 ? '#5f5' : '#888'
   );
+};
+// Backward-compat alias
+window.fillEmptyVideoInfo = window.fillEmptyMediaInfo;
+
+// ── FillEmptyUIDs — assign sequential UniqIDs to rows that have none ──────────
+window.fillEmptyUIDs = function() {
+  syncTab();
+  // Find max existing numeric UniqID
+  let maxId = 0;
+  linksData.forEach(r => {
+    const n = parseInt(r.UniqID || '0', 10);
+    if (!isNaN(n) && n > maxId) maxId = n;
+  });
+  let filled = 0;
+  linksData.forEach(r => {
+    if (!r.UniqID || r.UniqID === '') {
+      maxId++;
+      r.UniqID = String(maxId);
+      filled++;
+    }
+  });
+  if (!filled) { setStatus('All rows already have a UniqID', '#888'); return; }
+  saveData(true);
+  window.renderTableEditor();
+  setStatus('✓ Assigned UniqIDs to ' + filled + ' rows (max ID now ' + maxId + ')', '#5f5');
 };
 
 // ─── Compat shims ─────────────────────────────────────────────────────────────
