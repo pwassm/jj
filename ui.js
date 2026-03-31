@@ -1466,37 +1466,48 @@ window.openTable = function(forceAddMode) {
         const row   = cell.getRow();
         _activeRow = row; _activeCol = field; updateFocusIndicator();
 
-        if (e.shiftKey && window._cellAnchor && window._cellAnchor.field === field) {
-          // Shift+click same column → bulk rename range
+        if (e.shiftKey) {
           e.preventDefault();
-          if (window._salTab && window._salTab.modules && window._salTab.modules.edit) {
-            try { window._salTab.modules.edit.cancelEdit(); } catch(ex) {}
+          // Close any existing popup first
+          const existingPop = document.getElementById('bulk-rename-popup');
+          if (existingPop) existingPop.remove();
+
+          if (window._cellAnchor && window._cellAnchor.field === field) {
+            // Second shift-click in same column → open bulk rename popup
+            if (window._salTab && window._salTab.modules && window._salTab.modules.edit) {
+              try { window._salTab.modules.edit.cancelEdit(); } catch(ex) {}
+            }
+            const allRows = window._salTab.getRows();
+            // Use stored index — getRows() order is stable within one openTable() call
+            const anchorIdx = window._cellAnchor.tabIdx;
+            const clickIdx  = allRows.indexOf(row);
+            window._cellAnchor = null;  // clear anchor regardless
+            if (anchorIdx !== -1 && clickIdx !== -1) {
+              const lo = Math.min(anchorIdx, clickIdx);
+              const hi = Math.max(anchorIdx, clickIdx);
+              const rangeRows = allRows.slice(lo, hi + 1);
+              setTimeout(function() { openBulkRename(field, rangeRows); }, 0);
+            }
+          } else {
+            // First shift-click → set anchor, highlight row, show status
+            const allRows = window._salTab.getRows();
+            const idx = allRows.indexOf(row);
+            window._cellAnchor = { field, tabIdx: idx };
+            // Visual highlight on the anchor row element
+            allRows.forEach(function(r) { r.getElement().style.outline = ''; });
+            row.getElement().style.outline = '2px solid #fa8';
+            row.getElement().style.outlineOffset = '-2px';
+            setStatus('Anchor: row ' + (idx+1) + ' col "' + field + '" — shift+click another cell in this column to bulk-rename range', '#fa8');
           }
-          const allRows   = window._salTab.getRows();
-          // Find anchor row by stored DATA identity (link+cell) — immune to table rebuilds/sorts
-          const aData = window._cellAnchor.rowData;
-          const anchorIdx = allRows.findIndex(function(r) {
-            const d = r.getData();
-            return d.link === aData.link && d.cell === aData.cell;
-          });
-          const clickIdx  = allRows.indexOf(row);
-          if (anchorIdx !== -1 && clickIdx !== -1) {
-            const lo = Math.min(anchorIdx, clickIdx);
-            const hi = Math.max(anchorIdx, clickIdx);
-            const rangeRows = allRows.slice(lo, hi + 1);
-            window._cellAnchor = null;
-            setTimeout(function() { openBulkRename(field, rangeRows); }, 0);
+          return;
+        }
+
+        // Plain click — clear any anchor highlight but don't interfere with editing
+        if (window._cellAnchor) {
+          if (window._salTab) {
+            window._salTab.getRows().forEach(function(r) { r.getElement().style.outline = ''; });
           }
-        } else if (e.shiftKey) {
-          e.preventDefault();
-          // Store row DATA (link+cell) for anchor identity — not position index
-          const d = row.getData();
-          window._cellAnchor = { field, rowData: { link: d.link || '', cell: d.cell || '' } };
-          setStatus('Anchor set in "' + field + '" — shift+click another cell in same column to bulk rename', '#8ef');
-        } else {
-          // Plain click — set anchor by row data
-          const d = row.getData();
-          window._cellAnchor = { field, rowData: { link: d.link || '', cell: d.cell || '' } };
+          window._cellAnchor = null;
         }
       },
       cellEdited(){
@@ -1753,6 +1764,13 @@ document.getElementById('toggleRawJson').addEventListener('click', function() {
 
 // ─── OPEN / CLOSE TABLE EDITOR ─────────────────────────────────────────────
 function closeTableEditor() {
+  // Always dismiss any open bulk rename popup
+  const brnPop = document.getElementById('bulk-rename-popup');
+  if (brnPop) brnPop.remove();
+  if (window._cellAnchor) {
+    if (window._salTab) window._salTab.getRows().forEach(function(r){ r.getElement().style.outline=''; });
+    window._cellAnchor = null;
+  }
   if (_tabMode === 'adding') {
     // Tabulator holds addingData — pull it back and save staging
     if (window._salTab && window.addingData) {
@@ -2439,10 +2457,12 @@ function openBulkRename(field, rangeRows) {
 
   const popup = document.createElement('div');
   popup.id = 'bulk-rename-popup';
-  popup.style.cssText = 'position:fixed;z-index:999999;top:50%;left:50%;'
-    + 'transform:translate(-50%,-50%);min-width:320px;max-width:460px;'
+  // Position: top of viewport, centered, so it never covers the rows being selected
+  popup.style.cssText = 'position:fixed;z-index:999999;top:12px;left:50%;'
+    + 'transform:translateX(-50%);min-width:320px;max-width:480px;width:90vw;'
     + 'background:#1a2a3a;border:1px solid #4af;border-radius:8px;'
-    + 'padding:14px;box-shadow:0 8px 32px rgba(0,0,0,0.9);font-family:sans-serif;color:#fff;';
+    + 'padding:14px;box-shadow:0 8px 32px rgba(0,0,0,0.9);font-family:sans-serif;color:#fff;'
+    + 'box-sizing:border-box;';
   const isCellCol = field === 'cell';
   popup.innerHTML = '<div style="font-size:13px;font-weight:bold;color:#8ef;margin-bottom:10px;">'
     + (isCellCol
@@ -2472,6 +2492,30 @@ function openBulkRename(field, rangeRows) {
     + 'background:#222;color:#aaa;cursor:pointer;font-size:13px;">Cancel</button>'
     + '</div>';
   document.body.appendChild(popup);
+
+  // Stop outside clicks from propagating INTO the popup (prevent immediate self-dismissal)
+  popup.addEventListener('pointerdown', function(e) { e.stopPropagation(); });
+  popup.addEventListener('click',       function(e) { e.stopPropagation(); });
+
+  // Click outside popup → dismiss silently (deselect rows, clear anchor)
+  function outsideClickDismiss(e) {
+    if (!document.getElementById('bulk-rename-popup')) {
+      document.removeEventListener('pointerdown', outsideClickDismiss, true);
+      return;
+    }
+    popup.remove();
+    document.removeEventListener('pointerdown', outsideClickDismiss, true);
+    if (window._cellAnchor) {
+      if (window._salTab) window._salTab.getRows().forEach(function(r){ r.getElement().style.outline=''; });
+      window._cellAnchor = null;
+    }
+    if (window._salTab) window._salTab.deselectRow();
+  }
+  // Slight delay so the click that opened the popup doesn't immediately close it
+  setTimeout(function() {
+    document.addEventListener('pointerdown', outsideClickDismiss, true);
+  }, 100);
+
   const inp    = document.getElementById('brn-inp');
   const dd     = document.getElementById('brn-dd');
   const colSel = document.getElementById('brn-col');
@@ -2558,9 +2602,7 @@ function openBulkRename(field, rangeRows) {
       syncTab();
       if (_tabMode === 'adding') { if (typeof saveAdding === 'function') saveAdding(); }
       else saveData(true);
-      window._salTab.deselectRow();
-      window._cellAnchor = null;
-      popup.remove();
+      dismissPopup();
       setStatus('Assigned sequential cells to ' + rangeRows.length + ' rows', '#5f5');
       if (window.renderGrid) window.renderGrid();
       return;
@@ -2587,18 +2629,26 @@ function openBulkRename(field, rangeRows) {
     syncTab();
     if (_tabMode === 'adding') { if (typeof saveAdding === 'function') saveAdding(); }
     else saveData(true);
-    window._salTab.deselectRow();
-    window._cellAnchor = null;
-    popup.remove();
+    dismissPopup();
     setStatus('Set "' + f + '" = "' + val + '" on ' + rangeRows.length + ' rows', '#5f5');
   }
+  function dismissPopup() {
+    popup.remove();
+    document.removeEventListener('pointerdown', outsideClickDismiss, true);
+    if (window._salTab) {
+      window._salTab.deselectRow();
+      window._salTab.getRows().forEach(function(r){ r.getElement().style.outline=''; });
+    }
+    window._cellAnchor = null;
+  }
+
   inp.addEventListener('input', showDD);
   inp.addEventListener('focus', showDD);
   inp.addEventListener('blur', () => setTimeout(() => { dd.style.display = 'none'; }, 150));
   inp.addEventListener('keydown', e => {
     e.stopPropagation();
     if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); applyRename(); return; }
-    if (e.key === 'Escape') { popup.remove(); window._salTab.deselectRow(); return; }
+    if (e.key === 'Escape') { dismissPopup(); return; }
     if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && dd.style.display !== 'none') {
       e.preventDefault();
       const items = Array.from(dd.querySelectorAll('div'));
@@ -2612,9 +2662,7 @@ function openBulkRename(field, rangeRows) {
     }
   });
   document.getElementById('brn-apply').addEventListener('click', applyRename);
-  document.getElementById('brn-cancel').addEventListener('click', () => {
-    popup.remove(); window._salTab.deselectRow();
-  });
+  document.getElementById('brn-cancel').addEventListener('click', dismissPopup);
   setTimeout(() => { inp.focus(); showDD(); }, 50);
 }
 
