@@ -24,6 +24,27 @@ function setGhStatus(msg, color) {
   if (el) { el.textContent = msg; el.style.color = color || '#8ef'; }
 }
 
+// ── Shared helper: PUT one file to GitHub (GET sha first, handle 404 for new files) ──
+async function ghPutFile(owner, repo, headers, filePath, jsonData, commitMsg) {
+  var apiUrl = 'https://api.github.com/repos/' + owner + '/' + repo + '/contents/' + filePath;
+  var sha = null;
+  var getRes = await fetch(apiUrl, { headers: headers });
+  if (getRes.ok) {
+    var getJson = await getRes.json(); sha = getJson.sha;
+  } else if (getRes.status !== 404) {
+    var ge = {}; try { ge = await getRes.json(); } catch(x) {}
+    throw new Error('GET ' + filePath + ' ' + getRes.status + ': ' + (ge.message || getRes.statusText));
+  }
+  var content = btoa(unescape(encodeURIComponent(JSON.stringify(jsonData, null, 2))));
+  var body = { message: commitMsg, content: content };
+  if (sha) body.sha = sha;
+  var putRes = await fetch(apiUrl, { method: 'PUT', headers: headers, body: JSON.stringify(body) });
+  if (!putRes.ok) {
+    var pe = {}; try { pe = await putRes.json(); } catch(x) {}
+    throw new Error('PUT ' + filePath + ' ' + putRes.status + ': ' + (pe.message || putRes.statusText));
+  }
+}
+
 window.pushToGitHub = async function() {
   var token = localStorage.getItem('github-token');
   if (!token) {
@@ -46,49 +67,69 @@ window.pushToGitHub = async function() {
   setGhStatus('Pushing to GitHub...', '#8ef');
 
   try {
-    var path   = 'masterlinks.json';
-    var apiUrl = 'https://api.github.com/repos/' + owner + '/' + repo + '/contents/' + path;
     var headers = {
       'Authorization': 'Bearer ' + token,
       'Accept': 'application/vnd.github+json',
       'Content-Type': 'application/json'
     };
-
-    // GET current file to retrieve its SHA (required for PUT)
-    var getRes = await fetch(apiUrl, { headers: headers });
-    if (!getRes.ok) {
-      var ge = {}; try { ge = await getRes.json(); } catch(x) {}
-      throw new Error('GET ' + getRes.status + ': ' + (ge.message || getRes.statusText));
-    }
-    var getJson = await getRes.json();
-    var sha = getJson.sha;
-
-    // Build data: prepend _salMeta row with push timestamp so other clients
-    // can detect this push is newer than their localStorage
     var pushTime = Date.now();
-    var dataToSend = [{ _salMeta: true, _salPushTime: pushTime }]
+    var stamp    = new Date().toISOString().slice(0,16).replace('T',' ');
+
+    // ── Build _salMeta for masterlinks.json ──────────────────────────────────
+    var colLayout = null;
+    try {
+      var salCols = localStorage.getItem('sal-cols');
+      var tabCols = localStorage.getItem('tabulator-sal-table-columns');
+      if (salCols || tabCols) {
+        colLayout = {};
+        if (salCols) colLayout.salCols = JSON.parse(salCols);
+        if (tabCols) colLayout.tabCols = JSON.parse(tabCols);
+      }
+    } catch(ex) {}
+
+    var mlData = [{ _salMeta: true, _salPushTime: pushTime, _salColLayout: colLayout }]
       .concat(JSON.parse(JSON.stringify(linksData)));
 
-    var jsonText   = JSON.stringify(dataToSend, null, 2);
-    var contentB64 = btoa(unescape(encodeURIComponent(jsonText)));
-    var stamp      = new Date().toISOString().slice(0,16).replace('T',' ');
-
-    // Also update local sal-edited to match push time so we don't re-load our own push
+    // ── Push masterlinks.json ────────────────────────────────────────────────
+    await ghPutFile(owner, repo, headers, 'masterlinks.json', mlData, 'Update masterlinks.json ' + stamp);
     localStorage.setItem('sal-edited', String(pushTime));
 
-    var putRes = await fetch(apiUrl, {
-      method: 'PUT',
-      headers: headers,
-      body: JSON.stringify({ message: 'Update masterlinks.json ' + stamp, content: contentB64, sha: sha })
-    });
-
-    if (putRes.ok) {
-      showGhBalloon('✓ Pushed to GitHub!', 4000);
-      setGhStatus('Pushed ' + stamp, '#4f8');
-    } else {
-      var pe = {}; try { pe = await putRes.json(); } catch(x) {}
-      throw new Error('PUT ' + putRes.status + ': ' + (pe.message || putRes.statusText));
+    // ── Push history.json (non-fatal if it fails) ────────────────────────────
+    try {
+      var hData = window.historyData || [];
+      var histPayload = [{ _salMeta: true, _salPushTime: pushTime }].concat(hData);
+      await ghPutFile(owner, repo, headers, 'history.json', histPayload, 'Update history.json ' + stamp);
+      localStorage.setItem('sal-history-edited', String(pushTime));
+    } catch(hErr) {
+      console.warn('history.json push skipped:', hErr.message);
     }
+
+    showGhBalloon('✓ Pushed to GitHub!', 4000);
+    setGhStatus('Pushed ' + stamp, '#4f8');
+
+    // ── Auto-download both JSONs so local m:\jj copy stays in sync ────────────
+    // Files go to the browser's configured download folder.
+    // Tip: set browser download folder to m:\jj for seamless sync.
+    try {
+      var dlA = document.createElement('a');
+      var mlBlob = new Blob([JSON.stringify(mlData, null, 2)], {type:'application/json'});
+      dlA.href = URL.createObjectURL(mlBlob); dlA.download = 'masterlinks.json';
+      document.body.appendChild(dlA); dlA.click(); document.body.removeChild(dlA);
+      setTimeout(function() { URL.revokeObjectURL(dlA.href); }, 1000);
+      // history.json with a brief delay so browser allows the second download
+      setTimeout(function() {
+        try {
+          var hd = window.historyData || [];
+          var hp = [{ _salMeta:true, _salPushTime:pushTime }].concat(hd);
+          var dlH = document.createElement('a');
+          var hBlob = new Blob([JSON.stringify(hp, null, 2)], {type:'application/json'});
+          dlH.href = URL.createObjectURL(hBlob); dlH.download = 'history.json';
+          document.body.appendChild(dlH); dlH.click(); document.body.removeChild(dlH);
+          setTimeout(function() { URL.revokeObjectURL(dlH.href); }, 1000);
+        } catch(e2) {}
+      }, 600);
+    } catch(dlErr) {}
+
   } catch (err) {
     showGhBalloon('PUSH ERROR:\n' + err.message, 7000);
     setGhStatus('PUSH ERROR: ' + err.message, '#f66');

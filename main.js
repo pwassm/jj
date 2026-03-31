@@ -29,6 +29,8 @@ async function init(){
         // Check for metadata element (first element with _salMeta flag)
         if (raw.length > 0 && raw[0]._salMeta) {
           fileTime = parseInt(raw[0]._salPushTime || '0', 10);
+          // Apply column layout when file is authoritative (checked below after lsTime compare)
+          window._pendingColLayout = raw[0]._salColLayout || null;
           fileData = raw.slice(1); // rest is the actual data
         } else {
           fileData = raw; // legacy format, no timestamp
@@ -43,7 +45,10 @@ async function init(){
   const hasLocalData = lsData && Array.isArray(lsData) && lsData.length > 0 && lsTime > 0;
 
   if (fileIsNewer) {
-    // Server has data pushed after our last local edit — use it
+    // Server has data pushed after our last local edit — use it, including column layout
+    if (window._pendingColLayout && typeof applyColLayout === 'function') {
+      applyColLayout(window._pendingColLayout);
+    }
     linksData = fileData;
     localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
     localStorage.setItem('sal-edited', String(fileTime));
@@ -484,10 +489,15 @@ window.addEventListener('keyup', e => { if (e.key.toLowerCase() === 'r') window.
   }
 
   function doSwitch(key) {
-    // Save the CORRECT dataset — never call saveData() while Tabulator holds addingData
+    // Close history modal on any screen switch
+    var _hm = document.getElementById('historyModal');
+    if (_hm && _hm.classList.contains('open')) {
+      _hm.classList.remove('open');
+      if (window.menuWrap) window.menuWrap.style.display = '';
+    }
+
     function safeSave() {
       if (window._addGridActive) {
-        // Tabulator may hold addingData rows — save only the staging data, not linksData
         if (typeof saveAdding === 'function') saveAdding();
       } else {
         if (window.saveData) window.saveData();
@@ -499,18 +509,16 @@ window.addEventListener('keyup', e => { if (e.key.toLowerCase() === 'r') window.
       if (window.closeTableEditor) window.closeTableEditor();
       else safeSave();
       closeAllOverlays();
-      if (window.menuWrap) window.menuWrap.style.display = '';  // restore HM on G screen
+      if (window.menuWrap) window.menuWrap.style.display = '';
     }
     else if (key === 't') {
       closeLinkPaste(true);
       safeSave();
       closeAllOverlays();
-      if (window.menuWrap) window.menuWrap.style.display = 'none';  // hide HM on T screen
+      if (window.menuWrap) window.menuWrap.style.display = 'none';
       var modal = document.getElementById('jsonModal');
-      // Always open/refresh table — don't skip if modal was already open
       if (modal) {
         if (!modal.classList.contains('open')) {
-          // Set up modal display
           var rawJ = document.getElementById('toggleRawJson');
           if (rawJ) rawJ.textContent = 'Show Raw JSON';
           var te = document.getElementById('tableEditor'); if (te) te.style.display = 'block';
@@ -522,6 +530,12 @@ window.addEventListener('keyup', e => { if (e.key.toLowerCase() === 'r') window.
         }
         if (window.openTable) window.openTable();
       }
+    }
+    else if (key === 'h') {
+      closeLinkPaste(false);
+      safeSave();
+      closeAllOverlays();
+      if (window.openHistoryModal) window.openHistoryModal();
     }
     else if (key === 'e') {
       closeLinkPaste(false);
@@ -561,14 +575,18 @@ window.addEventListener('keyup', e => { if (e.key.toLowerCase() === 'r') window.
     else if (key === 'a') {
       if (window.toggleAddGrid) window.toggleAddGrid();
     }
+    else if (key === 's') {
+      showToast('Subjects grid — coming soon');
+    }
   }
 
+  // Expose so history.js and other modules can call it
+  window.doSwitch = doSwitch;
+
   // ── Floating button bar ─────────────────────────────────────────────────────
-  // Layout (both desktop and mobile):
-  //   Top row:    G  T  L       (Grid, Table/Master, Links)
-  //   Bottom row: E  V  A       (VideoEdit [desktop only], VideoShow, Add grid)
-  //   S stub: small button above T (Subjects — future)
-  // On mobile E is hidden (replaced by nothing, or just V A remain)
+  // Stub row: H(above G)  S(above T)
+  // Main row: G  T  L
+  // Alt row:  E  V  A
 
   var bar = document.createElement('div');
   bar.id = 'sal-switcher-bar';
@@ -579,13 +597,17 @@ window.addEventListener('keyup', e => { if (e.key.toLowerCase() === 'r') window.
   var btnStyle = 'width:34px;height:34px;border-radius:6px;border:1px solid #4af;'
     + 'background:rgba(0,20,50,0.85);color:#8ef;font-size:13px;font-weight:bold;'
     + 'cursor:pointer;font-family:sans-serif;';
+  var stubStyle = 'width:34px;height:20px;border-radius:4px;font-size:10px;font-weight:bold;'
+    + 'cursor:pointer;font-family:sans-serif;';
   var btnTitles = {
-    G:'Grid view (masterlinks)',
-    T:'Table view (masterlinks)',
+    G:'Grid view (masterlinks)  [double-tap G]',
+    T:'Table view (masterlinks)  [double-tap T]',
     L:'Links — fast paste screen',
-    E:'VideoEdit',
-    V:'VideoShow (play)',
-    A:'Toggle GAdd staging grid'
+    H:'History — GM snapshots',
+    E:'VideoEdit  [double-tap E]',
+    V:'VideoShow (play)  [double-tap V]',
+    A:'Toggle GA staging grid',
+    S:'Subjects — coming soon'
   };
 
   function mkBarBtn(lbl, extraStyle) {
@@ -599,69 +621,123 @@ window.addEventListener('keyup', e => { if (e.key.toLowerCase() === 'r') window.
     return btn;
   }
 
-  // S stub — small, sits above T (column 2, row 1)
+  // ── Stub row: H above G, S above T ─────────────────────────────────────────
+  var stubRow = document.createElement('div');
+  stubRow.style.cssText = 'grid-column:1/4;display:grid;grid-template-columns:repeat(3,34px);gap:5px;';
+
+  // H button — above G
+  var hStubBtn = document.createElement('button');
+  hStubBtn.textContent = 'H';
+  hStubBtn.title = btnTitles['H'];
+  hStubBtn.style.cssText = stubStyle + 'border:1px solid #8a8;background:rgba(0,50,20,0.7);color:#afa;';
+  hStubBtn.addEventListener('click', function(e) { e.stopPropagation(); doSwitch('h'); });
+
+  // S button — above T
   var sBtn = document.createElement('button');
   sBtn.textContent = 'S';
-  sBtn.title = 'Subjects grid — coming soon';
-  sBtn.style.cssText = 'width:34px;height:20px;border-radius:4px;border:1px solid #888;'
-    + 'background:rgba(0,20,50,0.7);color:#888;font-size:10px;font-weight:bold;'
-    + 'cursor:pointer;font-family:sans-serif;grid-column:2;';
+  sBtn.title = btnTitles['S'];
+  sBtn.style.cssText = stubStyle + 'border:1px solid #888;background:rgba(0,20,50,0.7);color:#888;';
   sBtn.addEventListener('click', function(e) {
-    e.stopPropagation();
-    if (typeof showToast === 'function') showToast('Subjects grid — coming soon');
+    e.stopPropagation(); doSwitch('s');
   });
 
-  // S stub row (spans full width, only S visible)
-  var sRow = document.createElement('div');
-  sRow.style.cssText = 'grid-column:1/4;display:flex;justify-content:center;';
-  sRow.appendChild(sBtn);
-  bar.appendChild(sRow);
+  // Empty spacer above L
+  var stubSpacer = document.createElement('div');
 
-  // Top row: G T L
+  stubRow.appendChild(hStubBtn);
+  stubRow.appendChild(sBtn);
+  stubRow.appendChild(stubSpacer);
+  bar.appendChild(stubRow);
+
+  // Main row: G T L
   bar.appendChild(mkBarBtn('G'));
   bar.appendChild(mkBarBtn('T'));
   bar.appendChild(mkBarBtn('L'));
 
-  // Bottom row: E V A  (E hidden on mobile)
+  // Alt row: E V A  (E hidden on mobile)
   var eBtn = mkBarBtn('E');
   if (ISMOBILE) eBtn.style.visibility = 'hidden';
   bar.appendChild(eBtn);
   bar.appendChild(mkBarBtn('V'));
 
-  // A button
   var aBtn = document.createElement('button');
   aBtn.id = 'sal-add-btn';
   aBtn.textContent = 'A';
   aBtn.title = btnTitles['A'];
   aBtn.style.cssText = btnStyle;
-  aBtn.addEventListener('click', function(e) {
-    e.stopPropagation(); doSwitch('a');
-  });
+  aBtn.addEventListener('click', function(e) { e.stopPropagation(); doSwitch('a'); });
   bar.appendChild(aBtn);
 
   if (document.body) document.body.appendChild(bar);
   else window.addEventListener('DOMContentLoaded', function() { document.body.appendChild(bar); });
 
-    var rmbDown = false;
+  // ── RMB-hold + double-tap switcher ─────────────────────────────────────────
+  var rmbDown = false;
   var switcherFired = false;
 
-  // mousedown/mouseup capture so we detect RMB even inside iframes
   document.addEventListener('mousedown', function(e) {
     if (e.button === 2) { rmbDown = true; switcherFired = false; }
   }, true);
   document.addEventListener('mouseup', function(e) {
     if (e.button === 2) rmbDown = false;
   }, true);
-  // Suppress contextmenu in capture phase whenever rmbDown (but not ctrl+right-click)
   document.addEventListener('contextmenu', function(e) {
     if (rmbDown && !e.ctrlKey) { e.preventDefault(); e.stopPropagation(); }
   }, true);
 
-  // ── Double-tap key ──────────────────────────────────────────────────────────
   var lastKey = '', lastTime = 0, DOUBLE_MS = 350;
 
-  // Single capture-phase keydown handles both RMB-hold and double-tap
+  // ── Ctrl+0 keyboard menu ────────────────────────────────────────────────────
+  var ctrl0Pending = false;
+  var ctrl0Toast = null;
+  var ctrl0Timer  = null;
+
+  function showCtrl0Menu() {
+    if (!ctrl0Toast) {
+      ctrl0Toast = document.createElement('div');
+      ctrl0Toast.style.cssText = 'position:fixed;bottom:120px;right:18px;z-index:9999999;'
+        + 'background:rgba(0,8,24,0.97);border:1px solid #4af;border-radius:8px;'
+        + 'padding:10px 14px;font-family:monospace;font-size:12px;'
+        + 'box-shadow:0 4px 20px rgba(0,0,0,0.9);pointer-events:none;line-height:1.7;';
+      document.body.appendChild(ctrl0Toast);
+    }
+    ctrl0Toast.innerHTML =
+        '<div style="color:#aaa;font-size:10px;margin-bottom:4px;">Ctrl+0 — press key:</div>'
+      + '<div><b style="color:#8ef;">G</b> Grid &nbsp; <b style="color:#8ef;">T</b> Table '
+      + '&nbsp; <b style="color:#afa;">H</b> History</div>'
+      + '<div><b style="color:#8ef;">L</b> Links &nbsp; <b style="color:#8ef;">E</b> Edit '
+      + '&nbsp; <b style="color:#8ef;">V</b> Video &nbsp; <b style="color:#8ef;">A</b> Add</div>'
+      + '<div style="color:#666;font-size:10px;margin-top:3px;">Esc cancels</div>';
+    ctrl0Toast.style.display = 'block';
+  }
+  function hideCtrl0Menu() {
+    if (ctrl0Toast) ctrl0Toast.style.display = 'none';
+    ctrl0Pending = false;
+    if (ctrl0Timer) { clearTimeout(ctrl0Timer); ctrl0Timer = null; }
+  }
+
   document.addEventListener('keydown', function(e) {
+    // Ctrl+0 activates the keyboard switcher menu
+    if (e.ctrlKey && !e.altKey && !e.metaKey && e.key === '0') {
+      e.preventDefault();
+      ctrl0Pending = true;
+      showCtrl0Menu();
+      if (ctrl0Timer) clearTimeout(ctrl0Timer);
+      ctrl0Timer = setTimeout(hideCtrl0Menu, 3000);  // auto-cancel after 3s
+      return;
+    }
+
+    // If Ctrl+0 menu is active, intercept the next keypress
+    if (ctrl0Pending) {
+      var k0 = e.key.toLowerCase();
+      if (k0 !== 'control' && k0 !== 'shift' && k0 !== 'alt' && k0 !== 'meta') {
+        e.preventDefault(); e.stopPropagation();
+        hideCtrl0Menu();
+        if (k0 !== 'escape' && 'gthlevsa'.indexOf(k0) >= 0) doSwitch(k0);
+      }
+      return;
+    }
+
     if (e.ctrlKey || e.altKey || e.metaKey) return;
     var tag = document.activeElement && document.activeElement.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA') return;
@@ -685,6 +761,6 @@ window.addEventListener('keyup', e => { if (e.key.toLowerCase() === 'r') window.
     } else {
       lastKey = key; lastTime = now;
     }
-  }, true);  // capture phase — fires even when iframe has focus
+  }, true);
 
 })();

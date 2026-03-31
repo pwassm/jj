@@ -2049,6 +2049,23 @@ window.duplicateActiveRow = function() {
 window.lastActiveRowIdx = -1;
 
 // ─── Load from GitHub (hamburger menu) ───────────────────────────────────────
+// ── Apply column layout from _salMeta (called after Pull / Reload ML) ─────────
+// Writes sal-cols and Tabulator persistence keys for both TM and TA so both
+// tables open with the same column order and widths on every device.
+function applyColLayout(layout) {
+  if (!layout) return;
+  try {
+    if (layout.salCols) {
+      localStorage.setItem('sal-cols', JSON.stringify(layout.salCols));
+    }
+    if (layout.tabCols) {
+      const tabStr = JSON.stringify(layout.tabCols);
+      localStorage.setItem('tabulator-sal-table-columns',     tabStr);
+      localStorage.setItem('tabulator-sal-table-add-columns', tabStr);
+    }
+  } catch(e) {}
+}
+
 document.getElementById('miLoadGithub').addEventListener('pointerup', async e => {
   e.stopPropagation(); closeMenu();
   const owner = localStorage.getItem('github-owner');
@@ -2073,10 +2090,14 @@ document.getElementById('miLoadGithub').addEventListener('pointerup', async e =>
     const decoded = atob(meta.content.replace(/\n/g, ''));
     const raw = JSON.parse(decoded);
     if (!Array.isArray(raw)) throw new Error('Expected JSON array');
-    // Strip _salMeta row if present
+    // Strip _salMeta row and apply embedded column layout if present
     let data = raw;
     let pushTime = 0;
-    if (raw.length > 0 && raw[0]._salMeta) { pushTime = parseInt(raw[0]._salPushTime || '0', 10); data = raw.slice(1); }
+    if (raw.length > 0 && raw[0]._salMeta) {
+      pushTime = parseInt(raw[0]._salPushTime || '0', 10);
+      applyColLayout(raw[0]._salColLayout || null);  // restore column order + widths
+      data = raw.slice(1);
+    }
     // Migrate legacy field names
     data.forEach(row => {
       if ('asset' in row && !('VidRange' in row)) { row.VidRange = row.asset; delete row.asset; }
@@ -2088,13 +2109,51 @@ document.getElementById('miLoadGithub').addEventListener('pointerup', async e =>
     localStorage.setItem('seeandlearn-links', s);
     localStorage.setItem('sal-edited', pushTime > 0 ? String(pushTime) : Date.now().toString());
     render();
-    // Auto-download so local file is updated
+    // Auto-download masterlinks.json so local file is updated
     const blob = new Blob([JSON.stringify(linksData, null, 2)], {type:'application/json'});
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = 'masterlinks.json';
     document.body.appendChild(a); a.click();
     document.body.removeChild(a); URL.revokeObjectURL(a.href);
-    setStatus('Loaded ' + linksData.length + ' rows from GitHub', '#5f5');
+
+    // ── Also fetch history.json from GitHub (non-fatal) ──────────────────────
+    let histMsg = '';
+    try {
+      const histApiUrl = 'https://api.github.com/repos/' + owner + '/' + repo + '/contents/history.json';
+      const histRes = await fetch(histApiUrl, { headers });
+      if (histRes.ok) {
+        const histMeta = await histRes.json();
+        if (histMeta.content) {
+          const histRaw = JSON.parse(atob(histMeta.content.replace(/\n/g, '')));
+          if (Array.isArray(histRaw)) {
+            let histData = histRaw, histPushTime = 0;
+            if (histRaw.length > 0 && histRaw[0]._salMeta) {
+              histPushTime = parseInt(histRaw[0]._salPushTime || '0', 10);
+              histData = histRaw.slice(1);
+            }
+            const lsHistTime = parseInt(localStorage.getItem('sal-history-edited') || '0', 10);
+            if (histPushTime >= lsHistTime) {  // >= so explicit fetch always wins
+              if (typeof historyData !== 'undefined' && typeof normaliseHistRow === 'function') {
+                window.historyData = histData.map(normaliseHistRow);
+              } else {
+                window.historyData = histData;
+              }
+              localStorage.setItem('sal-history', JSON.stringify(window.historyData));
+              localStorage.setItem('sal-history-edited', String(histPushTime || Date.now()));
+              // Auto-download history.json too
+              const hBlob = new Blob([JSON.stringify(histData, null, 2)], {type:'application/json'});
+              const ha = document.createElement('a');
+              ha.href = URL.createObjectURL(hBlob); ha.download = 'history.json';
+              document.body.appendChild(ha); ha.click();
+              document.body.removeChild(ha); URL.revokeObjectURL(ha.href);
+              histMsg = ' + history.json';
+            }
+          }
+        }
+      }
+    } catch(hErr) { /* history fetch is non-fatal */ }
+
+    setStatus('Loaded ' + linksData.length + ' rows from GitHub' + histMsg, '#5f5');
   } catch(err) {
     alert('Load from GitHub failed:\n' + err.message);
     setStatus('Load from GitHub failed: ' + err.message, '#f88');
@@ -2114,6 +2173,7 @@ document.getElementById('miReloadML').addEventListener('pointerup', async e => {
     let pushTime = 0;
     if (raw.length > 0 && raw[0]._salMeta) {
       pushTime = parseInt(raw[0]._salPushTime || '0', 10);
+      applyColLayout(raw[0]._salColLayout || null);  // restore column order + widths
       data = raw.slice(1);
     }
     // Clear all localStorage data so we start fresh

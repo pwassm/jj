@@ -3,7 +3,7 @@
 // Data: addingData[] stored in localStorage 'sal-adding' + adding.json on server.
 // Displayed as overlay when _addGridActive = true.
 
-const ADD_COLS = 3, ADD_ROWS = 3;
+const ADD_COLS = 4, ADD_ROWS = 4;
 
 // ── Load adding.json from server, merge with localStorage ───────────────────
 async function initAdding() {
@@ -42,8 +42,8 @@ function saveAdding() {
   localStorage.setItem('sal-adding-edited', Date.now().toString());
 }
 
-// ── mkAddCell / occupiedAdding — mirror of mkCell/occupied for 3×3 ───────────
-function mkAddCell(r, c) { return 'a' + r + LETTERS[c - 1]; }  // a1a, a1b, a1c … a3c
+// ── mkAddCell / occupiedAdding — mirror of mkCell/occupied for 4×4 ───────────
+function mkAddCell(r, c) { return 'a' + r + LETTERS[c - 1]; }  // a1a, a1b, a1c, a1d … a4d
 function occupiedAdding() {
   const s = new Set();
   addingData.forEach(it => {
@@ -84,7 +84,7 @@ function renderAddGrid() {
     + 'font-size:12px;color:#8ef;font-family:sans-serif;gap:12px;';
   hdr.innerHTML = '<span style="font-weight:bold;color:#8ef;">GAdd — Staging Grid</span>'
     + '<span style="color:#adf;">' + addingData.filter(r=>r.show==='1'&&r.cell).length
-    + '/9 cells used</span>';
+    + '/16 cells used</span>';
 
   // Merge button in header
   const mergeBtn = document.createElement('button');
@@ -294,6 +294,11 @@ function mergeAddingToML() {
   if (window.renderGrid) window.renderGrid();
   // Refresh TA table if open
   if (window._salTab && window._tabMode === 'adding' && window.openTable) window.openTable(true);
+
+  // Auto-push to GitHub after merge so masterlinks + history stay current
+  if (window.pushToGitHub) {
+    setTimeout(function() { window.pushToGitHub(); }, 200);
+  }
 }
 // Expose for TA toolbar button
 window.mergeAddingToML = mergeAddingToML;
