@@ -1,33 +1,8 @@
 [
   {
     "_salMeta": true,
-    "_salPushTime": 1774923543023,
+    "_salPushTime": 1774928010015,
     "_salColLayout": {
-      "salCols": {
-        "order": [
-          "MPix",
-          "Thumb",
-          "cname",
-          "sname",
-          "Portrait",
-          "show",
-          "Mute",
-          "cell",
-          "fit",
-          "link",
-          "linkpage",
-          "attribution",
-          "comment",
-          "DateAdded",
-          "VidRange",
-          "VidComment",
-          "UniqID",
-          "Topic",
-          "VidTitle",
-          "VidAuthor"
-        ],
-        "widths": {}
-      },
       "tabCols": [
         {
           "field": "_del",
@@ -180,19 +155,6 @@
           "visible": true
         },
         {
-          "field": "UniqID",
-          "title": "UniqID",
-          "width": 77,
-          "minWidth": 8,
-          "maxWidth": 245,
-          "headerWordWrap": false,
-          "editor": "input",
-          "resizable": true,
-          "headerSort": true,
-          "tooltip": true,
-          "visible": true
-        },
-        {
           "field": "link",
           "title": "link",
           "width": 245,
@@ -297,6 +259,19 @@
           "visible": true
         },
         {
+          "field": "UniqID",
+          "title": "UniqID",
+          "width": 77,
+          "minWidth": 8,
+          "maxWidth": 245,
+          "headerWordWrap": false,
+          "editor": "input",
+          "resizable": true,
+          "headerSort": true,
+          "tooltip": true,
+          "visible": true
+        },
+        {
           "field": "Topic",
           "title": "Topic",
           "width": 70,
@@ -324,7 +299,7 @@
         {
           "field": "VidAuthor",
           "title": "VidAuthor",
-          "width": 150,
+          "width": 149,
           "minWidth": 8,
           "maxWidth": 245,
           "headerWordWrap": false,
