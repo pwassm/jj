@@ -91,6 +91,7 @@ async function init(){
   const urlParams = new URLSearchParams(location.search);
   const urlId     = urlParams.get('id');
   const urlScreen = urlParams.get('screen');
+  const urlH      = urlParams.get('h');
 
   if (urlId) {
     const target = linksData.find(r => String(r.UniqID || '') === String(urlId));
@@ -101,12 +102,23 @@ async function init(){
     }
   }
 
-  // ── Deep-link: ?screen=ga opens GA (adding grid overlay) ─────────────────
-  // Usage: pwassm.github.io/jj/?screen=ga
+  // ── Deep-link: ?screen=ga opens GA overlay ────────────────────────────────
   if (urlScreen === 'ga') {
     setTimeout(function() {
       if (window.toggleAddGrid && !window._addGridActive) window.toggleAddGrid();
     }, 400);
+  }
+
+  // ── Deep-link: ?h=N restores history snapshot N and shows GM ─────────────
+  // Usage: pwassm.github.io/jj/?h=3
+  // Waits for historyData to load (initHistory is async), then restores.
+  if (urlH) {
+    Promise.resolve(window._historyReady).then(function() {
+      if (window.restoreByHistID) {
+        const ok = window.restoreByHistID(parseInt(urlH, 10));
+        if (!ok) console.warn('SeeAndLearn: no history entry with HistID=' + urlH);
+      }
+    });
   }
 }
 
@@ -238,7 +250,7 @@ async function flParseAndImport() {
       }
       const cell = isAdding ? '' : flNextFreeCell();
       if (!isAdding && !cell) { skipped++; continue; }
-      const entry = { show:'1', VidRange:'i', cell, fit:'fc',
+      const entry = { show:'1', VidRange:'i', cell, fit:'ei',
         link:resolved, linkpage:line, cname:'', sname:'', attribution:'', comment:'', DateAdded:da, Mute:'1' };
       if (isAdding) { addingData.push(entry); if (typeof saveAdding==='function') saveAdding(); }
       else linksData.push(entry);
@@ -250,7 +262,7 @@ async function flParseAndImport() {
     if (flIsImageURL(line)) {
       const cell = isAdding ? '' : flNextFreeCell();
       if (!isAdding && !cell) { skipped++; continue; }
-      const entry = { show:'1', VidRange:'i', cell, fit:'fc',
+      const entry = { show:'1', VidRange:'i', cell, fit:'ei',
         link:line, linkpage:'', cname:'', sname:'', attribution:'', comment:'', DateAdded:da, Mute:'1' };
       if (isAdding) { addingData.push(entry); if (typeof saveAdding==='function') saveAdding(); }
       else linksData.push(entry);
@@ -268,7 +280,7 @@ async function flParseAndImport() {
     // Any other URL (no preceding image row) — store as-is, treat as image
     const cell = isAdding ? '' : flNextFreeCell();
     if (!isAdding && !cell) { skipped++; continue; }
-    const entry = { show:'1', VidRange:'i', cell, fit:'fc',
+    const entry = { show:'1', VidRange:'i', cell, fit:'ei',
       link:line, linkpage:'', cname:'', sname:'', attribution:'', comment:'', DateAdded:da, Mute:'1' };
     if (isAdding) { addingData.push(entry); if (typeof saveAdding==='function') saveAdding(); }
     else linksData.push(entry);
@@ -379,28 +391,29 @@ window.addEventListener('keydown', e => {
     }
   }
 
-  if (!e.ctrlKey && !e.altKey && !e.metaKey && e.key.toLowerCase() === 't') {
+  // ── Hamburger menu keyboard shortcuts (menu must be open) ──────────────────
+  // When the hamburger panel is open, pressing the first letter of each item
+  // triggers it.  Map: A=Admin(skip) D=Download C=ClearStaging P=Push
+  //                    L=LoadGH R=ReloadML S=Settings H=Help G=GetLinksFromClip
+  if (!e.ctrlKey && !e.altKey && !e.metaKey) {
     const menuPanel = document.getElementById('menuPanel');
     if (menuPanel && menuPanel.classList.contains('open')) {
-       // If hamburger is open, trigger Tables
-       e.preventDefault();
-       const miTables = document.getElementById('miTables');
-       if (miTables) {
-         const ev = new PointerEvent('pointerup', { bubbles: true, cancelable: true });
-         miTables.dispatchEvent(ev);
-       }
-    }
-  }
-
-  if (!e.ctrlKey && !e.altKey && !e.metaKey && e.key.toLowerCase() === 'l') {
-    const menuPanel = document.getElementById('menuPanel');
-    if (menuPanel && menuPanel.classList.contains('open')) {
-      // If hamburger is open, trigger LinkPastes
-      e.preventDefault();
-      const miFast = document.getElementById('miLinkPastes');
-      if (miFast) {
-        const ev = new PointerEvent('pointerup', { bubbles: true, cancelable: true });
-        miFast.dispatchEvent(ev);
+      const menuKeyMap = {
+        'd': 'miDlAll',
+        'c': 'miClearStaging',
+        'p': 'miPushGithub',
+        'l': 'miLoadGithub',
+        'r': 'miReloadML',
+        's': 'miSettings',
+        'h': 'miHelp',
+        'g': 'miLinkPastes'
+        // 'a' = Admin — no interactive action, skip
+      };
+      const mk = e.key.toLowerCase();
+      if (menuKeyMap[mk]) {
+        e.preventDefault();
+        const el = document.getElementById(menuKeyMap[mk]);
+        if (el) el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
       }
     }
   }

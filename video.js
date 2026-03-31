@@ -154,27 +154,48 @@ window.mountYouTubeClip = async function(hostEl, url, startSec, dur, isMuted, cu
         if (isMuted) e.target.mute(); else e.target.unMute();
         var allowSeek = !window.keyframeOnly;
         e.target.seekTo(initSeek, allowSeek);
-        e.target.playVideo();
-        // Autopause: if enabled, pause after 100ms so a frame is visible but video doesn't run
-        if (window.autoPauseGrid !== false) {
-          setTimeout(function() { try { e.target.pauseVideo(); } catch(ex) {} }, 100);
+
+        if (window.autoPauseGrid) {
+          // Autopause: show a single frame at the segment start, stay paused.
+          // Set _salPaused BEFORE calling play so the interval never calls playVideo.
+          e.target._salPaused = true;
+          e.target.playVideo();   // needed to buffer/render the frame
+          setTimeout(function() {
+            try { e.target.pauseVideo(); } catch(ex) {}
+          }, 300);  // longer delay — YouTube needs time to seek + decode
+          // Interval just monitors position — no playback calls while paused
+          window.seeLearnVideoTimers[cellId] = setInterval(function() {
+            if (e.target._salPaused) return;
+            try {
+              var t   = e.target.getCurrentTime();
+              var seg = segs[segIdx];
+              if (t >= seg.start + seg.dur - 0.2) {
+                segIdx = (segIdx + 1) % segs.length;
+                e.target.seekTo(segs[segIdx].start, allowSeek);
+                e.target.playVideo();
+              }
+            } catch(err) {}
+          }, 100);
+        } else {
+          // Normal playback — no autopause
+          e.target._salPaused = false;
+          e.target.playVideo();
+          window.seeLearnVideoTimers[cellId] = setInterval(function() {
+            if (e.target._salPaused) return;
+            try {
+              var t   = e.target.getCurrentTime();
+              var seg = segs[segIdx];
+              if (t >= seg.start + seg.dur - 0.2) {
+                segIdx = (segIdx + 1) % segs.length;
+                e.target.seekTo(segs[segIdx].start, allowSeek);
+                e.target.playVideo();
+              }
+            } catch(err) {}
+          }, 100);
         }
-        window.seeLearnVideoTimers[cellId] = setInterval(function() {
-          try {
-            var t   = e.target.getCurrentTime();
-            var seg = segs[segIdx];
-            // UPPER-BOUND ONLY — no lower-bound snap to prevent "goes to beginning"
-            if (t >= seg.start + seg.dur - 0.2) {
-              segIdx = (segIdx + 1) % segs.length;
-              e.target.seekTo(segs[segIdx].start, allowSeek);
-              e.target.playVideo();
-            }
-          } catch(err) {}
-        }, 100);
       },
       onStateChange: function(e) {
-        // Interval handles end-of-segment looping at -0.2s.
-        // No ENDED handler here — it would reset to seg[0].start using stale segIdx.
+        // No ENDED handler — interval handles looping at -0.2s
       }
     }
   });

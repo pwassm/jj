@@ -1,18 +1,22 @@
 // ── history.js — GM display snapshots ────────────────────────────────────────
-// Saves and restores TM cell assignments keyed by UniqID.
-// Row format: { Topic, DateSaved, CellAssignments }
-// CellAssignments: "1a:3|1b:7|2a:12" — pipe-separated cell:UniqID pairs.
-// Stored in localStorage 'sal-history' + history.json on server (newer wins).
+// Row format: { HistID, Topic, DateSaved, CellAssignments }
+//   HistID: auto-incrementing integer, permanent, used for ?h=N deep-links.
+// CellAssignments: "1a:3|1b:7" — pipe-separated cell:UniqID pairs.
+// Storage: localStorage 'sal-history' + history.json on server (newer wins).
 
 var historyData = [];
 
-// ── Normalise one history row ─────────────────────────────────────────────────
-// Handles old field name (Assignment) and enforces column order.
+// ── Normalise one history row (migration: old field names + missing HistID) ──
 function normaliseHistRow(r) {
   var ca = r.CellAssignments !== undefined ? r.CellAssignments
          : r.Assignment      !== undefined ? r.Assignment
          : '';
-  return { Topic: String(r.Topic || ''), DateSaved: String(r.DateSaved || ''), CellAssignments: String(ca) };
+  return {
+    HistID:          parseInt(r.HistID || '0', 10) || 0,
+    Topic:           String(r.Topic    || ''),
+    DateSaved:       String(r.DateSaved || ''),
+    CellAssignments: String(ca)
+  };
 }
 
 // ── Load ──────────────────────────────────────────────────────────────────────
@@ -39,9 +43,16 @@ async function initHistory() {
   } catch(e) {}
 
   var src = (fileData && fileTime > lsTime) ? fileData : (lsData || fileData || []);
-  // Normalise every row (migrates old field names, enforces column order)
   historyData = src.map(normaliseHistRow);
-  // Always persist normalised data so migration is permanent
+
+  // Assign HistIDs to any entries that have HistID=0 (old format migration)
+  var maxId = 0;
+  historyData.forEach(function(r) { if (r.HistID > maxId) maxId = r.HistID; });
+  var changed = false;
+  historyData.forEach(function(r) {
+    if (!r.HistID) { maxId++; r.HistID = maxId; changed = true; }
+  });
+  // Always persist (migration + normalisation)
   saveHistory_ls();
 }
 
@@ -50,17 +61,16 @@ function saveHistory_ls() {
   localStorage.setItem('sal-history-edited', Date.now().toString());
 }
 
-// ── Encode / decode CellAssignments ──────────────────────────────────────────
-// Format: "1a:3|1b:7|2a:12" — sorted by cell name
+// Expose so main.js can await it for ?h= deep-link
+window._historyReady = initHistory();
 
+// ── Encode / decode CellAssignments ──────────────────────────────────────────
 function encodeAssignment() {
   return linksData
     .filter(function(r) {
-      return r.cell   && String(r.cell).trim() &&
-             r.UniqID && String(r.UniqID).trim();
+      return r.cell && String(r.cell).trim() && r.UniqID && String(r.UniqID).trim();
     })
-    .slice()
-    .sort(function(a, b) { return String(a.cell).localeCompare(String(b.cell)); })
+    .slice().sort(function(a, b) { return String(a.cell).localeCompare(String(b.cell)); })
     .map(function(r) { return String(r.cell).trim() + ':' + String(r.UniqID).trim(); })
     .join('|');
 }
@@ -70,7 +80,7 @@ function decodeAssignment(str) {
   var result = [];
   str.split('|').forEach(function(s) {
     var colon = s.indexOf(':');
-    if (colon < 1) return;                    // no colon or colon at position 0
+    if (colon < 1) return;
     var cell = s.slice(0, colon).trim();
     var uid  = s.slice(colon + 1).trim();
     if (cell && uid) result.push({ cell: cell, uid: uid });
@@ -86,8 +96,7 @@ window.writeToHistory = function() {
   });
   if (missing.length) {
     if (!confirm(missing.length + ' visible row(s) have a cell but no UniqID'
-      + ' — they will be excluded from this snapshot.\n\n'
-      + 'Run "Fill UIDs" first for a complete snapshot.\n\nSave partial snapshot?')) return;
+      + ' — they will be excluded.\n\nRun "Fill UIDs" first for a complete snapshot.\n\nSave partial snapshot?')) return;
   }
   var ca = encodeAssignment();
   if (!ca) {
@@ -106,25 +115,52 @@ window.writeToHistory = function() {
     String(d.getMinutes()).padStart(2,'0'),
     String(d.getSeconds()).padStart(2,'0')].join('.');
 
-  historyData.unshift({ Topic: topic || '(untitled)', DateSaved: ds, CellAssignments: ca });
+  // Auto-increment HistID
+  var maxId = 0;
+  historyData.forEach(function(r) { if (r.HistID > maxId) maxId = r.HistID; });
+  var newId = maxId + 1;
+
+  historyData.unshift({
+    HistID:          newId,
+    Topic:           topic || '(untitled)',
+    DateSaved:       ds,
+    CellAssignments: ca
+  });
   saveHistory_ls();
 
   var count = decodeAssignment(ca).length;
   if (typeof setStatus === 'function')
-    setStatus('✓ Snapshot "' + (topic || '(untitled)') + '" saved — ' + count + ' cells', '#5f5');
+    setStatus('✓ Snapshot #' + newId + ' "' + (topic || '(untitled)') + '" saved — ' + count + ' cells', '#5f5');
   renderHistoryTable();
 };
 
-// ── Restore snapshot ──────────────────────────────────────────────────────────
+// ── Restore by index ──────────────────────────────────────────────────────────
 window.restoreFromHistory = function(rowIdx) {
   var hrow = historyData[rowIdx];
   if (!hrow) return;
+  restoreHistRow(hrow);
+};
 
+// ── Restore by HistID (used by ?h= deep-link) ─────────────────────────────────
+window.restoreByHistID = function(hid) {
+  var hrow = historyData.find(function(r) {
+    return parseInt(r.HistID || '0', 10) === parseInt(hid, 10);
+  });
+  if (!hrow) {
+    console.warn('SeeAndLearn: no history entry with HistID=' + hid);
+    return false;
+  }
+  restoreHistRow(hrow);
+  return true;
+};
+
+// ── Core restore logic ─────────────────────────────────────────────────────────
+function restoreHistRow(hrow) {
   var caStr = hrow.CellAssignments || hrow.Assignment || '';
   var pairs = decodeAssignment(caStr);
   if (!pairs.length) {
     if (typeof setStatus === 'function')
-      setStatus('Snapshot has no UIDs — run Fill UIDs in TM, save new snapshot', '#f88');
+      setStatus('Snapshot #' + (hrow.HistID||'?') + ' has no UIDs — run Fill UIDs in TM, save new snapshot', '#f88');
     return;
   }
 
@@ -159,21 +195,21 @@ window.restoreFromHistory = function(rowIdx) {
     if (!matched) notFound++;
   }
 
-  // Write to localStorage directly — no saveData/syncTab
+  // Write to localStorage directly
   localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
   localStorage.setItem('sal-edited', Date.now().toString());
 
   // Render GM
   if (typeof render === 'function') render();
 
-  var msg = 'Restored "' + hrow.Topic + '": ' + applied + ' cells'
+  var msg = 'Restored #' + (hrow.HistID||'?') + ' "' + hrow.Topic + '": ' + applied + ' cells'
     + (notFound ? ' (' + notFound + ' UIDs not found)' : '');
   if (typeof setStatus === 'function') setStatus(msg, applied > 0 ? '#5f5' : '#f88');
-};
+}
 
 // ── Delete ────────────────────────────────────────────────────────────────────
 function deleteHistoryRow(idx) {
-  if (!confirm('Delete snapshot "' + historyData[idx].Topic + '"?')) return;
+  if (!confirm('Delete snapshot #' + (historyData[idx].HistID||'?') + ' "' + historyData[idx].Topic + '"?')) return;
   historyData.splice(idx, 1);
   saveHistory_ls();
   renderHistoryTable();
@@ -190,7 +226,7 @@ function renderHistoryTable() {
     + ' snapshot' + (historyData.length !== 1 ? 's' : '');
 
   if (!historyData.length) {
-    body.innerHTML = '<tr><td colspan="4" style="color:#666;text-align:center;padding:20px;'
+    body.innerHTML = '<tr><td colspan="5" style="color:#666;text-align:center;padding:20px;'
       + 'font-style:italic;">No snapshots yet — open TM table, run Fill UIDs, '
       + 'then click Write to History.</td></tr>';
     return;
@@ -198,20 +234,33 @@ function renderHistoryTable() {
 
   historyData.forEach(function(row, i) {
     var pairs    = decodeAssignment(row.CellAssignments);
-    // Show "1a:3  1b:7" — both cell position and UID
     var pairList = pairs.map(function(p) { return p.cell + ':' + p.uid; }).join('  ');
+    var deepLink = '?h=' + (row.HistID || i);
 
     var tr = document.createElement('tr');
     tr.style.cssText = 'border-bottom:1px solid #1e1e30;vertical-align:top;';
     tr.innerHTML =
-      '<td style="padding:6px 10px;color:#fff;font-size:13px;min-width:100px;">'
+      // Col 1: HistID + deep-link
+      '<td style="padding:6px 8px;text-align:center;white-space:nowrap;">'
+        + '<span style="color:#8ef;font-size:14px;font-weight:bold;font-family:monospace;">#'
+        + escH(String(row.HistID || '?')) + '</span><br>'
+        + '<a href="' + escH(deepLink) + '" title="Deep-link to restore this layout on load" '
+        + 'style="color:#4af;font-size:9px;font-family:monospace;text-decoration:none;" '
+        + 'onclick="event.preventDefault();navigator.clipboard&&navigator.clipboard.writeText(location.origin+location.pathname+\''
+        + escH(deepLink) + '\').catch(function(){});">copy ?h=' + escH(String(row.HistID||'?')) + '</a>'
+      + '</td>'
+      // Col 2: Topic
+    + '<td style="padding:6px 10px;color:#fff;font-size:13px;min-width:100px;">'
         + escH(row.Topic) + '</td>'
+      // Col 3: DateSaved
     + '<td style="padding:6px 10px;color:#8ef;font-size:12px;white-space:nowrap;font-family:monospace;">'
         + escH(row.DateSaved) + '</td>'
-    + '<td style="padding:6px 10px;color:#888;font-size:11px;font-family:monospace;word-break:break-all;max-width:280px;">'
+      // Col 4: CellAssignments
+    + '<td style="padding:6px 10px;color:#888;font-size:11px;font-family:monospace;word-break:break-all;max-width:260px;">'
         + '<span style="color:#666;font-size:10px;">' + pairs.length + ' cells — </span>'
         + escH(pairList || '(empty — save again after running Fill UIDs)')
     + '</td>'
+      // Col 5: Actions
     + '<td style="padding:6px 8px;white-space:nowrap;">'
         + '<div style="display:flex;gap:5px;">'
         + '<button onclick="window.restoreFromHistory(' + i + ')" '
@@ -255,6 +304,3 @@ window.downloadHistoryJson = function() {
   document.body.appendChild(a); a.click();
   document.body.removeChild(a); URL.revokeObjectURL(a.href);
 };
-
-// ── Init ──────────────────────────────────────────────────────────────────────
-initHistory();

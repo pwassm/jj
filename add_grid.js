@@ -212,25 +212,48 @@ function renderAddGrid() {
           + '<span style="font-size:10px;color:#666;font-family:monospace;">' + cs + '</span>';
         cell.addEventListener('pointerup', function(e) {
           e.stopPropagation();
-          const url = prompt('Paste URL for cell ' + cs + ':');
-          if (!url || !/^https?:\/\//i.test(url.trim())) return;
-          const cname = prompt('Name (optional):') || '';
-          const d = new Date();
-          const da = [String(d.getFullYear()).slice(-2),
+          var d = new Date();
+          var da = [String(d.getFullYear()).slice(-2),
             String(d.getMonth()+1).padStart(2,'0'),
             String(d.getDate()).padStart(2,'0'),
             String(d.getHours()).padStart(2,'0'),
             String(d.getMinutes()).padStart(2,'0'),
             String(d.getSeconds()).padStart(2,'0')].join('.');
-          // Detect video URLs — default VidRange to "0 99999" (full video) for YT/Vimeo
-          const isVidUrl = (window.isYouTubeLink && window.isYouTubeLink(url.trim()))
-            || (window.isVimeoLink && window.isVimeoLink(url.trim()));
-          const vidRange = isVidUrl ? '0 99999' : 'i';
-          addingData.push({ show:'1', VidRange:vidRange, cell:cs, fit:'fc',
-            link:url.trim(), cname, Topic:'', sname:'', attribution:'',
-            comment:'', DateAdded:da, Mute:'1' });
-          saveAdding();
-          renderAddGrid();
+
+          function addUrl(url) {
+            if (!url || !/^https?:\/\//i.test(url.trim())) return;
+            var isVidUrl = (window.isYouTubeLink && window.isYouTubeLink(url.trim()))
+              || (window.isVimeoLink && window.isVimeoLink(url.trim()));
+            var vidRange   = isVidUrl ? '0 99999' : 'i';
+            var fitDefault = isVidUrl ? 'fc' : 'ei';
+            addingData.push({ show:'1', VidRange:vidRange, cell:cs, fit:fitDefault,
+              link:url.trim(), cname:'', Topic:'', sname:'', attribution:'',
+              comment:'', DateAdded:da, Mute:'1' });
+            saveAdding();
+            renderAddGrid();
+          }
+
+          // Try clipboard first; fall back to prompt on failure (mobile permission denied, etc.)
+          if (navigator.clipboard && navigator.clipboard.readText) {
+            navigator.clipboard.readText().then(function(text) {
+              var trimmed = (text || '').trim();
+              if (/^https?:\/\//i.test(trimmed)) {
+                addUrl(trimmed);
+              } else {
+                // Clipboard doesn't have a URL — prompt as fallback
+                var manual = prompt('No URL in clipboard. Paste URL for cell ' + cs + ':');
+                addUrl(manual || '');
+              }
+            }).catch(function() {
+              // Clipboard read denied — prompt fallback
+              var manual = prompt('Paste URL for cell ' + cs + ':');
+              addUrl(manual || '');
+            });
+          } else {
+            // No clipboard API — prompt
+            var manual = prompt('Paste URL for cell ' + cs + ':');
+            addUrl(manual || '');
+          }
         });
       }
       _addOverlay.appendChild(cell);
