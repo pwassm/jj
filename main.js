@@ -701,42 +701,67 @@ window.addEventListener('keyup', e => { if (e.key.toLowerCase() === 'r') window.
   var lastKey = '', lastTime = 0, DOUBLE_MS = 350;
 
   // ── Ctrl+0 keyboard menu ────────────────────────────────────────────────────
+  // Ctrl+0 toggles the switcher overlay. Stays until key chosen, Esc, or Ctrl+0 again.
   var ctrl0Pending = false;
   var ctrl0Toast = null;
-  var ctrl0Timer  = null;
 
   function showCtrl0Menu() {
     if (!ctrl0Toast) {
       ctrl0Toast = document.createElement('div');
-      ctrl0Toast.style.cssText = 'position:fixed;bottom:120px;right:18px;z-index:9999999;'
-        + 'background:rgba(0,8,24,0.97);border:1px solid #4af;border-radius:8px;'
-        + 'padding:10px 14px;font-family:monospace;font-size:12px;'
-        + 'box-shadow:0 4px 20px rgba(0,0,0,0.9);pointer-events:none;line-height:1.7;';
+      ctrl0Toast.style.cssText =
+        'position:fixed;bottom:62px;right:14px;z-index:9999999;'
+        + 'background:rgba(5,12,30,0.97);border:1px solid rgba(100,180,255,0.4);'
+        + 'border-radius:10px;padding:12px 16px 10px;'
+        + 'box-shadow:0 6px 28px rgba(0,0,0,0.85);pointer-events:none;'
+        + 'font-family:Arial,sans-serif;min-width:200px;';
       document.body.appendChild(ctrl0Toast);
     }
     ctrl0Toast.innerHTML =
-        '<div style="color:#aaa;font-size:10px;margin-bottom:4px;">Ctrl+0 — press key:</div>'
-      + '<div><b style="color:#8ef;">G</b> Grid &nbsp; <b style="color:#8ef;">T</b> Table '
-      + '&nbsp; <b style="color:#afa;">H</b> History</div>'
-      + '<div><b style="color:#8ef;">L</b> Links &nbsp; <b style="color:#8ef;">E</b> Edit '
-      + '&nbsp; <b style="color:#8ef;">V</b> Video &nbsp; <b style="color:#8ef;">A</b> Add</div>'
-      + '<div style="color:#666;font-size:10px;margin-top:3px;">Esc cancels</div>';
+      '<div style="font-size:10px;color:rgba(120,160,220,0.7);letter-spacing:0.08em;'
+      + 'text-transform:uppercase;margin-bottom:8px;">Navigate — press key</div>'
+      + '<table style="border-collapse:collapse;width:100%;">'
+      + rows([
+          ['G','Grid','T','Table'],
+          ['H','History','L','Links'],
+          ['E','Edit','V','Video'],
+          ['A','Add','S','Subjects'],
+        ])
+      + '</table>'
+      + '<div style="margin-top:8px;font-size:10px;color:rgba(100,130,170,0.6);">'
+      + 'Ctrl+0 or Esc to close</div>';
+
+    function rows(pairs) {
+      return pairs.map(function(p) {
+        return '<tr>'
+          + td(p[0], p[1])
+          + td(p[2], p[3])
+          + '</tr>';
+      }).join('');
+    }
+    function td(key, label) {
+      return '<td style="padding:3px 10px 3px 0;">'
+        + '<span style="display:inline-block;width:18px;height:18px;line-height:18px;'
+        + 'text-align:center;border-radius:3px;background:rgba(60,120,200,0.25);'
+        + 'border:1px solid rgba(100,170,255,0.4);font-size:12px;font-weight:bold;'
+        + 'color:#8ef;margin-right:5px;">' + key + '</span>'
+        + '<span style="font-size:12px;color:#ccc;">' + label + '</span>'
+        + '</td>';
+    }
     ctrl0Toast.style.display = 'block';
   }
+
   function hideCtrl0Menu() {
     if (ctrl0Toast) ctrl0Toast.style.display = 'none';
     ctrl0Pending = false;
-    if (ctrl0Timer) { clearTimeout(ctrl0Timer); ctrl0Timer = null; }
   }
 
   document.addEventListener('keydown', function(e) {
-    // Ctrl+0 activates the keyboard switcher menu
+    // Ctrl+0 toggles the keyboard switcher overlay
     if (e.ctrlKey && !e.altKey && !e.metaKey && e.key === '0') {
       e.preventDefault();
+      if (ctrl0Pending) { hideCtrl0Menu(); return; }  // second Ctrl+0 closes
       ctrl0Pending = true;
       showCtrl0Menu();
-      if (ctrl0Timer) clearTimeout(ctrl0Timer);
-      ctrl0Timer = setTimeout(hideCtrl0Menu, 3000);  // auto-cancel after 3s
       return;
     }
 

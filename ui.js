@@ -1468,47 +1468,45 @@ window.openTable = function(forceAddMode) {
 
         if (e.shiftKey) {
           e.preventDefault();
-          // Close any existing popup first
+          e.stopPropagation();
+          // Always close stale popups first
           const existingPop = document.getElementById('bulk-rename-popup');
           if (existingPop) existingPop.remove();
 
+          const allRows = window._salTab.getRows();
           if (window._cellAnchor && window._cellAnchor.field === field) {
-            // Second shift-click in same column → open bulk rename popup
-            if (window._salTab && window._salTab.modules && window._salTab.modules.edit) {
+            // Second shift-click same column → compute range and open popup
+            if (window._salTab.modules && window._salTab.modules.edit) {
               try { window._salTab.modules.edit.cancelEdit(); } catch(ex) {}
             }
-            const allRows = window._salTab.getRows();
-            // Use stored index — getRows() order is stable within one openTable() call
             const anchorIdx = window._cellAnchor.tabIdx;
             const clickIdx  = allRows.indexOf(row);
-            window._cellAnchor = null;  // clear anchor regardless
-            if (anchorIdx !== -1 && clickIdx !== -1) {
+            window._cellAnchor = null;
+            // Clear anchor highlight
+            allRows.forEach(function(r) { r.getElement().style.outline = ''; });
+            if (anchorIdx !== -1 && clickIdx !== -1 && anchorIdx !== clickIdx) {
               const lo = Math.min(anchorIdx, clickIdx);
               const hi = Math.max(anchorIdx, clickIdx);
               const rangeRows = allRows.slice(lo, hi + 1);
+              setStatus('Range: rows ' + (lo+1) + '–' + (hi+1) + ' (' + rangeRows.length + ' rows)', '#8ef');
               setTimeout(function() { openBulkRename(field, rangeRows); }, 0);
+            } else {
+              setStatus('Same row clicked — select a different row for endpoint', '#f88');
             }
           } else {
-            // First shift-click → set anchor, highlight row, show status
-            const allRows = window._salTab.getRows();
+            // First shift-click → set anchor only, highlight it
             const idx = allRows.indexOf(row);
-            window._cellAnchor = { field, tabIdx: idx };
-            // Visual highlight on the anchor row element
+            // Clear any previous anchor highlight from a different column
             allRows.forEach(function(r) { r.getElement().style.outline = ''; });
+            window._cellAnchor = { field, tabIdx: idx };
             row.getElement().style.outline = '2px solid #fa8';
             row.getElement().style.outlineOffset = '-2px';
-            setStatus('Anchor: row ' + (idx+1) + ' col "' + field + '" — shift+click another cell in this column to bulk-rename range', '#fa8');
+            setStatus('Anchor ► row ' + (idx+1) + ' · "' + field + '" — now shift+click the END row in the same column', '#fa8');
           }
           return;
         }
-
-        // Plain click — clear any anchor highlight but don't interfere with editing
-        if (window._cellAnchor) {
-          if (window._salTab) {
-            window._salTab.getRows().forEach(function(r) { r.getElement().style.outline = ''; });
-          }
-          window._cellAnchor = null;
-        }
+        // Plain click: update active row/col trackers. Do NOT touch the anchor —
+        // user may be scrolling to find the end row of the range.
       },
       cellEdited(){
         if (isAddMode) {
@@ -2559,47 +2557,37 @@ function openBulkRename(field, rangeRows) {
       if (!confirm('Set "' + f + '" to empty on ' + rangeRows.length + ' row(s)?')) return;
     }
 
-    const activeData = _tabMode === 'adding' ? (window.addingData || []) : linksData;
+    // syncTab FIRST — aligns linksData[i] with Tabulator's getRows()[i] by position.
+    // After syncTab, linksData[pos] === activeData[pos] is guaranteed correct.
+    if (_tabMode !== 'adding') syncTab();
 
-    // ── Special case: "cell" column → assign sequential positions 1a→5e ──────
+    const activeData = _tabMode === 'adding' ? (window.addingData || []) : linksData;
+    const allRows    = window._salTab.getRows();
+
+    // ── Special case: "cell" column → assign sequential grid positions ────────
     if (f === 'cell') {
-      const COLS = 5, ROWS = 5, LETTERS = 'abcde';
-      // Build list of all valid cell names in order
+      const LETTERS = 'abcde';
       const allCells = [];
-      for (let r = 1; r <= ROWS; r++)
-        for (let c = 0; c < COLS; c++)
+      for (let r = 1; r <= 5; r++)
+        for (let c = 0; c < 5; c++)
           allCells.push(r + LETTERS[c]);
 
-      // Find first free cell not already claimed by rows OUTSIDE the range
-      const rangeDataKeys = new Set(rangeRows.map(row => {
-        const d = row.getData(); return (d.link || '') + '|' + (d.cell || '');
-      }));
-      const occupiedByOthers = new Set(
-        activeData
-          .filter(r => r.cell && !rangeDataKeys.has((r.link||'') + '|' + (r.cell||'')))
-          .map(r => r.cell)
-      );
+      // Cells occupied by rows NOT in the selection
+      const rangeSet = new Set(rangeRows.map(function(r) { return allRows.indexOf(r); }));
+      const occupiedByOthers = new Set();
+      allRows.forEach(function(r, i) {
+        if (!rangeSet.has(i) && activeData[i] && activeData[i].cell)
+          occupiedByOthers.add(activeData[i].cell);
+      });
 
-      // Fill the range rows with sequential cells starting from 1a (skip occupied-by-others)
       let cellIdx = 0;
       rangeRows.forEach(function(row) {
-        // Advance past cells already used by non-range rows
         while (cellIdx < allCells.length && occupiedByOthers.has(allCells[cellIdx])) cellIdx++;
         const newCell = cellIdx < allCells.length ? allCells[cellIdx++] : '';
-        const d = row.getData();
-        const idx = activeData.findIndex(function(r) {
-          return r.link === d.link && r.cell === d.cell;
-        });
-        if (idx !== -1) activeData[idx].cell = newCell;
-        else if (d.link) {
-          const idx2 = activeData.findIndex(function(r) { return r.link === d.link; });
-          if (idx2 !== -1) activeData[idx2].cell = newCell;
-        }
+        const pos = allRows.indexOf(row);
+        if (pos !== -1 && activeData[pos]) activeData[pos].cell = newCell;
         row.update({ cell: newCell });
       });
-      // Sync Tabulator → linksData for any rows that were updated via row.update
-      // but whose activeData entry we didn't find by identity
-      syncTab();
       if (_tabMode === 'adding') { if (typeof saveAdding === 'function') saveAdding(); }
       else saveData(true);
       dismissPopup();
@@ -2608,25 +2596,14 @@ function openBulkRename(field, rangeRows) {
       return;
     }
 
-    // ── Standard bulk rename ───────────────────────────────────────────────────
-    // Find each row in activeData by identity (link+cell), not by visual position.
-    // Using position (indexOf in allRows) breaks when the table is sorted.
+    // ── Standard bulk rename — position-based after syncTab ───────────────────
     rangeRows.forEach(function(row) {
-      const d = row.getData();
-      // Primary key: link + cell (unique combination)
-      let idx = activeData.findIndex(function(r) {
-        return r.link === d.link && r.cell === d.cell;
-      });
-      // Fallback: link only (for rows with empty cell)
-      if (idx === -1 && d.link) {
-        idx = activeData.findIndex(function(r) { return r.link === d.link; });
+      const pos = allRows.indexOf(row);
+      if (pos !== -1 && activeData[pos]) {
+        activeData[pos][f] = val;
       }
-      if (idx !== -1) activeData[idx][f] = val;
       const upd = {}; upd[f] = val; row.update(upd);
     });
-    // syncTab first so Tabulator's updated values reach linksData,
-    // then saveData(true) writes the now-correct linksData.
-    syncTab();
     if (_tabMode === 'adding') { if (typeof saveAdding === 'function') saveAdding(); }
     else saveData(true);
     dismissPopup();
