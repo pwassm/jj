@@ -347,6 +347,10 @@ document.addEventListener('keydown', e => {
       else { jsonMod.classList.remove('open'); render(); }
       if (window.menuWrap) window.menuWrap.style.display = '';  // restore HM
     }
+    const histMod = document.getElementById('historyModal');
+    if (histMod && histMod.classList.contains('open')) {
+      if (window.closeHistoryModal) window.closeHistoryModal();
+    }
     const fastMod = document.getElementById('fastLinkModal');
     if (fastMod && fastMod.style.display === 'flex') {
       fastMod.style.display = 'none';
