@@ -246,6 +246,7 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
     <div class="menu-item" id="miClearStaging" style="color:#f88;">&#x1F5D1; Clear staging (adding.json)</div>
     <div class="menu-item" id="miPushGithub">&#x2601; Push to GitHub</div>
     <div class="menu-item" id="miLoadGithub">&#x2B07; Load from GitHub</div>
+    <div class="menu-item" id="miSetFolder" style="color:#8a8;">&#x1F4C2; Set project folder (silent writes)</div>
     <div class="menu-item" id="miReloadML" style="color:#fa8;">&#x21BA; Reload masterlinks.json</div>
     <div class="menu-divider"></div>
     <div class="menu-item" id="miSettings">Settings &#x25B8;</div>
@@ -284,7 +285,7 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
     <div class="menu-item" id="miHelp">Help</div>
     <div class="menu-divider"></div>
     <div class="menu-item" id="miLinkPastes" style="color:#6cf;">&#x1F517; GetLinksFromClip (G)</div>
-    <div id="menuDateStamp" style="padding:13px 18px;color:#ccc;font:15px Arial,sans-serif;border-top:1px solid rgba(255,255,255,0.1);text-align:left;user-select:none;">zip177 &middot; Mar 30, 2026</div>
+    <div id="menuDateStamp" style="padding:13px 18px;color:#ccc;font:15px Arial,sans-serif;border-top:1px solid rgba(255,255,255,0.1);text-align:left;user-select:none;">zip180 &middot; Mar 30, 2026</div>
   </div>
   <button id="menuBtn"><span></span><span></span><span></span></button>
 </div>
@@ -390,8 +391,8 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
           <button id="btn-export-chosen"       title="Download selected rows as JSON (all if none selected)" style="padding:6px 12px;border-radius:5px;border:1px solid #4f8;background:rgba(0,120,60,0.3);color:#4f8;cursor:pointer;font-size:13px;">ExportChosen</button>
           <button id="btn-import"              title="Import JSON file and merge"          style="padding:6px 12px;border-radius:5px;border:1px solid #4f8;background:rgba(0,80,60,0.3);color:#4f8;cursor:pointer;font-size:13px;">Import</button>
           <button id="btn-make-json-topic"     title="Generate entries from a topic (stub)" style="padding:6px 12px;border-radius:5px;border:1px solid #f9a;background:rgba(180,80,0,0.3);color:#f9a;cursor:pointer;font-size:13px;">MakeJsonFromTopic</button>
-          <button id="btn-sync-at-cols"        title="Copy TM column structure (names + order + widths) to TA. Open TM table first." style="padding:6px 12px;border-radius:5px;border:1px solid #8f8;background:rgba(0,100,50,0.3);color:#8f8;cursor:pointer;font-size:13px;">Sync TM→TA</button>
-          <button id="btn-merge-to-tm"         title="Merge all TA staging entries into TM (dedup by link URL)" style="display:none;padding:6px 12px;border-radius:5px;border:1px solid #5f5;background:rgba(0,120,0,0.4);color:#5f5;cursor:pointer;font-size:13px;font-weight:bold;">Merge→TM</button>
+          <button id="btn-sync-at-cols"        title="Copy TM column structure (names + order + widths) to TA staging table" style="padding:6px 12px;border-radius:5px;border:1px solid #8f8;background:rgba(0,100,50,0.3);color:#8f8;cursor:pointer;font-size:13px;">Sync cols TM→TA</button>
+          <button id="btn-merge-to-tm"         title="Merge all TA staging entries into TM (dedup by link URL)" style="padding:6px 12px;border-radius:5px;border:1px solid #5f5;background:rgba(0,120,0,0.4);color:#5f5;cursor:pointer;font-size:13px;font-weight:bold;">Merge TA→TM</button>
           <button id="btn-clear-ta"            title="Clear all TA staging entries (TM is not affected)" style="display:none;padding:6px 12px;border-radius:5px;border:1px solid #f88;background:rgba(140,0,0,0.3);color:#f88;cursor:pointer;font-size:13px;">Clear TA</button>
         </div>
         <span id="focusIndicator" style="font-size:11px;color:#666;padding:0 8px;align-self:center;white-space:nowrap;">Focus: — · col: —</span>
@@ -453,16 +454,16 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
 </div>
 
 <script>window.LINKS_JSON_INLINE = [{"MPix":"","Thumb":"","cname":"Giant Sea Bass","sname":"Stereolepis gigas","Portrait":"0","show":"1","Mute":"","cell":"1a","fit":"","link":"https://upload.wikimedia.org/wikipedia/commons/thumb/b/b8/Giant_Sea_Bass%2C_CAS.jpg/1920px-Giant_Sea_Bass%2C_CAS.jpg","attribution":"Caitlin Childs - https://www.flickr.com/photos/nerdcoregirl/3135135560/","comment":"California Academy of Sciences","DateAdded":"","VidRange":"i","VidComment":"","UniqID":"","Topic":"","VidTitle":"","VidAuthor":""},{"MPix":"","Thumb":"","cname":"","sname":"","Portrait":"0","show":"1","Mute":"","cell":"","fit":"fc","link":"https://media.gettyimages.com/id/90066520/photo/comb-jelly-mnemiopsis-sp-interference-colours.jpg?s=2048x2048&w=gi&k=20&c=VFblMoTgPO8FoicZuKjiXSjEVxvAe3ajZUuLEiD9WXs=","attribution":"","comment":"","DateAdded":"26.03.15.21.29.02","VidRange":"i","VidComment":"","UniqID":"","Topic":"","VidTitle":"","VidAuthor":""},{"MPix":"","Thumb":"","cname":"","sname":"","Portrait":"0","show":"1","Mute":"","cell":"1c","fit":"fc","link":"https://media.gettyimages.com/id/1349420009/photo/red-snapper-or-red-sea-bass-fish-in-the-tank.jpg?s=2048x2048&w=gi&k=20&c=mbBMkZ4OX3zpIb_UIJFrMsNgDmHooH8_zT9gvPwK0Zg=","attribution":"","comment":"","DateAdded":"","VidRange":"i","VidComment":"","UniqID":"","Topic":"","VidTitle":"","VidAuthor":""},{"MPix":"","Thumb":"","cname":"","sname":"","Portrait":"0","show":"1","Mute":"","cell":"1d","fit":"fc","link":"https://i.natgeofe.com/n/523d689d-7f47-4229-81e0-fd482ff5b6d5/00000165-67e1-df80-affd-f7e5b67f0000_3x2.jpg","attribution":"","comment":"","DateAdded":"26.03.15.21.32.26","VidRange":"i","VidComment":"","UniqID":"","Topic":"","VidTitle":"","VidAuthor":""},{"MPix":"","Thumb":"","cname":"","sname":"","Portrait":"0","show":"1","Mute":"","cell":"1e","fit":"fc","link":"https://i.pinimg.com/originals/9c/11/20/9c1120a3a562f302e8b3408263502699.jpg","attribution":"","comment":"","DateAdded":"26.03.15.21.33.06","VidRange":"i","VidComment":"","UniqID":"","Topic":"","VidTitle":"","VidAuthor":""}];</script>
-<script src="globals.js?v=177"></script>
-<script src="add_grid.js?v=177"></script>
-<script src="grid.js?v=177"></script>
-<script src="ui.js?v=177"></script>
-<script src="editor.js?v=177"></script>
-<script src="github.js?v=177"></script>
-<script src="video.js?v=177"></script>
-<script src="instagram.js?v=177"></script>
-<script src="history.js?v=177"></script>
-<script src="main.js?v=177"></script>
+<script src="globals.js?v=180"></script>
+<script src="add_grid.js?v=180"></script>
+<script src="grid.js?v=180"></script>
+<script src="ui.js?v=180"></script>
+<script src="editor.js?v=180"></script>
+<script src="github.js?v=180"></script>
+<script src="video.js?v=180"></script>
+<script src="instagram.js?v=180"></script>
+<script src="history.js?v=180"></script>
+<script src="main.js?v=180"></script>
 
 </body>
 </html>

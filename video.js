@@ -9,8 +9,15 @@ window.seeLearnVimeoLoading = false;
 
 window.getYouTubeId = function(url) {
   if (!url) return '';
-  var m = url.match(/^.*((youtu\.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/);
-  return (m && m[7] && m[7].length === 11) ? m[7] : '';
+  // Shorts:  youtube.com/shorts/ID
+  // Watch:   youtube.com/watch?v=ID
+  // Short:   youtu.be/ID
+  // Embed:   youtube.com/embed/ID
+  // Live:    youtube.com/live/ID
+  var m = url.match(
+    /(?:youtu\.be\/|youtube\.com\/(?:shorts\/|live\/|embed\/|v\/|watch\?(?:.*&)?v=|(?:.*\?)?v=))([A-Za-z0-9_-]{11})/
+  );
+  return (m && m[1]) ? m[1] : '';
 };
 
 // ─── VidRange parsing ─────────────────────────────────────────────────────────

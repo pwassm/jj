@@ -628,6 +628,21 @@ window.openFS = function(it) {
   });
   vidHost.appendChild(tapClose);
 
+  // ── Pause cover — hides YouTube's own play-button overlay when we pause ──────
+  // When YouTube is paused it renders a large centred play caret over the iframe.
+  // This transparent div (z-index:11, above the iframe) blocks the caret's click
+  // target and also hides it visually via a subtle dark scrim.
+  // Shown on fsPause/scrub, hidden on fsPlay.
+  const pauseCover = document.createElement('div');
+  pauseCover.style.cssText = 'position:absolute;inset:0;z-index:11;display:none;'
+    + 'background:rgba(0,0,0,0.01);cursor:pointer;';   // near-transparent — just covers the caret
+  // Clicking the cover resumes playback (same as Space)
+  pauseCover.addEventListener('pointerup', function(e) {
+    e.stopPropagation();
+    if (!isPlayingFS) fsPlay();
+  });
+  vidHost.appendChild(pauseCover);
+
   // ── Duration + playhead polling ───────────────────────────────────────────
   let durDone = false;
   durTimer = setInterval(function() {
@@ -673,6 +688,7 @@ window.openFS = function(it) {
   function fsPause() {
     isPlayingFS = false;
     scrubSuspend();
+    pauseCover.style.display = 'block';  // hide YT's play-caret overlay
     const p = getP(); if (!p) return;
     if (typeof p.pauseVideo === 'function') try { p.pauseVideo(); } catch(ex) {}
     else if (p.pause) p.pause().catch(function(){});
@@ -680,6 +696,7 @@ window.openFS = function(it) {
 
   function fsPlay() {
     isPlayingFS = true;
+    pauseCover.style.display = 'none';   // uncover the video
     const p = getP(); if (!p) return;
     const segsArg = playMode === 'selected'
       ? parsed
@@ -731,6 +748,7 @@ window.openFS = function(it) {
     e.preventDefault(); isScrubbing = true;
     tl.setPointerCapture(e.pointerId);
     scrubSuspend();
+    pauseCover.style.display = 'block';
     fsSeek(tlScrubSec(e));
   });
   tl.addEventListener('pointermove', function(e) {
@@ -741,7 +759,7 @@ window.openFS = function(it) {
     if (!isScrubbing) return;
     isScrubbing = false;
     fsSeek(tlScrubSec(e));
-    // Stay paused — press Space to resume
+    // Stay paused — press Space to resume (cover stays visible)
   });
   tl.addEventListener('pointercancel', function() { isScrubbing = false; });
 
@@ -833,6 +851,8 @@ window.openFS = function(it) {
   btnStepL.addEventListener('click', function(e) {
     e.stopPropagation();
     const p = getP(); if (!p) return;
+    // Pause first so the frame actually displays after seek
+    if (isPlayingFS) fsPause();
     if (typeof p.getCurrentTime === 'function') {
       try { fsSeek(Math.max(0, p.getCurrentTime() - FRAME)); } catch(ex) {}
     } else if (p.getCurrentTime) {
@@ -842,6 +862,8 @@ window.openFS = function(it) {
   btnStepR.addEventListener('click', function(e) {
     e.stopPropagation();
     const p = getP(); if (!p) return;
+    // Pause first so the frame actually displays after seek
+    if (isPlayingFS) fsPause();
     if (typeof p.getCurrentTime === 'function') {
       try { fsSeek(p.getCurrentTime() + FRAME); } catch(ex) {}
     } else if (p.getCurrentTime) {
@@ -1387,12 +1409,10 @@ window.openTable = function(forceAddMode) {
     ? '📋 Table Editor: TA (staging) — ' + tableData.length + ' rows'
     : '📋 Table Editor: TM (masterlinks) — ' + tableData.length + ' rows';
 
-  // Show/hide TA-specific toolbar buttons
-  const taOnlyBtns = ['btn-merge-to-tm', 'btn-clear-ta'];
-  taOnlyBtns.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.style.display = isAddMode ? 'inline-block' : 'none';
-  });
+  // Merge TA→TM: always visible (useful from both TM and TA views)
+  // Clear TA: only shown in TA mode
+  const clearTaEl = document.getElementById('btn-clear-ta');
+  if (clearTaEl) clearTaEl.style.display = isAddMode ? 'inline-block' : 'none';
 
   if (window._salTab) { try { window._salTab.destroy(); } catch(e) {} window._salTab = null; }
   container.innerHTML = '';
@@ -1827,12 +1847,32 @@ document.getElementById('jsonCancel').addEventListener('click', closeTableEditor
   document.addEventListener('keydown', function(e) {
     const modal=document.getElementById('jsonModal');
     if (!modal||!modal.classList.contains('open')) return;
-    if (e.key!=='ArrowLeft'&&e.key!=='ArrowRight') return;
     const a=document.activeElement;
-    if (a&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.closest('.tabulator-cell.tabulator-editing'))) return;
-    e.preventDefault();
-    const el=scroller();
-    if (el) el.scrollBy({left:e.key==='ArrowRight'?AMT:-AMT,behavior:'smooth'});
+    const inEditField = a && (a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.closest('.tabulator-cell.tabulator-editing'));
+
+    // ── Horizontal scroll (arrow keys) ──────────────────────────────────────
+    if (e.key==='ArrowLeft'||e.key==='ArrowRight') {
+      if (inEditField) return;
+      e.preventDefault();
+      const el=scroller();
+      if (el) el.scrollBy({left:e.key==='ArrowRight'?AMT:-AMT,behavior:'smooth'});
+      return;
+    }
+
+    // ── Vertical scroll: Home / End / PgUp / PgDn ────────────────────────────
+    // These work even when no cell is focused (table just needs to be open).
+    if (e.key==='Home'||e.key==='End'||e.key==='PageUp'||e.key==='PageDown') {
+      if (inEditField) return;
+      e.preventDefault();
+      const el=scroller();
+      if (!el) return;
+      if (e.key==='Home')     { el.scrollTo({top:0, behavior:'smooth'}); }
+      else if (e.key==='End') { el.scrollTo({top:el.scrollHeight, behavior:'smooth'}); }
+      else {
+        const pageAmt = el.clientHeight * 0.85;  // ~85% of visible height per page
+        el.scrollBy({top: e.key==='PageDown' ? pageAmt : -pageAmt, behavior:'smooth'});
+      }
+    }
   });
 })();
 document.getElementById('jsonModal').addEventListener('pointerup', e => e.stopPropagation());
@@ -1846,16 +1886,26 @@ document.getElementById('jsonText').addEventListener('keydown', e => {
 // ─── Settings ─────────────────────────────────────────────────────────────────
 document.getElementById('miDlAll').addEventListener('pointerup', e => {
   e.stopPropagation(); closeMenu();
-  function dl(filename, data) {
-    const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-    a.download = filename; document.body.appendChild(a); a.click();
-    document.body.removeChild(a); setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+  const files = [
+    { name: 'masterlinks.json', data: linksData },
+    { name: 'adding.json',      data: window.addingData || [] },
+    { name: 'history.json',     data: window.historyData || [] }
+  ];
+  if (typeof writeFilesToDisk === 'function') {
+    writeFilesToDisk(files, '');
+    setStatus('Saved masterlinks + adding + history', '#5f5');
+  } else {
+    // Fallback if writeFilesToDisk not yet available
+    files.forEach(function(f, i) {
+      setTimeout(function() {
+        const blob = new Blob([JSON.stringify(f.data, null, 2)], {type:'application/json'});
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+        a.download = f.name; document.body.appendChild(a); a.click();
+        document.body.removeChild(a); setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+      }, i * 450);
+    });
+    setStatus('Downloaded 3 JSON files', '#5f5');
   }
-  // Small delay between downloads so browser doesn't block second one
-  dl('masterlinks.json', linksData);
-  setTimeout(() => dl('adding.json', window.addingData || []), 400);
-  setStatus('Downloaded masterlinks.json and adding.json', '#5f5');
 });
 
 document.getElementById('miClearStaging').addEventListener('pointerup', e => {
@@ -2137,7 +2187,7 @@ document.getElementById('miLoadGithub').addEventListener('pointerup', async e =>
     document.body.appendChild(a); a.click();
     document.body.removeChild(a); URL.revokeObjectURL(a.href);
 
-    // ── Also fetch history.json from GitHub (non-fatal) ──────────────────────
+    // ── Fetch history.json from GitHub (non-fatal) ───────────────────────────
     let histMsg = '';
     try {
       const histApiUrl = 'https://api.github.com/repos/' + owner + '/' + repo + '/contents/history.json';
@@ -2153,28 +2203,57 @@ document.getElementById('miLoadGithub').addEventListener('pointerup', async e =>
               histData = histRaw.slice(1);
             }
             const lsHistTime = parseInt(localStorage.getItem('sal-history-edited') || '0', 10);
-            if (histPushTime >= lsHistTime) {  // >= so explicit fetch always wins
-              if (typeof historyData !== 'undefined' && typeof normaliseHistRow === 'function') {
+            if (histPushTime >= lsHistTime) {
+              if (typeof normaliseHistRow === 'function') {
                 window.historyData = histData.map(normaliseHistRow);
               } else {
                 window.historyData = histData;
               }
               localStorage.setItem('sal-history', JSON.stringify(window.historyData));
               localStorage.setItem('sal-history-edited', String(histPushTime || Date.now()));
-              // Auto-download history.json too
-              const hBlob = new Blob([JSON.stringify(histData, null, 2)], {type:'application/json'});
-              const ha = document.createElement('a');
-              ha.href = URL.createObjectURL(hBlob); ha.download = 'history.json';
-              document.body.appendChild(ha); ha.click();
-              document.body.removeChild(ha); URL.revokeObjectURL(ha.href);
-              histMsg = ' + history.json';
+              histMsg = ' + history';
             }
           }
         }
       }
-    } catch(hErr) { /* history fetch is non-fatal */ }
+    } catch(hErr) { /* non-fatal */ }
 
-    setStatus('Loaded ' + linksData.length + ' rows from GitHub' + histMsg, '#5f5');
+    // ── Fetch adding.json from GitHub (non-fatal) ─────────────────────────────
+    let addMsg = '';
+    try {
+      const addApiUrl = 'https://api.github.com/repos/' + owner + '/' + repo + '/contents/adding.json';
+      const addRes = await fetch(addApiUrl, { headers });
+      if (addRes.ok) {
+        const addMeta = await addRes.json();
+        if (addMeta.content) {
+          const addRaw = JSON.parse(atob(addMeta.content.replace(/\n/g, '')));
+          if (Array.isArray(addRaw)) {
+            let addData = addRaw, addPushTime = 0;
+            if (addRaw.length > 0 && addRaw[0]._salMeta) {
+              addPushTime = parseInt(addRaw[0]._salPushTime || '0', 10);
+              addData = addRaw.slice(1);
+            }
+            const lsAddTime = parseInt(localStorage.getItem('sal-adding-edited') || '0', 10);
+            if (addPushTime >= lsAddTime) {
+              window.addingData = addData;
+              localStorage.setItem('sal-adding', JSON.stringify(addData));
+              localStorage.setItem('sal-adding-edited', String(addPushTime || Date.now()));
+              addMsg = ' + adding';
+            }
+          }
+        }
+      }
+    } catch(aErr) { /* non-fatal */ }
+
+    // ── Write all fetched files to disk (silently if FSA folder set) ──────────
+    const filesToWrite = [
+      { name: 'masterlinks.json', data: linksData },
+      { name: 'history.json',     data: (window.historyData || []) },
+      { name: 'adding.json',      data: (window.addingData  || []) }
+    ];
+    if (typeof writeFilesToDisk === 'function') writeFilesToDisk(filesToWrite, '');
+
+    setStatus('Loaded from GitHub: masterlinks' + histMsg + addMsg + ' (' + linksData.length + ' TM rows)', '#5f5');
   } catch(err) {
     alert('Load from GitHub failed:\n' + err.message);
     setStatus('Load from GitHub failed: ' + err.message, '#f88');

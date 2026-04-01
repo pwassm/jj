@@ -104,31 +104,29 @@ window.pushToGitHub = async function() {
       console.warn('history.json push skipped:', hErr.message);
     }
 
+    // ── Push adding.json (non-fatal if it fails) ─────────────────────────────
+    try {
+      var aData = window.addingData || [];
+      var addPayload = [{ _salMeta: true, _salPushTime: pushTime }].concat(aData);
+      await ghPutFile(owner, repo, headers, 'adding.json', addPayload, 'Update adding.json ' + stamp);
+      localStorage.setItem('sal-adding-edited', String(pushTime));
+    } catch(aErr) {
+      console.warn('adding.json push skipped:', aErr.message);
+    }
+
     showGhBalloon('✓ Pushed to GitHub!', 4000);
     setGhStatus('Pushed ' + stamp, '#4f8');
 
-    // ── Auto-download both JSONs so local m:\jj copy stays in sync ────────────
-    // Files go to the browser's configured download folder.
-    // Tip: set browser download folder to m:\jj for seamless sync.
-    try {
-      var dlA = document.createElement('a');
-      var mlBlob = new Blob([JSON.stringify(mlData, null, 2)], {type:'application/json'});
-      dlA.href = URL.createObjectURL(mlBlob); dlA.download = 'masterlinks.json';
-      document.body.appendChild(dlA); dlA.click(); document.body.removeChild(dlA);
-      setTimeout(function() { URL.revokeObjectURL(dlA.href); }, 1000);
-      // history.json with a brief delay so browser allows the second download
-      setTimeout(function() {
-        try {
-          var hd = window.historyData || [];
-          var hp = [{ _salMeta:true, _salPushTime:pushTime }].concat(hd);
-          var dlH = document.createElement('a');
-          var hBlob = new Blob([JSON.stringify(hp, null, 2)], {type:'application/json'});
-          dlH.href = URL.createObjectURL(hBlob); dlH.download = 'history.json';
-          document.body.appendChild(dlH); dlH.click(); document.body.removeChild(dlH);
-          setTimeout(function() { URL.revokeObjectURL(dlH.href); }, 1000);
-        } catch(e2) {}
-      }, 600);
-    } catch(dlErr) {}
+    // ── Write files to disk (no download bar) ────────────────────────────────
+    // Uses File System Access API (Chrome/Edge) to write directly to the last-
+    // used directory without prompting, if permission is already held.
+    // Falls back to silent <a> download (still goes to Downloads folder) if not.
+    var filesToWrite = [
+      { name: 'masterlinks.json', data: mlData },
+      { name: 'history.json',     data: [{ _salMeta:true, _salPushTime:pushTime }].concat(window.historyData||[]) },
+      { name: 'adding.json',      data: [{ _salMeta:true, _salPushTime:pushTime }].concat(window.addingData||[]) }
+    ];
+    writeFilesToDisk(filesToWrite, stamp);
 
   } catch (err) {
     showGhBalloon('PUSH ERROR:\n' + err.message, 7000);
@@ -138,6 +136,81 @@ window.pushToGitHub = async function() {
 
 document.getElementById('miPushGithub').addEventListener('pointerup', function(e) {
   e.stopPropagation(); closeMenu(); window.pushToGitHub();
+});
+
+// ── File System Access API — write files directly to m:\jj without download bar ──
+// Usage: call writeFilesToDisk([{name,data}, ...]) after any save operation.
+// First call (or after permission lost) will show a one-time folder picker.
+// Subsequent calls in the same session write silently.
+var _fsaDir = null;   // cached DirectoryHandle
+
+async function getProjectDir() {
+  if (_fsaDir) {
+    try {
+      // Verify permission is still valid
+      var perm = await _fsaDir.requestPermission({ mode: 'readwrite' });
+      if (perm === 'granted') return _fsaDir;
+    } catch(e) {}
+  }
+  // Check if we have a saved handle
+  try {
+    var stored = localStorage.getItem('sal-fsa-dir');
+    if (stored && window.showDirectoryPicker) {
+      // Can't persist handles across sessions without IndexedDB — need to re-pick
+    }
+  } catch(e) {}
+  return null;
+}
+
+window.pickProjectFolder = async function() {
+  if (!window.showDirectoryPicker) {
+    alert('File System Access API not supported in this browser.\n\nChrome or Edge required for silent file writes.\n\nFiles will use the browser download folder instead.');
+    return;
+  }
+  try {
+    _fsaDir = await window.showDirectoryPicker({ mode: 'readwrite', id: 'jj-project' });
+    showGhBalloon('✓ Project folder set — files will now write silently', 3000);
+    setGhStatus('Project folder: ' + _fsaDir.name, '#5f5');
+  } catch(e) {
+    if (e.name !== 'AbortError') console.warn('Folder picker:', e.message);
+  }
+};
+
+async function writeFilesToDisk(files, stamp) {
+  var dir = await getProjectDir();
+  if (dir) {
+    // Silent write via File System Access API
+    try {
+      for (var i = 0; i < files.length; i++) {
+        var f = files[i];
+        var fh = await dir.getFileHandle(f.name, { create: true });
+        var w  = await fh.createWritable();
+        await w.write(JSON.stringify(f.data, null, 2));
+        await w.close();
+      }
+      setGhStatus('Pushed + wrote ' + files.length + ' files to ' + dir.name + ' · ' + stamp, '#5f5');
+      return;
+    } catch(e) {
+      console.warn('FSA write failed, falling back to downloads:', e.message);
+      _fsaDir = null;
+    }
+  }
+  // Fallback: silent <a> downloads, staggered to avoid browser blocking
+  files.forEach(function(f, i) {
+    setTimeout(function() {
+      try {
+        var blob = new Blob([JSON.stringify(f.data, null, 2)], {type:'application/json'});
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob); a.download = f.name;
+        a.style.display = 'none';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(function() { URL.revokeObjectURL(a.href); }, 2000);
+      } catch(e2) {}
+    }, i * 500);
+  });
+}
+document.getElementById('miSetFolder').addEventListener('pointerup', function(e) {
+  e.stopPropagation(); closeMenu(); window.pickProjectFolder();
 });
 document.getElementById('togGithub').addEventListener('change', function(e) {
   var s = document.getElementById('githubTokenSetup');
