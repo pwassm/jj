@@ -1,7 +1,7 @@
 [
   {
     "_salMeta": true,
-    "_salPushTime": 1775108224778,
+    "_salPushTime": 1775108369745,
     "_salColLayout": {
       "salCols": {
         "order": [
@@ -1515,13 +1515,22 @@
     "cell": "",
     "fit": "ei",
     "link": "https://assets.iflscience.com/assets/articleNo/83038/iImg/89815/oldest-chelicerate-fossil-l.webp",
-    "cname": "",
+    "cname": "Cambrian chelicerate",
     "Topic": "",
-    "sname": "",
+    "sname": "Megachelicerax cousteaui",
     "attribution": "",
     "comment": "",
     "DateAdded": "26.04.01.22.36.00",
-    "Mute": "1"
+    "Mute": "1",
+    "MPix": "",
+    "Thumb": "",
+    "UniqID": "",
+    "Portrait": "",
+    "linkpage": "https://www.iflscience.com/500-million-year-old-sea-predator-is-oldest-known-animal-of-its-kind-an-ancestor-of-spiders-with-surprise-claws-83038",
+    "ValLink": "",
+    "VidComment": "",
+    "VidTitle": "",
+    "VidAuthor": ""
   },
   {
     "show": "1",
@@ -1529,12 +1538,21 @@
     "cell": "",
     "fit": "ei",
     "link": "https://assets.iflscience.com/assets/articleNo/83038/iImg/89814/megachelicerax-cousteaui-l.webp",
-    "cname": "",
+    "cname": "Cambrian chelicerate",
     "Topic": "",
-    "sname": "",
+    "sname": "Megachelicerax cousteaui",
     "attribution": "",
     "comment": "",
     "DateAdded": "26.04.01.22.36.23",
-    "Mute": "1"
+    "Mute": "1",
+    "MPix": "",
+    "Thumb": "",
+    "UniqID": "",
+    "Portrait": "",
+    "linkpage": "https://www.iflscience.com/500-million-year-old-sea-predator-is-oldest-known-animal-of-its-kind-an-ancestor-of-spiders-with-surprise-claws-83038",
+    "ValLink": "",
+    "VidComment": "",
+    "VidTitle": "",
+    "VidAuthor": ""
   }
 ]
