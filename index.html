@@ -278,6 +278,10 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
       <div class="github-token-setup" id="githubTokenSetup">
         <label for="tokenInput">GitHub Fine-Grained PAT (Contents:Write)</label>
         <input type="password" id="tokenInput" class="token-input" placeholder="github_pat_...">
+        <label for="ownerInput" style="margin-top:6px;">GitHub Owner (username)</label>
+        <input type="text" id="ownerInput" class="token-input" placeholder="username" autocomplete="off">
+        <label for="repoInput" style="margin-top:4px;">Repository Name</label>
+        <input type="text" id="repoInput" class="token-input" placeholder="jj" autocomplete="off">
         <div class="token-status" id="tokenStatus"></div>
       </div>
     </div>
@@ -285,7 +289,7 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
     <div class="menu-item" id="miHelp">Help</div>
     <div class="menu-divider"></div>
     <div class="menu-item" id="miLinkPastes" style="color:#6cf;">&#x1F517; GetLinksFromClip (G)</div>
-    <div id="menuDateStamp" style="padding:13px 18px;color:#ccc;font:15px Arial,sans-serif;border-top:1px solid rgba(255,255,255,0.1);text-align:left;user-select:none;">zip180 &middot; Mar 30, 2026</div>
+    <div id="menuDateStamp" style="padding:13px 18px;color:#ccc;font:15px Arial,sans-serif;border-top:1px solid rgba(255,255,255,0.1);text-align:left;user-select:none;">zip181 &middot; Mar 30, 2026</div>
   </div>
   <button id="menuBtn"><span></span><span></span><span></span></button>
 </div>
@@ -339,7 +343,7 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
       <button id="flClearBtn" style="padding:7px 10px;font-size:12px;border-radius:5px;border:1px solid #555;background:#1a1a2a;color:#888;cursor:pointer;">Clear</button>
     </div>
     <textarea id="fastLinkInput" rows="12" autocomplete="off" spellcheck="false"
-      placeholder="https://image.jpg&#10;https://source-page.org&#10;https://image2.png&#10;&#10;Species Name&#10;https://image3.jpg" 
+      placeholder="Paste one URL per line — images and videos both accepted&#10;https://example.com/photo.jpg&#10;https://www.youtube.com/watch?v=...&#10;https://www.youtube.com/shorts/...&#10;&#10;Images: MPix and Portrait auto-filled&#10;YouTube Shorts: detected as portrait video" 
       style="width:100%;box-sizing:border-box;padding:8px;font-size:13px;border-radius:5px;border:1px solid #4af;background:#111;color:#fff;outline:none;font-family:monospace;resize:vertical;"></textarea>
     <div style="color:#f88;font-size:12px;min-height:14px;margin:4px 0;" id="fastLinkStatus"></div>
     <button id="flImport" style="width:100%;padding:10px;font-size:14px;border-radius:6px;border:1px solid #5f5;background:rgba(0,120,0,0.3);color:#5f5;cursor:pointer;font-weight:bold;margin-top:2px;">Paste</button>
@@ -454,16 +458,16 @@ html, body { overflow: hidden; touch-action: manipulation; background: #000; }
 </div>
 
 <script>window.LINKS_JSON_INLINE = [{"MPix":"","Thumb":"","cname":"Giant Sea Bass","sname":"Stereolepis gigas","Portrait":"0","show":"1","Mute":"","cell":"1a","fit":"","link":"https://upload.wikimedia.org/wikipedia/commons/thumb/b/b8/Giant_Sea_Bass%2C_CAS.jpg/1920px-Giant_Sea_Bass%2C_CAS.jpg","attribution":"Caitlin Childs - https://www.flickr.com/photos/nerdcoregirl/3135135560/","comment":"California Academy of Sciences","DateAdded":"","VidRange":"i","VidComment":"","UniqID":"","Topic":"","VidTitle":"","VidAuthor":""},{"MPix":"","Thumb":"","cname":"","sname":"","Portrait":"0","show":"1","Mute":"","cell":"","fit":"fc","link":"https://media.gettyimages.com/id/90066520/photo/comb-jelly-mnemiopsis-sp-interference-colours.jpg?s=2048x2048&w=gi&k=20&c=VFblMoTgPO8FoicZuKjiXSjEVxvAe3ajZUuLEiD9WXs=","attribution":"","comment":"","DateAdded":"26.03.15.21.29.02","VidRange":"i","VidComment":"","UniqID":"","Topic":"","VidTitle":"","VidAuthor":""},{"MPix":"","Thumb":"","cname":"","sname":"","Portrait":"0","show":"1","Mute":"","cell":"1c","fit":"fc","link":"https://media.gettyimages.com/id/1349420009/photo/red-snapper-or-red-sea-bass-fish-in-the-tank.jpg?s=2048x2048&w=gi&k=20&c=mbBMkZ4OX3zpIb_UIJFrMsNgDmHooH8_zT9gvPwK0Zg=","attribution":"","comment":"","DateAdded":"","VidRange":"i","VidComment":"","UniqID":"","Topic":"","VidTitle":"","VidAuthor":""},{"MPix":"","Thumb":"","cname":"","sname":"","Portrait":"0","show":"1","Mute":"","cell":"1d","fit":"fc","link":"https://i.natgeofe.com/n/523d689d-7f47-4229-81e0-fd482ff5b6d5/00000165-67e1-df80-affd-f7e5b67f0000_3x2.jpg","attribution":"","comment":"","DateAdded":"26.03.15.21.32.26","VidRange":"i","VidComment":"","UniqID":"","Topic":"","VidTitle":"","VidAuthor":""},{"MPix":"","Thumb":"","cname":"","sname":"","Portrait":"0","show":"1","Mute":"","cell":"1e","fit":"fc","link":"https://i.pinimg.com/originals/9c/11/20/9c1120a3a562f302e8b3408263502699.jpg","attribution":"","comment":"","DateAdded":"26.03.15.21.33.06","VidRange":"i","VidComment":"","UniqID":"","Topic":"","VidTitle":"","VidAuthor":""}];</script>
-<script src="globals.js?v=180"></script>
-<script src="add_grid.js?v=180"></script>
-<script src="grid.js?v=180"></script>
-<script src="ui.js?v=180"></script>
-<script src="editor.js?v=180"></script>
-<script src="github.js?v=180"></script>
-<script src="video.js?v=180"></script>
-<script src="instagram.js?v=180"></script>
-<script src="history.js?v=180"></script>
-<script src="main.js?v=180"></script>
+<script src="globals.js?v=181"></script>
+<script src="add_grid.js?v=181"></script>
+<script src="grid.js?v=181"></script>
+<script src="ui.js?v=181"></script>
+<script src="editor.js?v=181"></script>
+<script src="github.js?v=181"></script>
+<script src="video.js?v=181"></script>
+<script src="instagram.js?v=181"></script>
+<script src="history.js?v=181"></script>
+<script src="main.js?v=181"></script>
 
 </body>
 </html>

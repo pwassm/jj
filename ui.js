@@ -2139,14 +2139,28 @@ function applyColLayout(layout) {
 
 document.getElementById('miLoadGithub').addEventListener('pointerup', async e => {
   e.stopPropagation(); closeMenu();
-  const owner = localStorage.getItem('github-owner');
-  const repo  = localStorage.getItem('github-repo');
-  const token = localStorage.getItem('github-token');
-  if (!owner || !repo) {
-    alert('GitHub owner/repo not set.\nOpen Settings → GitHub Sync to configure, or do a Push first.');
-    return;
+  let owner = localStorage.getItem('github-owner');
+  let repo  = localStorage.getItem('github-repo');
+  let token = localStorage.getItem('github-token');
+  // On fresh browser, prompt for credentials — same as Push
+  if (!token) {
+    const t = prompt('No GitHub token found.\nEnter your Fine-Grained PAT (Contents:Read):');
+    if (!t || !t.trim()) { setStatus('Load cancelled — no token', '#f88'); return; }
+    token = t.trim(); localStorage.setItem('github-token', token);
   }
-  if (!confirm('Load masterlinks.json from GitHub?\n\nThis REPLACES your current data.\nA copy will also be downloaded so your local file is updated.')) return;
+  if (!owner) {
+    const o = prompt('GitHub Owner (username):');
+    if (!o || !o.trim()) { setStatus('Load cancelled — no owner', '#f88'); return; }
+    owner = o.trim(); localStorage.setItem('github-owner', owner);
+    const oEl = document.getElementById('ownerInput'); if (oEl) oEl.value = owner;
+  }
+  if (!repo) {
+    const r = prompt('Repository name:', 'jj');
+    if (!r || !r.trim()) { setStatus('Load cancelled — no repo', '#f88'); return; }
+    repo = r.trim(); localStorage.setItem('github-repo', repo);
+    const rEl = document.getElementById('repoInput'); if (rEl) rEl.value = repo;
+  }
+  if (!confirm('Load all JSONs from GitHub?\n\nThis REPLACES current local data.')) return;
   try {
     // Use the GitHub Contents API — works on localhost, no CORS issue
     // Returns JSON with base64-encoded content field

@@ -200,38 +200,87 @@ function flNextFreeCell() {
   return '';
 }
 
+// ── URL cleanup ──────────────────────────────────────────────────────────────
+function flCleanURL(url) {
+  // Strip tracking/sharing params from YouTube: keep only ?v=ID
+  const ytM = url.match(/(?:youtube\.com\/watch[^\s]*[?&]v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+  if (ytM) {
+    // Check if it's a Shorts URL before stripping
+    if (/youtube\.com\/shorts\//.test(url)) return 'https://www.youtube.com/shorts/' + ytM[1];
+    return 'https://www.youtube.com/watch?v=' + ytM[1];
+  }
+  // Strip ?share and other Vimeo/generic junk after the path
+  return url.replace(/[?#](share|utm_[^&]*|si=[^&]*)(&.*)?$/, '').replace(/&utm_[^&]*/g, '');
+}
+
+// ── Detect YouTube Shorts (with or without /shorts/ in URL) ─────────────────
+// Strategy: check URL path first, then use noembed oEmbed API to check
+// the thumbnail dimensions (Shorts are taller than wide → portrait).
+async function flIsYouTubeShorts(url, vid) {
+  if (/youtube\.com\/shorts\//.test(url)) return true;
+  // Try oEmbed to get thumbnail dimensions (works for public videos)
+  try {
+    const oe = await fetch('https://noembed.com/embed?url=' + encodeURIComponent('https://www.youtube.com/watch?v=' + vid));
+    if (oe.ok) {
+      const j = await oe.json();
+      if (j.thumbnail_width && j.thumbnail_height) {
+        return j.thumbnail_height > j.thumbnail_width;  // portrait → Shorts
+      }
+    }
+  } catch(e) {}
+  return false;
+}
+
+// ── Image dimension fetch ─────────────────────────────────────────────────────
+function flGetImageDims(url) {
+  return new Promise(function(resolve) {
+    const img = new Image();
+    const timer = setTimeout(function() { resolve(null); }, 6000);
+    img.onload  = function() { clearTimeout(timer); resolve({ w: img.naturalWidth, h: img.naturalHeight }); };
+    img.onerror = function() { clearTimeout(timer); resolve(null); };
+    img.src = url;
+  });
+}
+
 async function flParseAndImport() {
   const raw   = document.getElementById('fastLinkInput').value;
-  const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+  const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0 && flIsURL(l));
   const da    = flDateStamp();
 
-  const target = (typeof window.flImportTarget === 'function') ? window.flImportTarget() : 'adding';
+  const target   = (typeof window.flImportTarget === 'function') ? window.flImportTarget() : 'adding';
   const isAdding = target === 'adding';
-
   const statusEl = document.getElementById('fastLinkStatus');
-  statusEl.textContent = 'Processing...';
+
+  if (!lines.length) { statusEl.textContent = 'No URLs found.'; return; }
 
   let imported = 0, skipped = 0;
-  let lastEntry = null;   // the most recently created row (for attaching linkpage)
+  let lastEntry = null;
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+    const rawLine = lines[i];
+    statusEl.textContent = 'Processing ' + (i+1) + '/' + lines.length + '…';
 
-    // Ignore blank lines and any line that isn't a URL — LP is URL-only input
-    if (!line || !flIsURL(line)) continue;
+    const line = ISMOBILE ? rawLine : flCleanURL(rawLine);
 
-    // Assign next cell — for TA there is no hard limit (GA shows 9 but TA holds any amount)
-    function nextCell() {
-      return isAdding
-        ? (typeof nextFreeAddCell === 'function' ? nextFreeAddCell() : 'a' + (addingData.length + 1) + 'a')
-        : flNextFreeCell();
-    }
+    const cell = isAdding ? '' : flNextFreeCell();
+    if (!isAdding && !cell) { skipped++; continue; }
 
-    // Video URL → row with VidRange full
+    // ── Video URL (YouTube / Vimeo) ─────────────────────────────────────────
     if (flIsVideoURL(line)) {
-      const cell = isAdding ? '' : flNextFreeCell();  // TA: no cell needed until merge
-      if (!isAdding && !cell) { skipped++; continue; }
-      const entry = { show:'1', VidRange:'0 99999', cell, fit:'fc',
+      let portrait = '0';
+      let vidRange = '0 99999';
+
+      if (!ISMOBILE && window.isYouTubeLink && window.isYouTubeLink(line)) {
+        const vid = window.getYouTubeId ? window.getYouTubeId(line) : '';
+        if (vid) {
+          const isShorts = await flIsYouTubeShorts(line, vid);
+          portrait = isShorts ? '1' : '0';
+        }
+        // Try to get actual duration via noembed (not always available)
+        // Default to 0 99999 which means "play all"
+      }
+
+      const entry = { show:'1', VidRange:vidRange, cell, fit:'fc', Portrait:portrait,
         link:line, cname:'', linkpage:'', sname:'', attribution:'', comment:'', DateAdded:da, Mute:'1' };
       if (isAdding) { addingData.push(entry); if (typeof saveAdding==='function') saveAdding(); }
       else linksData.push(entry);
@@ -239,18 +288,15 @@ async function flParseAndImport() {
       continue;
     }
 
-    // Wikipedia #/media/File: URL → resolve to direct image URL
+    // ── Wikipedia media URL → resolve to direct image ──────────────────────
     if (/wikipedia\.org\/wiki\/.*#\/media\/File:/i.test(line)) {
-      statusEl.textContent = 'Resolving Wikipedia image URL...';
+      statusEl.textContent = 'Resolving Wikipedia image…';
       const resolved = await flResolveWikipediaMedia(line);
-      if (!resolved) {
-        statusEl.textContent = 'Could not resolve Wikipedia image URL: ' + line.slice(0, 60);
-        skipped++;
-        continue;
-      }
-      const cell = isAdding ? '' : flNextFreeCell();
-      if (!isAdding && !cell) { skipped++; continue; }
-      const entry = { show:'1', VidRange:'i', cell, fit:'ei',
+      if (!resolved) { skipped++; continue; }
+      const dims = ISMOBILE ? null : await flGetImageDims(resolved);
+      const mpix = dims ? ((dims.w * dims.h) / 1e6).toFixed(2) : '';
+      const portrait = dims ? (dims.h > dims.w ? '1' : '0') : '';
+      const entry = { show:'1', VidRange:'i', cell, fit:'ei', MPix:mpix, Portrait:portrait,
         link:resolved, linkpage:line, cname:'', sname:'', attribution:'', comment:'', DateAdded:da, Mute:'1' };
       if (isAdding) { addingData.push(entry); if (typeof saveAdding==='function') saveAdding(); }
       else linksData.push(entry);
@@ -258,11 +304,12 @@ async function flParseAndImport() {
       continue;
     }
 
-    // Direct image URL
+    // ── Direct image URL ───────────────────────────────────────────────────
     if (flIsImageURL(line)) {
-      const cell = isAdding ? '' : flNextFreeCell();
-      if (!isAdding && !cell) { skipped++; continue; }
-      const entry = { show:'1', VidRange:'i', cell, fit:'ei',
+      const dims = ISMOBILE ? null : await flGetImageDims(line);
+      const mpix = dims ? ((dims.w * dims.h) / 1e6).toFixed(2) : '';
+      const portrait = dims ? (dims.h > dims.w ? '1' : '0') : '';
+      const entry = { show:'1', VidRange:'i', cell, fit:'ei', MPix:mpix, Portrait:portrait,
         link:line, linkpage:'', cname:'', sname:'', attribution:'', comment:'', DateAdded:da, Mute:'1' };
       if (isAdding) { addingData.push(entry); if (typeof saveAdding==='function') saveAdding(); }
       else linksData.push(entry);
@@ -270,43 +317,37 @@ async function flParseAndImport() {
       continue;
     }
 
-    // Non-image URL after an image/video row → linkpage on that row
+    // ── Non-image URL after image/video row → linkpage ─────────────────────
     if (lastEntry) {
       lastEntry.linkpage = line;
       lastEntry = null;
       continue;
     }
 
-    // Any other URL (no preceding image row) — store as-is, treat as image
-    const cell = isAdding ? '' : flNextFreeCell();
-    if (!isAdding && !cell) { skipped++; continue; }
-    const entry = { show:'1', VidRange:'i', cell, fit:'ei',
+    // ── Unknown URL — treat as image ───────────────────────────────────────
+    const dims2 = ISMOBILE ? null : await flGetImageDims(line);
+    const mpix2 = dims2 ? ((dims2.w * dims2.h) / 1e6).toFixed(2) : '';
+    const portrait2 = dims2 ? (dims2.h > dims2.w ? '1' : '0') : '';
+    const entry = { show:'1', VidRange:'i', cell, fit:'ei', MPix:mpix2, Portrait:portrait2,
       link:line, linkpage:'', cname:'', sname:'', attribution:'', comment:'', DateAdded:da, Mute:'1' };
     if (isAdding) { addingData.push(entry); if (typeof saveAdding==='function') saveAdding(); }
     else linksData.push(entry);
     lastEntry = entry; imported++;
   }
 
-  if (!imported && !skipped) {
-    statusEl.textContent = 'No URLs found.';
-    return;
-  }
-
   if (!isAdding) {
     if (window.saveData) window.saveData(true);
     else localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
   } else {
-    // Refresh TA table if open
     if (window._salTab && window._tabMode === 'adding' && window.openTable) window.openTable(true);
   }
 
   if (typeof renderAddGrid === 'function') renderAddGrid();
   render();
 
-  const dest = isAdding ? 'TA (staging)' : 'TM (masterlinks)';
-  const msg = '✓ Pushed ' + imported + ' row' + (imported !== 1 ? 's' : '') + ' to ' + dest
-    + (skipped ? ' (' + skipped + ' skipped — TM grid full)' : '');
-  statusEl.textContent = msg;
+  const dest = isAdding ? 'TA staging' : 'TM';
+  statusEl.textContent = '✓ ' + imported + ' URL' + (imported!==1?'s':'') + ' → ' + dest
+    + (skipped ? ', ' + skipped + ' skipped (grid full)' : '');
   document.getElementById('fastLinkInput').value = '';
 }
 

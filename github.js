@@ -56,11 +56,8 @@ window.pushToGitHub = async function() {
   var owner = localStorage.getItem('github-owner');
   var repo  = localStorage.getItem('github-repo');
   if (!owner || !repo) {
-    owner = prompt('GitHub Owner (username):', owner || '') || '';
-    repo  = prompt('Repository Name:', repo  || '') || '';
-    if (!owner || !repo) { showGhBalloon('Push cancelled — no repo.', 2500); return; }
-    localStorage.setItem('github-owner', owner);
-    localStorage.setItem('github-repo',  repo);
+    showGhBalloon('Owner/repo not set.\nOpen ☰ → Settings → GitHub Sync to configure.', 4000);
+    return;
   }
 
   showGhBalloon('Pushing to GitHub...', 0);
@@ -214,11 +211,46 @@ document.getElementById('miSetFolder').addEventListener('pointerup', function(e)
 });
 document.getElementById('togGithub').addEventListener('change', function(e) {
   var s = document.getElementById('githubTokenSetup');
-  if (e.target.checked) s.classList.add('open'); else s.classList.remove('open');
+  if (e.target.checked) {
+    s.classList.add('open');
+    // Pre-fill fields from localStorage whenever panel opens
+    var o = document.getElementById('ownerInput');
+    var r = document.getElementById('repoInput');
+    var t = document.getElementById('tokenInput');
+    if (o) o.value = localStorage.getItem('github-owner') || '';
+    if (r) r.value = localStorage.getItem('github-repo')  || '';
+    if (t) t.value = localStorage.getItem('github-token') ? '••••••••' : '';
+  } else {
+    s.classList.remove('open');
+  }
 });
+
+// Save token on Enter
 document.getElementById('tokenInput').addEventListener('keydown', function(e) {
   if (e.key === 'Enter') {
     var val = this.value.trim();
-    if (val) { localStorage.setItem('github-token', val); alert('Token saved!'); syncAdminUI(); render(); }
+    if (val && val !== '••••••••') {
+      localStorage.setItem('github-token', val);
+      this.value = '••••••••';
+      document.getElementById('tokenStatus').textContent = '✓ Token saved';
+      syncAdminUI(); render();
+    }
   }
 });
+
+// Save owner/repo on Enter or blur — instantly, no confirm needed
+function saveOwnerRepo(inputId, storageKey) {
+  var el = document.getElementById(inputId);
+  if (!el) return;
+  function save() {
+    var v = el.value.trim();
+    if (v) {
+      localStorage.setItem(storageKey, v);
+      document.getElementById('tokenStatus').textContent = '✓ ' + storageKey.replace('github-','') + ' saved';
+    }
+  }
+  el.addEventListener('keydown', function(e) { if (e.key === 'Enter') { save(); el.blur(); } });
+  el.addEventListener('blur', save);
+}
+saveOwnerRepo('ownerInput', 'github-owner');
+saveOwnerRepo('repoInput',  'github-repo');
