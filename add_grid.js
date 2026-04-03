@@ -204,6 +204,47 @@ function renderAddGrid() {
         cell.addEventListener('pointerup', function() { clearTimeout(pressTimer); });
         cell.addEventListener('pointercancel', function() { clearTimeout(pressTimer); });
 
+        // Ctrl+Alt+K — delete this entry from staging; assign next unassigned row to this cell
+        // Ctrl+Alt+Space — promote this entry from TA to TM, show next unassigned
+        cell.setAttribute('tabindex', '0');  // make focusable for keyboard
+        cell.addEventListener('keydown', function(e) {
+          if (!e.ctrlKey || !e.altKey) return;
+          if (e.key === 'k' || e.key === 'K') {
+            // Delete from staging
+            e.preventDefault(); e.stopPropagation();
+            const idx = addingData.indexOf(entry);
+            if (idx !== -1) {
+              addingData.splice(idx, 1);
+              // Assign next unassigned row to this cell position
+              var nextUnassigned = addingData.find(function(r) { return !r.cell || !r.cell.trim(); });
+              if (nextUnassigned) { nextUnassigned.cell = cs; }
+              saveAdding(); renderAddGrid();
+            }
+          } else if (e.key === ' ') {
+            // Promote to TM
+            e.preventDefault(); e.stopPropagation();
+            const idx = addingData.indexOf(entry);
+            if (idx !== -1) {
+              var promoted = addingData.splice(idx, 1)[0];
+              // Ensure UniqID and dates set before promoting
+              if (window.salAutoFill) window.salAutoFill(promoted);
+              if (window.linksData) {
+                // Dedup by link
+                var exists = window.linksData.find(function(r) { return r.link === promoted.link; });
+                if (!exists) {
+                  window.linksData.push(promoted);
+                  if (window.saveData) window.saveData(true);
+                }
+              }
+              // Assign next unassigned TA row to this cell
+              var nextU = addingData.find(function(r) { return !r.cell || !r.cell.trim(); });
+              if (nextU) { nextU.cell = cs; }
+              saveAdding(); renderAddGrid();
+              if (window.render) window.render();  // refresh GM to show promoted item
+            }
+          }
+        });
+
       } else {
         // Empty cell
         cell.style.background = '#f0f4f0';

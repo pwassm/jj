@@ -33,3 +33,38 @@ const menuPanel = document.getElementById('menuPanel');
 var addingData = [];   // var so window.addingData works cross-file
 var _addGridActive = false;   // true when GAdd overlay is shown
 window._addGridActive = false;
+
+// ── Date stamp: YY.MM.DD.HH.MM.SS ────────────────────────────────────────────
+window.salDateStamp = function() {
+  const d = new Date();
+  return [
+    String(d.getFullYear()).slice(-2),
+    String(d.getMonth()+1).padStart(2,'0'),
+    String(d.getDate()).padStart(2,'0'),
+    String(d.getHours()).padStart(2,'0'),
+    String(d.getMinutes()).padStart(2,'0'),
+    String(d.getSeconds()).padStart(2,'0')
+  ].join('.');
+};
+
+// ── Next unique integer ID across both TM and TA ─────────────────────────────
+window.salNextUID = function() {
+  let max = 0;
+  [window.linksData, window.addingData].forEach(function(arr) {
+    (arr || []).forEach(function(r) {
+      const n = parseInt(r.UniqID || '0', 10);
+      if (n > max) max = n;
+    });
+  });
+  return max + 1;
+};
+
+// ── Auto-fill UniqID + DateAdded + DateModified on a new row ─────────────────
+window.salAutoFill = function(row) {
+  const now = window.salDateStamp();
+  if (!row.UniqID || !String(row.UniqID).trim())
+    row.UniqID = String(window.salNextUID());
+  if (!row.DateAdded   || !String(row.DateAdded).trim())   row.DateAdded   = now;
+  if (!row.DateModified|| !String(row.DateModified).trim()) row.DateModified = now;
+  return row;
+};

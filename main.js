@@ -335,11 +335,51 @@ async function flParseAndImport() {
     lastEntry = entry; imported++;
   }
 
-  if (!isAdding) {
+  // ── Auto-assign UIDs, dates, and cells to newly imported rows ───────────────
+  // For TA imports: assign UniqID (continuing from TM max), DateAdded, DateModified,
+  // and auto-assign the first 16 GA cells (1a–4d) to rows that have no cell yet.
+  // For TM imports: auto-fill UID + dates only.
+  if (isAdding) {
+    // Re-check max UID across both TM and TA
+    const now2 = window.salDateStamp ? window.salDateStamp() : da;
+    // Assign cells 1a..4d to first 16 unassigned TA rows (GA shows 4×4 = 16)
+    const GA_CELLS = ['1a','1b','1c','1d','1e',
+                      '2a','2b','2c','2d','2e',
+                      '3a','3b','3c','3d','3e',
+                      '4a','4b','4c','4d','4e'];
+    const occupied = new Set(addingData.filter(r => r.cell).map(r => r.cell));
+    let cellIdx = 0;
+    addingData.forEach(function(r) {
+      // UID
+      if (!r.UniqID || !String(r.UniqID).trim()) {
+        r.UniqID = String(window.salNextUID ? window.salNextUID() : '');
+      }
+      // Dates
+      if (!r.DateAdded   || !String(r.DateAdded).trim())   r.DateAdded   = now2;
+      if (!r.DateModified|| !String(r.DateModified).trim()) r.DateModified= now2;
+      // Cell assignment for newly unassigned rows only
+      if (!r.cell || !r.cell.trim()) {
+        while (cellIdx < GA_CELLS.length && occupied.has(GA_CELLS[cellIdx])) cellIdx++;
+        if (cellIdx < GA_CELLS.length) {
+          r.cell = GA_CELLS[cellIdx];
+          occupied.add(GA_CELLS[cellIdx]);
+          cellIdx++;
+        }
+      }
+    });
+    if (typeof saveAdding === 'function') saveAdding();
+    if (window._salTab && window._tabMode === 'adding' && window.openTable) window.openTable(true);
+  } else {
+    // TM: auto-fill UID + dates on new rows
+    linksData.forEach(function(r) {
+      if (!r.UniqID || !String(r.UniqID).trim()) {
+        r.UniqID = String(window.salNextUID ? window.salNextUID() : '');
+      }
+      if (!r.DateAdded || !String(r.DateAdded).trim()) r.DateAdded = da;
+      if (!r.DateModified || !String(r.DateModified).trim()) r.DateModified = da;
+    });
     if (window.saveData) window.saveData(true);
     else localStorage.setItem('seeandlearn-links', JSON.stringify(linksData));
-  } else {
-    if (window._salTab && window._tabMode === 'adding' && window.openTable) window.openTable(true);
   }
 
   if (typeof renderAddGrid === 'function') renderAddGrid();

@@ -1528,7 +1528,8 @@ window.openTable = function(forceAddMode) {
         // Plain click: update active row/col trackers. Do NOT touch the anchor —
         // user may be scrolling to find the end row of the range.
       },
-      cellEdited(){
+      cellEdited(cell){
+        const editedField = cell.getColumn().getField();
         if (isAddMode) {
           // Sync addingData from Tabulator and save
           if (window._salTab && window.addingData) {
@@ -1542,6 +1543,18 @@ window.openTable = function(forceAddMode) {
           }
           if (typeof saveAdding === 'function') saveAdding();
         } else {
+          // Update DateModified (but not when DateModified itself was edited)
+          if (editedField !== 'DateModified') {
+            const now = window.salDateStamp();
+            const rowData = cell.getRow().getData();
+            const allRows = window._salTab.getRows();
+            const pos = allRows.indexOf(cell.getRow());
+            if (pos !== -1 && linksData[pos]) {
+              linksData[pos].DateModified = now;
+            }
+            // Silently update the cell in Tabulator display too
+            try { cell.getRow().update({ DateModified: now }); } catch(ex) {}
+          }
           saveData();
         }
       }
@@ -1649,6 +1662,7 @@ Object.defineProperty(window, 'tableKeys', { get:()=>_colOrder, set:v=>{ _colOrd
 document.getElementById('addTableItem').addEventListener('click', function() {
   if (!window._salTab) return;
   const newRow = {}; _colOrder.forEach(k => newRow[k]='');
+  if (!isAddMode) window.salAutoFill(newRow);   // auto UID + dates for TM rows
   const fr = getFocusedRow();
   if (fr) window._salTab.addRow(newRow, false, fr);
   else    window._salTab.addRow(newRow, true);
@@ -1658,6 +1672,7 @@ document.getElementById('addTableItem').addEventListener('click', function() {
 document.getElementById('btn-row-add-bottom').addEventListener('click', function() {
   if (!window._salTab) return;
   const newRow = {}; _colOrder.forEach(k => newRow[k]='');
+  if (!isAddMode) window.salAutoFill(newRow);
   window._salTab.addRow(newRow, false);
   saveData(); setStatus('Row added at bottom');
 });
@@ -1671,6 +1686,11 @@ document.getElementById('btn-duplicate-row-action').addEventListener('click', fu
     const nr = deepCopy(row.getData());
     Object.keys(nr).forEach(k => { if (k.startsWith('_')) delete nr[k]; });
     nr.cell = window.getFirstEmptyCell();
+    if (!isAddMode) {
+      // New duplicate gets new UID and current date, but preserves DateAdded of original
+      nr.UniqID = String(window.salNextUID());
+      nr.DateModified = window.salDateStamp();
+    }
     window._salTab.addRow(nr, false, row);
   });
   saveData(); setStatus('Row(s) duplicated');
@@ -2093,24 +2113,27 @@ window.fillEmptyVideoInfo = window.fillEmptyMediaInfo;
 // ── FillEmptyUIDs — assign sequential UniqIDs to rows that have none ──────────
 window.fillEmptyUIDs = function() {
   syncTab();
-  // Find max existing numeric UniqID
+  const now = window.salDateStamp();
   let maxId = 0;
   linksData.forEach(r => {
     const n = parseInt(r.UniqID || '0', 10);
     if (!isNaN(n) && n > maxId) maxId = n;
   });
-  let filled = 0;
+  let filledUID = 0, filledDA = 0, filledDM = 0;
   linksData.forEach(r => {
-    if (!r.UniqID || r.UniqID === '') {
-      maxId++;
-      r.UniqID = String(maxId);
-      filled++;
-    }
+    if (!r.UniqID || r.UniqID === '') { maxId++; r.UniqID = String(maxId); filledUID++; }
+    if (!r.DateAdded   || !String(r.DateAdded).trim())   { r.DateAdded   = now; filledDA++; }
+    if (!r.DateModified|| !String(r.DateModified).trim()) { r.DateModified= now; filledDM++; }
   });
-  if (!filled) { setStatus('All rows already have a UniqID', '#888'); return; }
+  const msg = [
+    filledUID ? filledUID + ' UIDs' : '',
+    filledDA  ? filledDA  + ' DateAdded' : '',
+    filledDM  ? filledDM  + ' DateModified' : ''
+  ].filter(Boolean).join(', ');
+  if (!msg) { setStatus('All rows already fully populated', '#888'); return; }
   saveData(true);
   window.renderTableEditor();
-  setStatus('✓ Assigned UniqIDs to ' + filled + ' rows (max ID now ' + maxId + ')', '#5f5');
+  setStatus('✓ Backfilled: ' + msg, '#5f5');
 };
 
 // ─── Compat shims ─────────────────────────────────────────────────────────────
@@ -2443,6 +2466,16 @@ document.getElementById('btn-make-json-topic').addEventListener('click', functio
 // Copies the current TM column order to every row in addingData,
 // adding empty string for any column that's missing.
 // If addingData has entries, warns the user to merge first.
+// Auto-sync TM column layout to TA whenever TM table is opened
+function autoSyncTMcolsToTA() {
+  try {
+    const tmCols = localStorage.getItem('tabulator-sal-table-columns');
+    if (tmCols) localStorage.setItem('tabulator-sal-table-add-columns', tmCols);
+    const salCols = localStorage.getItem('sal-cols');
+    if (salCols) localStorage.setItem('sal-cols-add', salCols);
+  } catch(e) {}
+}
+
 document.getElementById('btn-sync-at-cols').addEventListener('click', function() {
   const atCount = (window.addingData || []).filter(r => r.show === '1').length;
   if (atCount > 0) {
