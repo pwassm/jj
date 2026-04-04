@@ -1,7 +1,13 @@
 [
   {
     "_salMeta": true,
-    "_salPushTime": 1775278696993
+    "_salPushTime": 1775311620877
+  },
+  {
+    "HistID": 2,
+    "Topic": "Before zip200",
+    "DateSaved": "26.04.04.06.59.50",
+    "CellAssignments": "1a:3|1b:1|1c:6|1d:7|1e:8|2a:9|2b:10|2c:11|2d:12|2e:13|3a:15|3b:21|3c:16|3d:17|3e:18|4a:14|4b:2|4c:19|4d:20|4e:23|5a:23|5b:24|5c:48|5d:25|5e:50"
   },
   {
     "HistID": 1,
