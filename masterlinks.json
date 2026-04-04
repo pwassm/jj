@@ -1,7 +1,7 @@
 [
   {
     "_salMeta": true,
-    "_salPushTime": 1775335068065,
+    "_salPushTime": 1775337624188,
     "_salColLayout": {
       "salCols": {
         "order": [
@@ -58,7 +58,7 @@
         },
         {
           "field": "_move",
-          "title": "ÃÂ¢ÃÂÃÂ",
+          "title": "ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ",
           "hozAlign": "center",
           "width": 32,
           "minWidth": 32,
@@ -94,9 +94,35 @@
           "visible": true
         },
         {
+          "field": "t0",
+          "title": "t0",
+          "width": 47,
+          "minWidth": 8,
+          "maxWidth": 245,
+          "headerWordWrap": false,
+          "editor": "input",
+          "resizable": true,
+          "headerSort": true,
+          "tooltip": true,
+          "visible": true
+        },
+        {
+          "field": "t1",
+          "title": "t1",
+          "width": 47,
+          "minWidth": 8,
+          "maxWidth": 245,
+          "headerWordWrap": false,
+          "editor": "input",
+          "resizable": true,
+          "headerSort": true,
+          "tooltip": true,
+          "visible": true
+        },
+        {
           "field": "cname",
           "title": "cname",
-          "width": 245,
+          "width": 195,
           "minWidth": 8,
           "maxWidth": 245,
           "headerWordWrap": false,
@@ -108,7 +134,7 @@
         {
           "field": "sname",
           "title": "sname",
-          "width": 173,
+          "width": 130,
           "minWidth": 8,
           "maxWidth": 245,
           "headerWordWrap": false,
@@ -183,6 +209,19 @@
           "visible": true
         },
         {
+          "field": "VidRange",
+          "title": "VidRange",
+          "width": 95,
+          "minWidth": 8,
+          "maxWidth": 245,
+          "headerWordWrap": false,
+          "editor": "input",
+          "resizable": true,
+          "headerSort": true,
+          "tooltip": true,
+          "visible": true
+        },
+        {
           "field": "linkpage",
           "title": "linkpage",
           "width": 245,
@@ -222,6 +261,19 @@
           "visible": true
         },
         {
+          "field": "show",
+          "title": "show",
+          "width": 68,
+          "minWidth": 8,
+          "maxWidth": 245,
+          "headerWordWrap": false,
+          "editor": "input",
+          "resizable": true,
+          "headerSort": true,
+          "tooltip": true,
+          "visible": true
+        },
+        {
           "field": "DateAdded",
           "title": "DateAdded",
           "width": 123,
@@ -235,9 +287,9 @@
           "visible": true
         },
         {
-          "field": "VidRange",
-          "title": "VidRange",
-          "width": 95,
+          "field": "DateModified",
+          "title": "DateModified",
+          "width": 123,
           "minWidth": 8,
           "maxWidth": 245,
           "headerWordWrap": false,
@@ -276,7 +328,7 @@
         {
           "field": "VidTitle",
           "title": "VidTitle",
-          "width": 245,
+          "width": 172,
           "minWidth": 8,
           "maxWidth": 245,
           "headerWordWrap": false,
@@ -302,58 +354,6 @@
           "field": "ValLink",
           "title": "ValLink",
           "width": 81,
-          "minWidth": 8,
-          "maxWidth": 245,
-          "headerWordWrap": false,
-          "editor": "input",
-          "resizable": true,
-          "headerSort": true,
-          "tooltip": true,
-          "visible": true
-        },
-        {
-          "field": "DateModified",
-          "title": "DateModified",
-          "width": 123,
-          "minWidth": 8,
-          "maxWidth": 245,
-          "headerWordWrap": false,
-          "editor": "input",
-          "resizable": true,
-          "headerSort": true,
-          "tooltip": true,
-          "visible": true
-        },
-        {
-          "field": "show",
-          "title": "show",
-          "width": 68,
-          "minWidth": 8,
-          "maxWidth": 245,
-          "headerWordWrap": false,
-          "editor": "input",
-          "resizable": true,
-          "headerSort": true,
-          "tooltip": true,
-          "visible": true
-        },
-        {
-          "field": "t0",
-          "title": "t0",
-          "width": 47,
-          "minWidth": 8,
-          "maxWidth": 245,
-          "headerWordWrap": false,
-          "editor": "input",
-          "resizable": true,
-          "headerSort": true,
-          "tooltip": true,
-          "visible": true
-        },
-        {
-          "field": "t1",
-          "title": "t1",
-          "width": 47,
           "minWidth": 8,
           "maxWidth": 245,
           "headerWordWrap": false,
